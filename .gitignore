@@ -1,0 +1,29 @@
+.pytest_cache
+__pycache__
+*.egg-info/
+.DS_Store
+.vscode/
+node_modules/
+*.pyc
+
+# dagit-cloud build
+build/
+
+**/.terraform/*
+**/.tox/*
+
+.coverage*
+
+python_modules/elementl-data/elementl_data/survey_data_dbt_project/target/**/*
+python_modules/elementl-data/elementl_data/survey_data_dbt_project/logs
+
+# Script-generated values.yaml files
+dagster-cloud/infra/k8s/host/values.yaml
+
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# dotenv
+.env
