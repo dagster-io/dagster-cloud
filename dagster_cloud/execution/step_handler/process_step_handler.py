@@ -7,7 +7,6 @@ from dagster.core.events import DagsterEvent, DagsterEventType, EngineEventData
 from dagster.core.execution.plan.objects import StepFailureData
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.executor.step_delegating.step_handler.base import StepHandlerContext
-from dagster.serdes import serialize_dagster_namedtuple
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process, launch_process
 
@@ -28,8 +27,7 @@ class ProcessStepHandler(StepHandler):
         ), "Launching multiple steps is not currently supported"
         step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
 
-        input_json = serialize_dagster_namedtuple(step_handler_context.execute_step_args)
-        args = ["dagster", "api", "execute_step", input_json]
+        args = step_handler_context.execute_step_args.get_command_args()
         pid = launch_process(args)
 
         with self._step_pids_lock:

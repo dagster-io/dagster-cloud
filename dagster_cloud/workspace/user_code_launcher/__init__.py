@@ -1,2 +1,6 @@
 from .process import ProcessUserCodeLauncher
-from .user_code_launcher import DagsterCloudUserCodeLauncher, ReconcileUserCodeLauncher
+from .user_code_launcher import (
+    DagsterCloudUserCodeLauncher,
+    ReconcileUserCodeLauncher,
+    UserCodeLauncherEntry,
+)

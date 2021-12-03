@@ -1,18 +1,8 @@
-import click
+from typer import Typer
 
-from .saml.commands import saml_cli
+from .login import commands as login_cli
+from .saml import commands as saml_cli
 
-
-def create_settings_cli_group():
-    commands = {
-        "saml": saml_cli,
-    }
-
-    @click.group(commands=commands)
-    def group():
-        """Customize your dagster-cloud settings."""
-
-    return group
-
-
-settings_cli = create_settings_cli_group()
+app = Typer(help="Customize your dagster-cloud settings.")
+app.add_typer(login_cli.app, name="login")
+app.add_typer(saml_cli.app, name="saml")

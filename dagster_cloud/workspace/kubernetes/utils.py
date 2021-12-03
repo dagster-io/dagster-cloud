@@ -76,6 +76,7 @@ def construct_repo_location_deployment(
     deployment_name,
     metadata,
     pull_policy,
+    env_config_maps,
     env_secrets,
     service_account_name,
     image_pull_secrets,
@@ -104,7 +105,7 @@ def construct_repo_location_deployment(
                     containers=[
                         client.V1Container(
                             name="dagster",
-                            command=["dagster", "api", "grpc"],
+                            args=["dagster", "api", "grpc"],
                             image=metadata.image,
                             image_pull_policy=pull_policy,
                             env=[
@@ -130,6 +131,14 @@ def construct_repo_location_deployment(
                                 ),
                             ],
                             env_from=[
+                                kubernetes.client.V1EnvFromSource(
+                                    config_map_ref=kubernetes.client.V1ConfigMapEnvSource(
+                                        name=config_map
+                                    )
+                                )
+                                for config_map in env_config_maps
+                            ]
+                            + [
                                 client.V1EnvFromSource(
                                     secret_ref=(client.V1SecretEnvSource(name=secret_name))
                                 )

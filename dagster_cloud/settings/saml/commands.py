@@ -1,28 +1,32 @@
-import click
-import requests
+from pathlib import Path
 
-from ...cli.utils import add_options, create_cloud_dagit_client_options
+import requests
+from typer import Argument, Typer
+
+from ...cli import ui
+from ...cli.config_utils import dagster_cloud_options
 from ...errors import raise_http_error
 from ...headers.impl import get_dagster_cloud_api_headers
 
-
-@click.group(name="saml")
-def saml_cli():
-    """Customize your SAML settings."""
+app = Typer(help="Customize your SAML settings.")
 
 
-@saml_cli.command(name="upload-identity-provider-metadata")
-@add_options(create_cloud_dagit_client_options)
-@click.argument("metadata_file", type=click.File("r"), metavar="METADATA_FILE_PATH")
-def upload_identity_provider_metadata_command(metadata_file, url: str, api_token: str):
+@app.command(name="upload-identity-provider-metadata")
+@dagster_cloud_options(allow_empty=True, requires_url=True)
+def upload_identity_provider_metadata_command(
+    url: str,
+    api_token: str,
+    metadata_file: Path = Argument(..., readable=True, metavar="METADATA_FILE_PATH"),
+):
     """Uploads your identity provider's metadata to enable SAML Single sign-on (SSO)."""
 
-    response = requests.post(
-        url=f"{url}/upload_idp_metadata",
-        headers=get_dagster_cloud_api_headers(api_token),
-        files={"metadata.xml": metadata_file},
-    )
+    with open(metadata_file, "r") as f:
+        response = requests.post(
+            url=f"{url}/upload_idp_metadata",
+            headers=get_dagster_cloud_api_headers(api_token),
+            files={"metadata.xml": f},
+        )
 
     raise_http_error(response)
 
-    click.echo("The identity provider metadata was successfully uploaded.")
+    ui.print("The identity provider metadata was successfully uploaded.")

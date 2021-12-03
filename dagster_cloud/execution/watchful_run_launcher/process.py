@@ -1,6 +1,5 @@
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.types import ExecuteRunArgs
-from dagster.serdes.serdes import serialize_dagster_namedtuple
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process, launch_process
 
@@ -14,15 +13,13 @@ class ProcessRunLauncher(WatchfulRunLauncher):
         run = context.pipeline_run
         pipeline_code_origin = context.pipeline_code_origin
 
-        input_json = serialize_dagster_namedtuple(
-            ExecuteRunArgs(
-                pipeline_origin=pipeline_code_origin,
-                pipeline_run_id=run.run_id,
-                instance_ref=self._instance.get_ref(),
-            )
+        run_args = ExecuteRunArgs(
+            pipeline_origin=pipeline_code_origin,
+            pipeline_run_id=run.run_id,
+            instance_ref=self._instance.get_ref(),
         )
 
-        args = ["dagster", "api", "execute_run", input_json]
+        args = run_args.get_command_args()
         pid = launch_process(args)
 
         self._instance.add_run_tags(run.run_id, {PID_TAG: str(pid)})
@@ -68,5 +65,8 @@ class ProcessRunLauncher(WatchfulRunLauncher):
         run = self._instance.get_run_by_id(run_id)
         pid = self._get_pid(run)
 
-        if check_on_process(pid) != TaskStatus.RUNNING:
+        if not pid:
+            return
+
+        if check_on_process(pid) == TaskStatus.NOT_FOUND:
             self._instance.report_run_failed(run, f"Process pid {pid} is not running")

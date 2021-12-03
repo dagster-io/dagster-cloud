@@ -1,9 +1,8 @@
 import os
-import subprocess
 import sys
 from typing import List
 
-from dagster.serdes.ipc import interrupt_ipc_subprocess_pid
+from dagster.serdes.ipc import interrupt_ipc_subprocess_pid, open_ipc_subprocess
 
 from . import TaskStatus
 
@@ -12,7 +11,7 @@ def launch_process(args: List[str]) -> int:
     """
     Launch a process and return the PID
     """
-    p = subprocess.Popen(args)
+    p = open_ipc_subprocess(args)
     pid = p.pid
     return pid
 

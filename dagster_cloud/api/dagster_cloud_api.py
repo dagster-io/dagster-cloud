@@ -347,3 +347,17 @@ DagsterCloudApiResponse = Union[
     DagsterCloudApiErrorResponse,
     DagsterCloudApiUnknownCommandResponse,
 ]
+
+
+@whitelist_for_serdes
+class DagsterCloudUploadApiResponse(
+    NamedTuple(
+        "_DagsterCloudUploadApiResponse",
+        [
+            ("request_id", str),
+            ("request_api", DagsterCloudApi),
+            ("response", DagsterCloudApiResponse),
+        ],
+    )
+):
+    pass

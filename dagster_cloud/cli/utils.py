@@ -1,47 +1,68 @@
-import os
+import collections
+import functools
+import inspect
+from typing import Any, Dict, List, Tuple
 
-import click
+from typer.models import OptionInfo
 
 
-def add_options(options):
+def with_added_params(
+    signature: inspect.Signature, to_add: Dict[str, inspect.Parameter]
+) -> inspect.Signature:
     """
-    Share options between commands
-    https://stackoverflow.com/questions/40182157/shared-options-and-flags-between-commands
+    Returns a new signature based on the provided one, with the provided parameters added.
     """
-
-    def _add_options(func):
-        for option in reversed(options):
-            func = option(func)
-        return func
-
-    return _add_options
+    params = collections.OrderedDict(signature.parameters)
+    for k, v in to_add.items():
+        params[k] = v
+    return signature.replace(parameters=list(params.values()))
 
 
-DEFAULT_DAGIT_URL = lambda: os.getenv(
-    "DAGSTER_CLOUD_DAGIT_URL",
-    "http://localhost:3000",
-)
+def without_params(signature: inspect.Signature, to_remove: List[str]) -> inspect.Signature:
+    """
+    Returns a new signature based on the provided one with the given parameters removed by name.
+    Does nothing if the parameter is not found.
+    """
+    params = collections.OrderedDict(signature.parameters)
+    for r in to_remove:
+        if r in params:
+            del params[r]
+    return signature.replace(parameters=list(params.values()))
 
 
-def _api_token():
-    return os.getenv("DAGSTER_CLOUD_API_TOKEN")
+def add_options(options: Dict[str, Tuple[Any, OptionInfo]]):
+    """Decorator to add Options to a particular command."""
 
+    def decorator(to_wrap):
+        # Ensure that the function signature has the correct typer.Option defaults,
+        # so that every command need not specify them
 
-def _show_api_token_prompt():
-    password_exists = bool(_api_token())
-    show_prompt = not password_exists
-    return show_prompt
+        # Remove kwargs, since Typer doesn't know how to handle it
+        to_wrap_sig = inspect.signature(to_wrap)
+        has_kwargs = "kwargs" in to_wrap_sig.parameters
+        sig = without_params(to_wrap_sig, ["kwargs"])
+        sig = with_added_params(
+            sig,
+            {
+                name: inspect.Parameter(
+                    name,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    annotation=_type,
+                    default=default,
+                )
+                for name, (_type, default) in options.items()
+            },
+        )
 
+        @functools.wraps(to_wrap)
+        def wrap_function(*args, **kwargs):
+            modified_kwargs = kwargs
+            if not has_kwargs and not hasattr(to_wrap, "modified_options"):
+                modified_kwargs = {k: v for k, v in kwargs.items() if k in to_wrap_sig.parameters}
+            return to_wrap(*args, **modified_kwargs)
 
-create_cloud_dagit_client_options = [
-    click.option("--url", type=click.STRING, default=DEFAULT_DAGIT_URL, help="Dagit url"),
-    click.option(
-        "--api-token",
-        type=click.STRING,
-        default=_api_token,
-        prompt=_show_api_token_prompt(),
-        hide_input=True,
-        required=True,
-        help="API token generated in Dagit",
-    ),
-]
+        wrap_function.__signature__ = sig
+        wrap_function.modified_options = True
+        return wrap_function
+
+    return decorator

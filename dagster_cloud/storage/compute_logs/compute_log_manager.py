@@ -3,7 +3,6 @@ import tempfile
 import zlib
 from contextlib import contextmanager
 
-import requests
 from dagster import Field, StringSource, check, seven
 from dagster.core.storage.compute_log_manager import (
     MAX_BYTES_FILE_READ,
@@ -78,7 +77,7 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
                     compressed.write(zlib.compress(data.read()))
 
                 with open(dst, "rb") as compressed:
-                    resp = requests.post(
+                    resp = self._instance.requests_session.post(
                         self._instance.dagster_cloud_upload_logs_url,
                         headers=self._instance.dagster_cloud_api_headers,
                         params={
@@ -88,6 +87,7 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
                             "compressed": True,
                         },
                         files={"compute_log.tmp": compressed},
+                        timeout=self._instance.dagster_cloud_api_timeout,
                     )
         raise_http_error(resp)
 

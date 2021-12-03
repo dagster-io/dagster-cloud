@@ -1,6 +1,8 @@
 from collections import namedtuple
+from typing import Any, Dict, List
 
-from dagster import check
+from dagster import Field, check
+from dagster.config.source import BoolSourceType, IntSourceType, StringSourceType
 from dagster.serdes.utils import create_snapshot_id
 
 
@@ -43,3 +45,19 @@ def diff_serializable_namedtuple_map(desired_map, actual_map, force_update_keys=
     }
 
     return SerializableNamedtupleMapDiff(to_add, to_update, to_remove)
+
+
+def get_env_names_from_config(
+    config_schema: Dict[str, Field], config_dict: Dict[str, Any]
+) -> List[str]:
+    env_vars = []
+    for field_name, field in config_schema.items():
+        config_type = field.config_type
+        if isinstance(
+            config_type, (StringSourceType, IntSourceType, BoolSourceType)
+        ) and isinstance(config_dict.get(field_name), dict):
+            env_name = config_dict[field_name].get("env")
+            if env_name:
+                env_vars.append(env_name)
+
+    return env_vars

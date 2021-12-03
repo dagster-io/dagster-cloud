@@ -21,24 +21,25 @@ if __name__ == "__main__":
         author_email="hello@elementl.com",
         packages=find_packages(exclude=["dagster_cloud_tests"]),
         include_package_data=True,
-        install_requires=[f"dagster{pin}", "gql<3"],
+        install_requires=[f"dagster{pin}", "questionary", "requests", "typer"],
         extras_require={
             "tests": [
                 "black",
                 "docker",
+                "httpretty",
                 "isort",
                 "kubernetes",
                 "mypy==0.812",
                 "pylint",
                 "pytest",
-                "types-click",
                 "types-PyYAML",
                 "types-requests",
+                "ursula",
                 f"dagster_k8s{pin}",
-                f"ursula",
             ],
             "docker": ["docker", f"dagster_docker{pin}"],
             "kubernetes": ["kubernetes", f"dagster_k8s{pin}"],
+            "ecs": [f"dagster_aws{pin}", "boto3"],
         },
         author="Elementl",
         license="Apache-2.0",
@@ -49,7 +50,7 @@ if __name__ == "__main__":
         ],
         entry_points={
             "console_scripts": [
-                "dagster-cloud = dagster_cloud.cli.entrypoint:main",
+                "dagster-cloud = dagster_cloud.cli.entrypoint:app",
             ]
         },
     )

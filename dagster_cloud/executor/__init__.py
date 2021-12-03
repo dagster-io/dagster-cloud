@@ -5,7 +5,7 @@ from dagster.config.config_type import Array, Noneable
 from dagster.config.field import Field
 from dagster.config.field_utils import Permissive, Shape
 from dagster.config.source import BoolSource, StringSource
-from dagster.core.definitions.executor import multiple_process_executor_requirements
+from dagster.core.definitions.executor_definition import multiple_process_executor_requirements
 from dagster.core.errors import DagsterInvariantViolationError
 from dagster.core.execution.retries import get_retries_config
 from dagster.utils.merger import merge_dicts
@@ -107,10 +107,10 @@ DAGSTER_CLOUD_K8S_EXECUTOR_CONFIG_SCHEMA = {
                 merge_dicts(
                     DAGSTER_CLOUD_K8S_EXECUTOR_CONFIG_SCHEMA,
                     {"job_namespace": Field(StringSource, is_required=False)},
-                    {"retries": get_retries_config()},
                 ),
                 is_required=False,
-            )
+            ),
+            "retries": get_retries_config(),
         }
     ),
     requirements=multiple_process_executor_requirements(),

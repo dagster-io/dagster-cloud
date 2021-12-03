@@ -52,7 +52,7 @@ HANDLE_RUN_EVENT_MUTATION = """
 """
 
 GET_RUNS_QUERY = """
-    query getRunsQuery($filters: PipelineRunsFilter, $cursor: String, $limit: Int) {
+    query getRunsQuery($filters: RunsFilter, $cursor: String, $limit: Int) {
         runs {
             getRuns(filters: $filters, cursor: $cursor, limit: $limit)
         }
@@ -60,7 +60,7 @@ GET_RUNS_QUERY = """
 """
 
 GET_RUNS_COUNT_QUERY = """
-    query getRunsCountQuery($filters: PipelineRunsFilter) {
+    query getRunsCountQuery($filters: RunsFilter) {
         runs {
             getRunsCount(filters: $filters)
         }
@@ -118,7 +118,7 @@ GET_RUN_GROUP_QUERY = """
 
 
 GET_RUN_GROUPS_QUERY = """
-    query getRunGroupsQuery($filters: PipelineRunsFilter, $cursor: String, $limit: Int) {
+    query getRunGroupsQuery($filters: RunsFilter, $cursor: String, $limit: Int) {
         runs {
             getRunGroups(filters: $filters, cursor: $cursor, limit: $limit) {
                 rootRunId
@@ -132,7 +132,7 @@ GET_RUN_GROUPS_QUERY = """
 GET_RUN_RECORDS_QUERY = (
     RUN_ROW_FRAGMENT
     + """
-    query getRunRecordsQuery($filters: PipelineRunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean) {
+    query getRunRecordsQuery($filters: RunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean) {
         runs {
             getRunRecords(filters: $filters, limit: $limit, orderBy: $orderBy, ascending: $ascending) {
                 ...runRecordFragment
@@ -164,9 +164,9 @@ ADD_RUN_TAGS_MUTATION = """
 """
 
 ADD_PIPELINE_SNAPSHOT_MUTATION = """
-    mutation addPipelineSnapshotMutation($serializedPipelineSnapshot: String!) {
+    mutation addPipelineSnapshotMutation($serializedPipelineSnapshot: String!, $snapshotId: String) {
         runs {
-            addPipelineSnapshot(serializedPipelineSnapshot: $serializedPipelineSnapshot) {
+            addPipelineSnapshot(serializedPipelineSnapshot: $serializedPipelineSnapshot, snapshotId: $snapshotId) {
                 ok
             }
         }
@@ -182,9 +182,9 @@ HAS_EXECUTION_PLAN_SNAPSHOT_QUERY = """
 """
 
 ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION = """
-    mutation addExecutionPlanSnapshotMutation($serializedExecutionPlanSnapshot: String!) {
+    mutation addExecutionPlanSnapshotMutation($serializedExecutionPlanSnapshot: String!, $snapshotId: String) {
         runs {
-            addExecutionPlanSnapshot(serializedExecutionPlanSnapshot: $serializedExecutionPlanSnapshot) {
+            addExecutionPlanSnapshot(serializedExecutionPlanSnapshot: $serializedExecutionPlanSnapshot, snapshotId: $snapshotId) {
                 ok
             }
         }

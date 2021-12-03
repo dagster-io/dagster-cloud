@@ -6,7 +6,7 @@ from dagster_cloud.execution.utils import TaskStatus
 def check_on_container(client, container_name_or_id: str) -> Tuple[TaskStatus, Optional[str]]:
     try:
         container = client.containers.get(container_name_or_id)
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
         return TaskStatus.NOT_FOUND, f"Hit Exception trying to get the container: {e}"
 
     if container.status == "running":
@@ -14,7 +14,7 @@ def check_on_container(client, container_name_or_id: str) -> Tuple[TaskStatus, O
 
     try:
         container_info = container.wait(timeout=0.1)
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as e:
         return (
             TaskStatus.UNKNOWN,
             f"Container status is {container.status}. Hit exception attempting to get its return code: {e}",

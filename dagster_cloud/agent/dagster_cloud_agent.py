@@ -2,7 +2,9 @@ import concurrent.futures
 import logging
 import os
 import sys
+import tempfile
 import time
+import zlib
 from collections import deque
 from contextlib import ExitStack
 from typing import Dict, Iterator, List, NamedTuple, Optional, Union
@@ -37,18 +39,21 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudApiSuccess,
     DagsterCloudApiThreadTelemetry,
     DagsterCloudApiUnknownCommandResponse,
+    DagsterCloudUploadApiResponse,
 )
 from dagster_cloud.execution.watchful_run_launcher.base import WatchfulRunLauncher
 from dagster_cloud.executor.step_handler_context import DagsterCloudStepHandlerContext
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
-from dagster_cloud.workspace.user_code_launcher import DagsterCloudUserCodeLauncher
-
-from .queries import (
-    GET_USER_CLOUD_REQUESTS_QUERY,
-    SEND_USER_CLOUD_RESPONSE_MUTATION,
-    WORKSPACE_ENTRIES_QUERY,
+from dagster_cloud.workspace.user_code_launcher import (
+    DagsterCloudUserCodeLauncher,
+    UserCodeLauncherEntry,
 )
+
+from ..errors import raise_http_error
+from .queries import GET_USER_CLOUD_REQUESTS_QUERY, WORKSPACE_ENTRIES_QUERY
+
+CHECK_WORKSPACE_INTERVAL_SECONDS = 5
 
 
 class DagsterCloudApiFutureContext(
@@ -84,9 +89,9 @@ class DagsterCloudApiFutureContext(
 # Stub class to ensure that dagit still displays the status of the agent
 # (Even though the actual implementation of the agent no longer uses
 # the DagsterDaemon base class)
-class DagsterCloudApiDaemon(DagsterDaemon):
+class DagsterCloudAgentDaemon(DagsterDaemon):
     def __init__(self):
-        super(DagsterCloudApiDaemon, self).__init__(interval_seconds=0.5)
+        super(DagsterCloudAgentDaemon, self).__init__(interval_seconds=0.5)
 
     def run_iteration(
         self, instance: DagsterCloudAgentInstance, workspace: DynamicWorkspace
@@ -98,14 +103,15 @@ class DagsterCloudApiDaemon(DagsterDaemon):
         return "DAGSTER_CLOUD_API"
 
 
-class DagsterCloudApiAgent:
+class DagsterCloudAgent:
     MAX_THREADS_PER_CORE = 10
 
     def __init__(self):
         self._logger = get_default_daemon_logger(type(self).__name__)
 
+        self._logger.info("Starting Dagster Cloud agent...")
+
         self._exit_stack = ExitStack()
-        self._initial_workspace_loaded = False
         self._iteration = 0
 
         max_workers = os.cpu_count() * self.MAX_THREADS_PER_CORE
@@ -116,6 +122,9 @@ class DagsterCloudApiAgent:
         self._request_ids_to_future_context: Dict[str, DagsterCloudApiFutureContext] = {}
 
         self._last_heartbeat_time = None
+
+        self._last_workspace_check_time = None
+
         self._errors = deque(
             maxlen=DAEMON_HEARTBEAT_ERROR_LIMIT
         )  # (SerializableErrorInfo, timestamp) tuples
@@ -126,19 +135,38 @@ class DagsterCloudApiAgent:
     def __exit__(self, _exception_type, _exception_value, _traceback):
         self._exit_stack.close()
 
+    def initialize_workspace(self, instance, user_code_launcher):
+        self._check_update_workspace(instance, user_code_launcher)
+
+        while not user_code_launcher.is_workspace_ready:
+            self._logger.info("Waiting for workspace to be ready...")
+            # Check for any received interrupts
+            with raise_interrupts_as(KeyboardInterrupt):
+                time.sleep(5)
+
     def run_loop(self, instance, user_code_launcher, agent_uuid):
         heartbeat_interval_seconds = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
         error_interval_seconds = DEFAULT_DAEMON_ERROR_INTERVAL_SECONDS
+
+        self.initialize_workspace(instance, user_code_launcher)
+
+        self._logger.info("Started polling for requests from {}".format(instance.dagster_cloud_url))
 
         while True:
             try:
                 for error in self.run_iteration(instance, user_code_launcher):
                     if error:
+                        self._logger.error(str(error))
                         self._errors.appendleft((error, pendulum.now("UTC")))
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 self._logger.error("Caught error:\n{}".format(error_info))
                 self._errors.appendleft((error_info, pendulum.now("UTC")))
+
+            # Check for any received interrupts
+            with raise_interrupts_as(KeyboardInterrupt):
+                pass
+
             try:
                 self._check_add_heartbeat(
                     instance,
@@ -146,18 +174,44 @@ class DagsterCloudApiAgent:
                     heartbeat_interval_seconds,
                     error_interval_seconds,
                 )
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 self._logger.error(
                     "Failed to add heartbeat: \n{}".format(
                         serializable_error_info_from_exc_info(sys.exc_info())
                     )
                 )
 
-            time.sleep(0.5)
-
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
                 pass
+
+            try:
+                self._check_update_workspace(instance, user_code_launcher)
+
+            except Exception:
+                self._logger.error(
+                    "Failed to check for workspace updates: \n{}".format(
+                        serializable_error_info_from_exc_info(sys.exc_info())
+                    )
+                )
+
+            # Check for any received interrupts
+            with raise_interrupts_as(KeyboardInterrupt):
+                time.sleep(0.5)
+
+    def _check_update_workspace(self, instance, user_code_launcher):
+        curr_time = pendulum.now("UTC")
+
+        if (
+            self._last_workspace_check_time
+            and (curr_time - self._last_workspace_check_time).total_seconds()
+            < CHECK_WORKSPACE_INTERVAL_SECONDS
+        ):
+            return
+
+        self._last_workspace_check_time = curr_time
+
+        self._query_for_workspace_updates(instance, user_code_launcher, upload_results=False)
 
     def _check_add_heartbeat(
         self, instance, agent_uuid, heartbeat_interval_seconds, error_interval_seconds
@@ -178,24 +232,7 @@ class DagsterCloudApiAgent:
         ):
             return
 
-        daemon_type = DagsterCloudApiDaemon.daemon_type()
-
-        last_stored_heartbeat = instance.get_daemon_heartbeats().get(daemon_type)
-        if (
-            self._last_heartbeat_time
-            and last_stored_heartbeat
-            and last_stored_heartbeat.daemon_id != agent_uuid
-        ):
-            self._logger.warning(
-                "Taking over from another {} agent process. If this "
-                "message reoccurs, you may have multiple agents running which is not supported. "
-                "Last heartbeat agent id: {}, "
-                "Current agent ID: {}".format(
-                    daemon_type,
-                    last_stored_heartbeat.daemon_id,
-                    agent_uuid,
-                )
-            )
+        daemon_type = DagsterCloudAgentDaemon.daemon_type()
 
         self._last_heartbeat_time = curr_time
 
@@ -216,8 +253,11 @@ class DagsterCloudApiAgent:
     def request_ids_to_future_context(self) -> Dict[str, DagsterCloudApiFutureContext]:
         return self._request_ids_to_future_context
 
-    def _check_for_workspace_updates(
-        self, instance: DagsterCloudAgentInstance, user_code_launcher: DagsterCloudUserCodeLauncher
+    def _query_for_workspace_updates(
+        self,
+        instance: DagsterCloudAgentInstance,
+        user_code_launcher: DagsterCloudUserCodeLauncher,
+        upload_results: bool,
     ):
         # Get list of workspace entries from DB
         result = instance.graphql_client.execute(WORKSPACE_ENTRIES_QUERY)
@@ -225,19 +265,22 @@ class DagsterCloudApiAgent:
 
         # Create mapping of
         # - location name => deployment metadata
-        deployment_map: Dict[str, CodeDeploymentMetadata] = {}
-        force_update_locations = set()
+        deployment_map: Dict[str, UserCodeLauncherEntry] = {}
+        upload_locations = set()
         for entry in entries:
             location_name = entry["locationName"]
             deployment_metadata = check.inst(
                 deserialize_json_to_dagster_namedtuple(entry["serializedDeploymentMetadata"]),
                 CodeDeploymentMetadata,
             )
-            deployment_map[location_name] = deployment_metadata
-            if entry["hasOutdatedData"]:
-                force_update_locations.add(location_name)
+            deployment_map[location_name] = UserCodeLauncherEntry(
+                deployment_metadata,
+                float(entry["metadataTimestamp"]),
+            )
+            if upload_results and entry["hasOutdatedData"]:
+                upload_locations.add(location_name)
 
-        user_code_launcher.update_grpc_metadata(deployment_map, force_update_locations)
+        user_code_launcher.update_grpc_metadata(deployment_map, upload_locations)
 
     def _get_grpc_client(
         self,
@@ -278,7 +321,9 @@ class DagsterCloudApiAgent:
     ) -> Union[DagsterCloudApiSuccess, DagsterCloudApiGrpcResponse]:
         api_name = request.request_api
         if api_name == DagsterCloudApi.CHECK_FOR_WORKSPACE_UPDATES:
-            self._check_for_workspace_updates(instance, user_code_launcher)
+            # Dagster Cloud has requested that we upload new metadata for any out of date locations in
+            # the workspace
+            self._query_for_workspace_updates(instance, user_code_launcher, upload_results=True)
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.GET_EXTERNAL_EXECUTION_PLAN:
             external_pipeline_origin = request.request_args.pipeline_origin
@@ -392,15 +437,26 @@ class DagsterCloudApiAgent:
             launcher.check_run_health(run.run_id)
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.TERMINATE_RUN:
+            # With agent replicas enabled:
+            # Run workers now poll for run status. We don't use the run launcher to terminate.
+            # Once min agent version is bumped, we can deprecate this command.
+            # For backcompat, we use the run launcher to terminate unless the user opts in.
             run = request.request_args.pipeline_run
-            instance.report_engine_event(
-                f"Received request from {instance.dagster_cloud_url} to terminate run",
-                run,
-                cls=self.__class__,
-            )
-
-            launcher = user_code_launcher.run_launcher()
-            launcher.terminate(run.run_id)
+            if instance.agent_replicas_enabled:
+                instance.report_engine_event(
+                    f"Received request from {instance.dagster_cloud_url} to mark run as canceling",
+                    run,
+                    cls=self.__class__,
+                )
+                instance.report_run_canceling(run)
+            else:
+                instance.report_engine_event(
+                    f"Received request from {instance.dagster_cloud_url} to terminate run",
+                    run,
+                    cls=self.__class__,
+                )
+                launcher = user_code_launcher.run_launcher()
+                launcher.terminate(run.run_id)
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.LAUNCH_STEP:
             context = DagsterCloudStepHandlerContext.deserialize(
@@ -482,12 +538,12 @@ class DagsterCloudApiAgent:
             try:
                 request = deserialize_json_to_dagster_namedtuple(request_body)
                 self._logger.info(
-                    "Agent has received request {request}.".format(
+                    "Received request {request}.".format(
                         request=request,
                     )
                 )
                 api_result = self._handle_api_request(request, instance, user_code_launcher)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 api_result = DagsterCloudApiErrorResponse(error_infos=[error_info])
                 self._logger.error(
@@ -504,33 +560,26 @@ class DagsterCloudApiAgent:
             thread_end_handle_api_request_timestamp=thread_finished_request_time,
         )
 
-        api_result = serialize_dagster_namedtuple(
-            api_result.with_thread_telemetry(thread_telemetry)
+        api_result = api_result.with_thread_telemetry(thread_telemetry)
+
+        assert api_result
+
+        upload_response = DagsterCloudUploadApiResponse(
+            request_id=request_id, request_api=request_api, response=api_result
         )
 
-        instance.graphql_client.execute(
-            SEND_USER_CLOUD_RESPONSE_MUTATION,
-            {
-                "requestId": request_id,
-                "requestApi": request_api,
-                "response": api_result,
-            },
-        )
+        upload_api_response(instance, upload_response)
 
         return error_info
 
     def run_iteration(
         self, instance: DagsterCloudAgentInstance, user_code_launcher: DagsterCloudUserCodeLauncher
     ) -> Iterator[Optional[SerializableErrorInfo]]:
-        if not self._initial_workspace_loaded:
-            self._check_for_workspace_updates(instance, user_code_launcher)
-            self._initial_workspace_loaded = True
-
         result = instance.graphql_client.execute(GET_USER_CLOUD_REQUESTS_QUERY)
         json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
 
         self._logger.debug(
-            "Iteration #{iteration}: Agent adding {num_requests} requests to process.".format(
+            "Iteration #{iteration}: Adding {num_requests} requests to process.".format(
                 iteration=self._iteration, num_requests=len(json_requests)
             )
         )
@@ -560,7 +609,7 @@ class DagsterCloudApiAgent:
 
                 try:
                     response = future_context.future.result(timeout=0)
-                except (concurrent.futures.CancelledError, concurrent.futures.TimeoutError):
+                except:
                     response = serializable_error_info_from_exc_info(sys.exc_info())
 
                 # Do not process a request again once we have its result
@@ -573,3 +622,21 @@ class DagsterCloudApiAgent:
         self._iteration += 1
 
         yield None
+
+
+def upload_api_response(
+    instance: DagsterCloudAgentInstance, upload_response: DagsterCloudUploadApiResponse
+):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        dst = os.path.join(temp_dir, "api_response.tmp")
+        with open(dst, "wb") as f:
+            f.write(zlib.compress(serialize_dagster_namedtuple(upload_response).encode("utf-8")))
+
+        with open(dst, "rb") as f:
+            resp = instance.requests_session.post(
+                instance.dagster_cloud_upload_api_response_url,
+                headers=instance.dagster_cloud_api_headers,
+                files={"api_response.tmp": f},
+                timeout=instance.dagster_cloud_api_timeout,
+            )
+            raise_http_error(resp)

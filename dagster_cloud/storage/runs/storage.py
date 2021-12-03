@@ -191,7 +191,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 run_group_or_error["rootRunId"],
                 [deserialize_as(run, PipelineRun) for run in run_group_or_error["serializedRuns"]],
             )
-        elif run_group_or_error["__typename"] == "PipelineRunNotFoundError":
+        elif run_group_or_error["__typename"] == "RunNotFoundError":
             raise DagsterRunNotFoundError(invalid_run_id=run_group_or_error["runId"])
         else:
             raise DagsterInvariantViolationError(
@@ -280,16 +280,19 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["hasPipelineSnapshot"]
 
-    def add_pipeline_snapshot(self, pipeline_snapshot: PipelineSnapshot) -> str:
+    def add_pipeline_snapshot(
+        self, pipeline_snapshot: PipelineSnapshot, snapshot_id: Optional[str] = None
+    ) -> str:
         self._execute_query(
             ADD_PIPELINE_SNAPSHOT_MUTATION,
             variables={
                 "serializedPipelineSnapshot": serialize_dagster_namedtuple(
                     check.inst_param(pipeline_snapshot, "pipeline_snapshot", PipelineSnapshot)
-                )
+                ),
+                "snapshotId": snapshot_id,
             },
         )
-        return create_pipeline_snapshot_id(pipeline_snapshot)
+        return snapshot_id if snapshot_id else create_pipeline_snapshot_id(pipeline_snapshot)
 
     def get_pipeline_snapshot(self, pipeline_snapshot_id: str) -> PipelineSnapshot:
         res = self._execute_query(
@@ -314,7 +317,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["hasExecutionPlanSnapshot"]
 
-    def add_execution_plan_snapshot(self, execution_plan_snapshot: ExecutionPlanSnapshot) -> str:
+    def add_execution_plan_snapshot(
+        self, execution_plan_snapshot: ExecutionPlanSnapshot, snapshot_id: Optional[str] = None
+    ) -> str:
         self._execute_query(
             ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION,
             variables={
@@ -322,10 +327,15 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                     check.inst_param(
                         execution_plan_snapshot, "execution_plan_snapshot", ExecutionPlanSnapshot
                     )
-                )
+                ),
+                "snapshotId": snapshot_id,
             },
         )
-        return create_execution_plan_snapshot_id(execution_plan_snapshot)
+        return (
+            snapshot_id
+            if snapshot_id
+            else create_execution_plan_snapshot_id(execution_plan_snapshot)
+        )
 
     def get_execution_plan_snapshot(self, execution_plan_snapshot_id: str) -> ExecutionPlanSnapshot:
         res = self._execute_query(

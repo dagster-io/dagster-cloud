@@ -1,6 +1,6 @@
 import logging
 from contextlib import contextmanager
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 import kubernetes
 import kubernetes.client as client
@@ -15,6 +15,7 @@ from dagster_cloud.executor import (
     DAGSTER_CLOUD_EXECUTOR_K8S_CONFIG_KEY,
     DAGSTER_CLOUD_EXECUTOR_NAME,
 )
+from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_k8s.executor import K8sStepHandler
 from dagster_k8s.job import DagsterK8sJobConfig
 from kubernetes.client.rest import ApiException
@@ -33,7 +34,7 @@ DEPLOYMENT_TIMEOUT = 90  # Can take time to pull images
 SERVER_TIMEOUT = 60
 
 
-class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
+class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
     def __init__(
         self,
         dagster_home,
@@ -42,6 +43,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
         namespace=None,
         kubeconfig_file=None,
         pull_policy=None,
+        env_config_maps=None,
         env_secrets=None,
         service_account_name=None,
         volume_mounts=None,
@@ -54,6 +56,9 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
         self._instance_config_map = check.str_param(instance_config_map, "instance_config_map")
         self._namespace = namespace
         self._pull_policy = pull_policy
+        self._env_config_maps = check.opt_list_param(
+            env_config_maps, "env_config_maps", of_type=str
+        )
         self._env_secrets = check.opt_list_param(env_secrets, "env_secrets", of_type=str)
         self._service_account_name = check.opt_str_param(
             service_account_name, "service_account_name"
@@ -79,18 +84,16 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
             image_pull_policy=self._pull_policy,
             image_pull_secrets=self._image_pull_secrets,
             service_account_name=self._service_account_name,
-            env_config_maps=None,
+            env_config_maps=self._env_config_maps,
             env_secrets=self._env_secrets,
             job_namespace=self._namespace,
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
         )
 
-    def start(self):
-        super().start()
-        # NOTE: for better availability, we should scan for existing servers and use them
-        # (may need to check versions)
-        self._cleanup_servers()
+    @property
+    def requires_images(self):
+        return True
 
     def register_instance(self, instance):
         super().register_instance(instance)
@@ -108,6 +111,13 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
             "namespace": Field(StringSource, is_required=False, default_value="default"),
             "kubeconfig_file": Field(StringSource, is_required=False),
             "pull_policy": Field(StringSource, is_required=False, default_value="Always"),
+            "env_config_maps": Field(
+                Noneable(Array(StringSource)),
+                is_required=False,
+                description="A list of custom ConfigMapEnvSource names from which to draw "
+                "environment variables (using ``envFrom``) for the Job. Default: ``[]``. See:"
+                "https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/#define-an-environment-variable-for-a-container",
+            ),
             "env_secrets": Field(
                 Noneable(Array(StringSource)),
                 is_required=False,
@@ -170,6 +180,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
             namespace=config_value.get("namespace"),
             kubeconfig_file=config_value.get("kubeconfig_file"),
             pull_policy=config_value.get("pull_policy"),
+            env_config_maps=config_value.get("env_config_maps", []),
             env_secrets=config_value.get("env_secrets", []),
             service_account_name=config_value.get("service_account_name"),
             image_pull_secrets=config_value.get("image_pull_secrets"),
@@ -179,10 +190,12 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
 
     @contextmanager
     def _get_api_instance(self):
-        with client.ApiClient() as api_client:
+        with client.ApiClient() as api_client:  # pylint: disable=not-context-manager
             yield client.AppsV1Api(api_client)
 
-    def _create_deployment_endpoint(self, location_name, metadata):
+    def _create_new_server_endpoint(
+        self, location_name: str, metadata: CodeDeploymentMetadata
+    ) -> GrpcServerEndpoint:
         resource_name = unique_resource_name(location_name)
 
         try:
@@ -194,6 +207,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
                         resource_name,
                         metadata,
                         self._pull_policy,
+                        self._env_config_maps,
                         self._env_secrets,
                         self._service_account_name,
                         self._image_pull_secrets,
@@ -242,90 +256,33 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
 
         return endpoint
 
-    def _get_existing_deployments(self, location_name):
+    def _get_server_handles_for_location(self, location_name: str) -> Iterable[str]:
         with self._get_api_instance() as api_instance:
-            return api_instance.list_namespaced_deployment(
+            deployments = api_instance.list_namespaced_deployment(
                 self._namespace,
                 label_selector=f"location_hash={get_unique_label_for_location(location_name)}",
             ).items
+            return [deployment.metadata.name for deployment in deployments]
 
-    def _add_server(self, location_name, metadata):
-        # check if the container already exists, remove it if so (could happen
-        # if a previous attempt to set up the server failed)
-        existing_deployments = self._get_existing_deployments(location_name)
-        for existing_deployment in existing_deployments:
-            self._logger.info(
-                "Removing existing deployment {resource_name} for location {location_name}".format(
-                    resource_name=existing_deployment.metadata.name,
-                    location_name=location_name,
-                )
-            )
-            self._remove_deployment(existing_deployment.metadata.name)
-
-        return self._create_deployment_endpoint(location_name, metadata)
-
-    def _gen_update_server(self, location_name, old_metadata, new_metadata):
-        existing_deployments = self._get_existing_deployments(location_name)
-        try:
-            updated_server = self._create_deployment_endpoint(location_name, new_metadata)
-            yield updated_server
-        finally:
-            for existing_deployment in existing_deployments:
-                self._logger.info(
-                    "Removing old deployment {resource_name} for location {location_name}".format(
-                        resource_name=existing_deployment.metadata.name,
-                        location_name=location_name,
-                    )
-                )
-                self._remove_deployment(existing_deployment.metadata.name)
-
-    def _remove_server(self, location_name, metadata):
-        existing_deployments = self._get_existing_deployments(location_name)
-
-        for existing_deployment in existing_deployments:
-            self._remove_deployment(existing_deployment.metadata.name)
-
-    def _remove_deployment(self, resource_name):
-        check.str_param(resource_name, "resource_name")
-        with self._get_api_instance() as api_instance:
-            api_instance.delete_namespaced_deployment(resource_name, self._namespace)
-        client.CoreV1Api().delete_namespaced_service(resource_name, self._namespace)
-        self._logger.info("Removed deployment and service: {}".format(resource_name))
-
-    def _cleanup_servers(self):
+    def _cleanup_servers(self) -> None:
         with self._get_api_instance() as api_instance:
             deployments = api_instance.list_namespaced_deployment(
                 self._namespace,
                 label_selector="managed_by=K8sUserCodeLauncher",
             ).items
             for deployment in deployments:
-                api_instance.delete_namespaced_deployment(deployment.metadata.name, self._namespace)
+                self._remove_server_handle(deployment.metadata.name)
 
-        services = (
-            client.CoreV1Api()
-            .list_namespaced_service(
-                self._namespace,
-                label_selector="managed_by=K8sUserCodeLauncher",
-            )
-            .items
-        )
-        for service in services:
-            client.CoreV1Api().delete_namespaced_service(service.metadata.name, self._namespace)
-
-        self._logger.info(
-            "Deleted deployments: {} and services: {}".format(
-                ",".join([deployment.metadata.name for deployment in deployments]),
-                ",".join([service.metadata.name for service in services]),
-            )
-        )
+    def _remove_server_handle(self, server_handle: str) -> None:
+        check.str_param(server_handle, "server_handle")
+        with self._get_api_instance() as api_instance:
+            api_instance.delete_namespaced_deployment(server_handle, self._namespace)
+        client.CoreV1Api().delete_namespaced_service(server_handle, self._namespace)
+        self._logger.info("Removed deployment and service: {}".format(server_handle))
 
     def __exit__(self, exception_type, exception_value, traceback):
         super().__exit__(exception_value, exception_value, traceback)
-
         self._launcher.dispose()
-
-        if self._started:
-            self._cleanup_servers()
 
     def get_step_handler(self, execution_config: Optional[Dict]) -> StepHandler:
         executor_name, exc_cfg = (
@@ -355,7 +312,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
                     if k8s_cfg.get("service_account_name") != None
                     else self._service_account_name
                 ),
-                env_config_maps=k8s_cfg.get("env_config_maps") or [],
+                env_config_maps=self._env_config_maps + (k8s_cfg.get("env_config_maps") or []),
                 env_secrets=self._env_secrets + (k8s_cfg.get("env_secrets") or []),
                 volume_mounts=self._volume_mounts + (k8s_cfg.get("volume_mounts") or []),
                 volumes=self._volumes + (k8s_cfg.get("volumes") or []),

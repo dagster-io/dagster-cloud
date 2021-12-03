@@ -7,7 +7,6 @@ from dagster.core.definitions.event_metadata import EventMetadataEntry
 from dagster.core.events import DagsterEvent, DagsterEventType, EngineEventData
 from dagster.core.execution.plan.objects import StepFailureData
 from dagster.core.executor.step_delegating.step_handler.base import StepHandler, StepHandlerContext
-from dagster.serdes import serialize_dagster_namedtuple
 from dagster.serdes.utils import hash_str
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.docker import check_on_container
@@ -35,12 +34,7 @@ class DockerStepHandler(StepHandler):
             ),
             detach=True,
             network=self._networks[0] if len(self._networks) else None,
-            command=[
-                "dagster",
-                "api",
-                "execute_step",
-                serialize_dagster_namedtuple(execute_step_args),
-            ],
+            command=execute_step_args.get_command_args(),
             environment=(
                 {env_name: os.getenv(env_name) for env_name in self._env_vars}
                 if self._env_vars
@@ -156,7 +150,7 @@ class DockerStepHandler(StepHandler):
                 )
             )
             container.stop()
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception as e:
             events.append(
                 DagsterEvent(
                     event_type_value=DagsterEventType.ENGINE_EVENT.value,
