@@ -1,0 +1,63 @@
+from collections import namedtuple
+from typing import Any, Dict, List
+
+from dagster import Field, check
+from dagster.config.source import BoolSourceType, IntSourceType, StringSourceType
+from dagster.serdes.utils import create_snapshot_id
+
+
+class SerializableNamedtupleMapDiff(
+    namedtuple(
+        "_SerializableNamedtupleMapDiff",
+        "to_add to_update to_remove",
+    )
+):
+    def __new__(
+        cls,
+        to_add,
+        to_update,
+        to_remove,
+    ):
+        return super(SerializableNamedtupleMapDiff, cls).__new__(
+            cls,
+            check.set_param(to_add, "to_add", str),
+            check.set_param(to_update, "to_update", str),
+            check.set_param(to_remove, "to_remove", str),
+        )
+
+
+def diff_serializable_namedtuple_map(desired_map, actual_map, force_update_keys=None):
+    desired_keys = set(desired_map.keys())
+    actual_keys = set(actual_map.keys())
+    force_update_keys = check.opt_set_param(force_update_keys, "force_update_keys", str)
+
+    to_add = desired_keys.difference(actual_keys)
+    to_remove = actual_keys.difference(desired_keys)
+
+    existing = actual_keys.intersection(desired_keys)
+
+    to_update = {
+        existing_key
+        for existing_key in existing
+        if create_snapshot_id(desired_map[existing_key])
+        != create_snapshot_id(actual_map[existing_key])
+        or existing_key in force_update_keys
+    }
+
+    return SerializableNamedtupleMapDiff(to_add, to_update, to_remove)
+
+
+def get_env_names_from_config(
+    config_schema: Dict[str, Field], config_dict: Dict[str, Any]
+) -> List[str]:
+    env_vars = []
+    for field_name, field in config_schema.items():
+        config_type = field.config_type
+        if isinstance(
+            config_type, (StringSourceType, IntSourceType, BoolSourceType)
+        ) and isinstance(config_dict.get(field_name), dict):
+            env_name = config_dict[field_name].get("env")
+            if env_name:
+                env_vars.append(env_name)
+
+    return env_vars

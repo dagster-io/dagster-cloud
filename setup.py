@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict
 
 from setuptools import find_packages, setup
@@ -11,12 +12,18 @@ def get_version() -> str:
     return version["__version__"]
 
 
+def get_description() -> str:
+    return (Path(__file__).parent / "README.md").read_text()
+
+
 if __name__ == "__main__":
     ver = get_version()
     # dont pin dev installs to avoid pip dep resolver issues
     pin = "" if ver == "dev" else f"=={ver}"
     setup(
         name="dagster_cloud",
+        long_description=get_description(),
+        long_description_content_type="text/markdown",
         version=ver,
         author_email="hello@elementl.com",
         packages=find_packages(exclude=["dagster_cloud_tests"]),
