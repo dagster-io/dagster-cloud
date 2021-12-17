@@ -7,7 +7,7 @@ import time
 import zlib
 from collections import deque
 from contextlib import ExitStack
-from typing import Dict, Iterator, List, NamedTuple, Optional, Union
+from typing import Dict, Iterator, List, NamedTuple, Optional, Union, cast
 
 import pendulum
 from dagster import check
@@ -16,21 +16,17 @@ from dagster.core.events.log import EventLogEntry
 from dagster.core.host_representation import RepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.core.workspace.dynamic_workspace import DynamicWorkspace
-from dagster.daemon.controller import (
-    DEFAULT_DAEMON_ERROR_INTERVAL_SECONDS,
-    DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
-)
 from dagster.daemon.daemon import (
     DAEMON_HEARTBEAT_ERROR_LIMIT,
     DagsterDaemon,
     get_default_daemon_logger,
 )
-from dagster.daemon.types import DaemonHeartbeat
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster.utils.interrupts import raise_interrupts_as
 from dagster_cloud.api.dagster_cloud_api import (
+    AgentHeartbeat,
     DagsterCloudApi,
     DagsterCloudApiErrorResponse,
     DagsterCloudApiGrpcResponse,
@@ -40,10 +36,12 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudApiThreadTelemetry,
     DagsterCloudApiUnknownCommandResponse,
     DagsterCloudUploadApiResponse,
+    TimestampedError,
 )
 from dagster_cloud.execution.watchful_run_launcher.base import WatchfulRunLauncher
 from dagster_cloud.executor.step_handler_context import DagsterCloudStepHandlerContext
 from dagster_cloud.instance import DagsterCloudAgentInstance
+from dagster_cloud.storage.errors import GraphQLStorageError
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
@@ -51,9 +49,19 @@ from dagster_cloud.workspace.user_code_launcher import (
 )
 
 from ..errors import raise_http_error
-from .queries import GET_USER_CLOUD_REQUESTS_QUERY, WORKSPACE_ENTRIES_QUERY
+from .queries import (
+    ADD_AGENT_HEARTBEAT_MUTATION,
+    GET_USER_CLOUD_REQUESTS_QUERY,
+    WORKSPACE_ENTRIES_QUERY,
+)
 
 CHECK_WORKSPACE_INTERVAL_SECONDS = 5
+
+# Interval at which Agent heartbeats are sent to the host cloud
+AGENT_HEARTBEAT_INTERVAL_SECONDS = 30
+
+# How long after an error is raised before it is hidden
+AGENT_ERROR_INTERVAL_SECONDS = 300
 
 
 class DagsterCloudApiFutureContext(
@@ -65,7 +73,7 @@ class DagsterCloudApiFutureContext(
         ],
     )
 ):
-    DEFAULT_TIMEOUT_SECONDS = 15
+    DEFAULT_TIMEOUT_SECONDS = 75
 
     def __new__(
         cls,
@@ -145,8 +153,8 @@ class DagsterCloudAgent:
                 time.sleep(5)
 
     def run_loop(self, instance, user_code_launcher, agent_uuid):
-        heartbeat_interval_seconds = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
-        error_interval_seconds = DEFAULT_DAEMON_ERROR_INTERVAL_SECONDS
+        heartbeat_interval_seconds = AGENT_HEARTBEAT_INTERVAL_SECONDS
+        error_interval_seconds = AGENT_ERROR_INTERVAL_SECONDS
 
         self.initialize_workspace(instance, user_code_launcher)
 
@@ -232,18 +240,25 @@ class DagsterCloudAgent:
         ):
             return
 
-        daemon_type = DagsterCloudAgentDaemon.daemon_type()
-
         self._last_heartbeat_time = curr_time
 
-        instance.add_daemon_heartbeat(
-            DaemonHeartbeat(
-                curr_time.float_timestamp,
-                daemon_type,
-                agent_uuid,
-                errors=[error for (error, timestamp) in self._errors],
-            )
+        heartbeat = AgentHeartbeat(
+            timestamp=curr_time.float_timestamp,
+            agent_id=agent_uuid,
+            agent_label=instance.dagster_cloud_api_agent_label,
+            agent_type=None,
+            errors=[
+                TimestampedError(timestamp.float_timestamp, error)
+                for (error, timestamp) in self._errors
+            ],
         )
+
+        res = instance.graphql_client.execute(
+            ADD_AGENT_HEARTBEAT_MUTATION,
+            variable_values={"serializedAgentHeartbeat": serialize_dagster_namedtuple(heartbeat)},
+        )
+        if "errors" in res:
+            raise GraphQLStorageError(res)
 
     @property
     def executor(self) -> concurrent.futures.ThreadPoolExecutor:
@@ -528,6 +543,10 @@ class DagsterCloudAgent:
         request_api = json_request["requestApi"]
         request_body = json_request["requestBody"]
 
+        request: Union[str, DagsterCloudApiRequest] = DagsterCloudApiRequest.format_request(
+            request_id, request_api
+        )
+
         if request_api not in DagsterCloudApi.__members__:
             api_result = DagsterCloudApiUnknownCommandResponse(request_api)
             self._logger.warning(
@@ -536,7 +555,9 @@ class DagsterCloudAgent:
             )
         else:
             try:
-                request = deserialize_json_to_dagster_namedtuple(request_body)
+                request = cast(
+                    DagsterCloudApiRequest, deserialize_json_to_dagster_namedtuple(request_body)
+                )
                 self._logger.info(
                     "Received request {request}.".format(
                         request=request,
@@ -546,12 +567,19 @@ class DagsterCloudAgent:
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 api_result = DagsterCloudApiErrorResponse(error_infos=[error_info])
+
                 self._logger.error(
                     "Error serving request {request}: {error_info}".format(
                         request=json_request,
                         error_info=error_info,
                     )
                 )
+
+        self._logger.info(
+            "Finished processing request {request}.".format(
+                request=request,
+            )
+        )
 
         thread_finished_request_time = pendulum.now("UTC").timestamp()
         thread_telemetry = DagsterCloudApiThreadTelemetry(
@@ -568,7 +596,19 @@ class DagsterCloudAgent:
             request_id=request_id, request_api=request_api, response=api_result
         )
 
+        self._logger.info(
+            "Uploading response for request {request}.".format(
+                request=request,
+            )
+        )
+
         upload_api_response(instance, upload_response)
+
+        self._logger.info(
+            "Finished uploading response for request {request}.".format(
+                request=request,
+            )
+        )
 
         return error_info
 

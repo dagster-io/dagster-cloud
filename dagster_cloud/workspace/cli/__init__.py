@@ -1,12 +1,12 @@
 import time
 from pathlib import Path
 from typing import Any, Dict
-from dagster_cloud.storage.client import GqlShimClient
 
 import yaml
 from dagster import check
 from dagster.serdes.serdes import deserialize_json_to_dagster_namedtuple
 from dagster.utils import DEFAULT_WORKSPACE_YAML_FILENAME
+from dagster_cloud.storage.client import GqlShimClient
 from dagster_cloud.workspace.config_schema import process_workspace_config
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from typer import Argument, Option, Typer
@@ -25,20 +25,59 @@ _DEPLOYMENT_METADATA_OPTIONS = {
             None, "--python-file", "-f", exists=False, help="Python file where repository lives."
         ),
     ),
+    "working_directory": (
+        str,
+        Option(
+            None,
+            "--working-directory",
+            "-d",
+            help="Working directory to use when loading the repositories. Can only be used along with -f/--python-file.",
+        ),
+    ),
     "package_name": (
         str,
-        Option(None, "--package-name", "-p", help="Python package where repositories live"),
+        Option(
+            None, "--package-name", "-p", help="Installed Python package where repositories live"
+        ),
+    ),
+    "module_name": (
+        str,
+        Option(None, "--module-name", "-m", help="Python module where repositories live"),
+    ),
+    "executable_path": (
+        str,
+        Option(
+            None,
+            "--executable-path",
+            help="Path to reach the executable to use for the Python environment to load the repositories. Defaults to the installed `dagster` command-line entry point.",
+        ),
+    ),
+    "attribute": (
+        str,
+        Option(
+            None,
+            "--attribute",
+            "-a",
+            help=(
+                "Optional attribute that is either a repository or a function that returns a repository."
+            ),
+        ),
     ),
 }
 
 
 def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCodeLocation:
     python_file = kwargs.get("python_file")
+
     return gql.CliInputCodeLocation(
         name=location,
         python_file=str(python_file) if python_file else None,
         package_name=kwargs.get("package_name"),
         image=kwargs.get("image"),
+        module_name=kwargs.get("module_name"),
+        working_directory=kwargs.get("working_directory"),
+        executable_path=kwargs.get("executable_path"),
+        attribute=kwargs.get("attribute"),
     )
 
 
@@ -207,15 +246,7 @@ def execute_sync_command(client, workspace):
     try:
         locations = gql.reconcile_code_locations(
             client,
-            [
-                gql.CliInputCodeLocation(
-                    name=name,
-                    image=m.get("image"),
-                    package_name=m.get("package_name"),
-                    python_file=m.get("python_file"),
-                )
-                for name, m in config["locations"].items()
-            ],
+            [_get_location_input(name, m) for name, m in config["locations"].items()],
         )
         ui.print(f"Synced locations: {', '.join(locations)}")
         wait_for_load(client, locations)

@@ -24,26 +24,26 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         log_group: str,
         service_discovery_namespace_id: str,
         task_role_arn: str = None,
+        security_group_ids: List[str] = None,
         inst_data: Optional[ConfigurableClassData] = None,
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
         self.service_discovery = boto3.client("servicediscovery")
 
-        # TODO: Default to default cluster
         self.cluster = cluster
-        # TODO: Default to default networking
         self.subnets = subnets
+        self.security_group_ids = security_group_ids
         self.service_discovery_namespace_id = service_discovery_namespace_id
         self.execution_role_arn = execution_role_arn
         self.task_role_arn = task_role_arn
-        # TODO: Create a log group if one doesn't exist?
         self.log_group = log_group
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
 
         self.client = Client(
             cluster_name=self.cluster,
             subnet_ids=self.subnets,
+            security_group_ids=security_group_ids,
             service_discovery_namespace_id=self.service_discovery_namespace_id,
             log_group=self.log_group,
             execution_role_arn=self.execution_role_arn,
@@ -59,6 +59,7 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         return {
             "cluster": Field(StringSource),
             "subnets": Field(Array(StringSource)),
+            "security_group_ids": Field(Array(StringSource), is_required=False),
             "execution_role_arn": Field(StringSource),
             "task_role_arn": Field(StringSource, is_required=False),
             "log_group": Field(StringSource),
@@ -77,33 +78,15 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         self, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
         port = 4000
-
-        command = [
-            "dagster",
-            "api",
-            "grpc",
-            "-p",
-            str(port),
-            "-h",
-            "0.0.0.0",
-            "--lazy-load-user-code",
-        ]
-
-        env = {"DAGSTER_CURRENT_IMAGE": metadata.image}
-        if metadata.python_file:
-            env["DAGSTER_CLI_API_GRPC_PYTHON_FILE"] = metadata.python_file
-        else:
-            env["DAGSTER_CLI_API_GRPC_PACKAGE_NAME"] = metadata.package_name
-
         service = self.client.create_service(
             name=location_name,
             image=metadata.image,
-            command=command,
-            env=env,
+            command=metadata.get_grpc_server_command(),
+            env=metadata.get_grpc_server_env(port),
             tags={"dagster/location_name": location_name},
             task_role_arn=self.task_role_arn,
         )
-        server_id = self._wait_for_server(host=service.hostname, port=4000, timeout=60)
+        server_id = self._wait_for_server(host=service.hostname, port=port, timeout=60)
 
         endpoint = GrpcServerEndpoint(
             server_id=server_id,

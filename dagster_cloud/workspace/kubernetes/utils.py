@@ -105,30 +105,12 @@ def construct_repo_location_deployment(
                     containers=[
                         client.V1Container(
                             name="dagster",
-                            args=["dagster", "api", "grpc"],
+                            args=metadata.get_grpc_server_command(),
                             image=metadata.image,
                             image_pull_policy=pull_policy,
                             env=[
-                                client.V1EnvVar(name="DAGSTER_CURRENT_IMAGE", value=metadata.image),
-                                client.V1EnvVar(
-                                    name="DAGSTER_CLI_API_GRPC_PORT", value=str(SERVICE_PORT)
-                                ),
-                                client.V1EnvVar(
-                                    name="DAGSTER_CLI_API_GRPC_LAZY_LOAD_USER_CODE",
-                                    value="1",
-                                ),
-                                client.V1EnvVar(name="DAGSTER_CLI_API_GRPC_HOST", value="0.0.0.0"),
-                                (
-                                    client.V1EnvVar(
-                                        name="DAGSTER_CLI_API_GRPC_PYTHON_FILE",
-                                        value=metadata.python_file,
-                                    )
-                                    if metadata.python_file
-                                    else client.V1EnvVar(
-                                        name="DAGSTER_CLI_API_GRPC_PACKAGE_NAME",
-                                        value=metadata.package_name,
-                                    )
-                                ),
+                                client.V1EnvVar(name=key, value=value)
+                                for key, value in metadata.get_grpc_server_env(SERVICE_PORT).items()
                             ],
                             env_from=[
                                 kubernetes.client.V1EnvFromSource(

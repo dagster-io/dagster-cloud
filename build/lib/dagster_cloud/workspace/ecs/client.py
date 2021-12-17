@@ -10,10 +10,11 @@ class Client:
     def __init__(
         self,
         cluster_name,
-        subnet_ids,
         service_discovery_namespace_id,
         log_group,
         execution_role_arn,
+        subnet_ids=None,
+        security_group_ids=None,
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
@@ -21,7 +22,8 @@ class Client:
         self.ec2 = boto3.resource("ec2")
 
         self.cluster_name = cluster_name.split("/")[-1]
-        self.subnet_ids = subnet_ids
+        self.subnet_ids = subnet_ids if subnet_ids else []
+        self.security_group_ids = security_group_ids if security_group_ids else []
         self.service_discovery_namespace_id = service_discovery_namespace_id
         self.log_group = log_group
         self.execution_role_arn = execution_role_arn
@@ -44,6 +46,20 @@ class Client:
             effectiveSettings=True,
         )
         return settings["settings"][0]["value"] == "enabled"
+
+    @property
+    def network_configuration(self):
+        network_configuration = {
+            "awsvpcConfiguration": {
+                "subnets": self.subnet_ids,
+                "assignPublicIp": self._assign_public_ip(),
+            },
+        }
+
+        if self.security_group_ids:
+            network_configuration["awsvpcConfiguration"]["securityGroups"] = self.security_group_ids
+
+        return network_configuration
 
     def register_task_definition(self, name, image, command, task_role_arn=None, env=None):
         if not env:
@@ -186,12 +202,7 @@ class Client:
                 taskDefinition=task_definition_arn,
                 cluster=self.cluster_name,
                 launchType="FARGATE",
-                networkConfiguration={
-                    "awsvpcConfiguration": {
-                        "subnets": self.subnet_ids,
-                        "assignPublicIp": self._assign_public_ip(),
-                    },
-                },
+                networkConfiguration=self.network_configuration,
             )
             .get("tasks", [{}])[0]
             .get("taskArn")
@@ -255,12 +266,7 @@ class Client:
             taskDefinition=task_definition_arn,
             launchType="FARGATE",
             desiredCount=1,
-            networkConfiguration={
-                "awsvpcConfiguration": {
-                    "subnets": self.subnet_ids,
-                    "assignPublicIp": self._assign_public_ip(),
-                },
-            },
+            networkConfiguration=self.network_configuration,
         )
 
         if service_registry_arn:

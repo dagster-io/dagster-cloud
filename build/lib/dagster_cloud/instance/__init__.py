@@ -142,6 +142,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._dagster_cloud_api_config["timeout"]
 
     @property
+    def dagster_cloud_api_agent_label(self) -> Optional[str]:
+        return self._dagster_cloud_api_config.get("agent_label")
+
+    @property
     def dagster_cloud_api_env_vars(self) -> List[str]:
         return get_env_names_from_config(
             dagster_cloud_api_config(), self._unprocessed_dagster_cloud_api_config

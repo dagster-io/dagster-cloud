@@ -36,16 +36,30 @@ def fetch_deployments(client: GqlShimClient) -> List[Any]:
 
 class CliInputCodeLocation:
     def __init__(
-        self, name: str, python_file: str = None, package_name: str = None, image: str = None
+        self,
+        name: str,
+        python_file: str = None,
+        package_name: str = None,
+        image: str = None,
+        module_name: str = None,
+        working_directory: str = None,
+        executable_path: str = None,
+        attribute: str = None,
     ):
         self.name = name
 
-        if (not python_file and not package_name) or (python_file and package_name):
-            raise Exception("Must specify exactly one of --python-file or --package-name.")
+        if len([val for val in [python_file, package_name, module_name] if val]) != 1:
+            raise Exception(
+                "Must specify exactly one of --python-file or --package-name or --module-name."
+            )
 
         self.python_file = python_file
         self.package_name = package_name
         self.image = image
+        self.module_name = module_name
+        self.working_directory = working_directory
+        self.executable_path = executable_path
+        self.attribute = attribute
 
     def get_location_input(self):
         location_input = {"name": self.name}
@@ -56,6 +70,15 @@ class CliInputCodeLocation:
             location_input["packageName"] = self.package_name
         if self.image:
             location_input["image"] = self.image
+        if self.module_name:
+            location_input["moduleName"] = self.module_name
+        if self.working_directory:
+            location_input["workingDirectory"] = self.working_directory
+        if self.executable_path:
+            location_input["executablePath"] = self.executable_path
+        if self.attribute:
+            location_input["attribute"] = self.attribute
+
         return location_input
 
 

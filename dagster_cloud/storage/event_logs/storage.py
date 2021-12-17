@@ -1,5 +1,4 @@
 import json
-from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from dagster import check
@@ -30,9 +29,7 @@ from .queries import (
     ENABLE_SECONDARY_INDEX_MUTATION,
     END_WATCH_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
-    GET_ALL_ASSET_TAGS_QUERY,
     GET_ASSET_RUN_IDS_QUERY,
-    GET_ASSET_TAGS_QUERY,
     GET_EVENT_RECORDS_QUERY,
     GET_LOGS_FOR_RUN_QUERY,
     GET_STATS_FOR_RUN_QUERY,
@@ -382,23 +379,6 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             AssetKey.from_db_string(asset_key_string)
             for asset_key_string in res["data"]["eventLogs"]["getAllAssetKeys"]
         ]
-
-    def all_asset_tags(self) -> Dict[AssetKey, Dict[str, str]]:
-        res = self._execute_query(GET_ALL_ASSET_TAGS_QUERY)
-        asset_tags: Dict[AssetKey, Dict[str, str]] = defaultdict(dict)
-        for asset_tag_entry in res["data"]["eventLogs"]["getAllAssetTags"]:
-            asset_key_string = asset_tag_entry["assetKey"]
-            tag_key = asset_tag_entry["tagKey"]
-            tag_value = asset_tag_entry["tagValue"]
-            asset_tags[AssetKey.from_db_string(asset_key_string)][tag_key] = tag_value
-
-        return asset_tags
-
-    def get_asset_tags(self, asset_key: AssetKey) -> Dict[str, str]:
-        res = self._execute_query(
-            GET_ASSET_TAGS_QUERY, variables={"assetKey": asset_key.to_string()}
-        )
-        return {entry["key"]: entry["value"] for entry in res["data"]["eventLogs"]["getAssetTags"]}
 
     def get_asset_events(
         self,

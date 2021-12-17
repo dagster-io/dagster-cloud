@@ -22,3 +22,14 @@ WORKSPACE_ENTRIES_QUERY = """
         }
     }
 """
+
+
+ADD_AGENT_HEARTBEAT_MUTATION = """
+    mutation AddAgentHeartbeat($serializedAgentHeartbeat: String!) {
+        userCloudAgent {
+            addAgentHeartbeat (serializedAgentHeartbeat: $serializedAgentHeartbeat) {
+                ok
+            }
+        }
+    }
+"""

@@ -156,4 +156,5 @@ def dagster_cloud_api_config():
         # logging
         "retries": Field(IntSource, default_value=DEFAULT_RETRIES),
         "method": Field(StringSource, default_value="POST"),
+        "agent_label": Field(StringSource, is_required=False),
     }

@@ -169,14 +169,6 @@ GET_ALL_ASSET_KEYS_QUERY = """
     }
     """
 
-GET_ALL_ASSET_TAGS_QUERY = """
-    query getAllAssetTags() {
-        eventLogs {
-            getAllAssetTags
-        }
-    }
-    """
-
 GET_ASSET_RUN_IDS_QUERY = """
     query getAssetRunIds($assetKey: String!) {
         eventLogs {
@@ -184,14 +176,6 @@ GET_ASSET_RUN_IDS_QUERY = """
         }
     }
     """
-
-GET_ASSET_TAGS_QUERY = """
-    query getAssetTags($assetKey: String!) {
-        eventLogs {
-            getAssetTags(assetKey: $assetKey)
-        }
-    }
-"""
 
 STORE_EVENT_MUTATION = """
     mutation StoreEvent($eventRecord: EventLogEntryInput!) {
