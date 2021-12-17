@@ -337,8 +337,12 @@ class DagsterCloudApiRequest(
     def is_expired(self) -> bool:
         return pendulum.now("UTC").timestamp() > self.expire_at
 
+    @staticmethod
+    def format_request(request_id: str, request_api: Union[str, DagsterCloudApi]) -> str:
+        return f"[{request_id}: {request_api}]"
+
     def __str__(self) -> str:
-        return f"[{self.request_id}: {self.request_api}]"
+        return DagsterCloudApiRequest.format_request(self.request_id, self.request_api)
 
 
 DagsterCloudApiResponse = Union[
@@ -361,3 +365,31 @@ class DagsterCloudUploadApiResponse(
     )
 ):
     pass
+
+
+@whitelist_for_serdes
+class TimestampedError(namedtuple("_AgentHeartbeat", "timestamp error")):
+    def __new__(cls, timestamp, error):
+
+        return super(TimestampedError, cls).__new__(
+            cls,
+            timestamp=check.opt_float_param(timestamp, "timestamp"),
+            error=check.inst_param(error, "error", SerializableErrorInfo),
+        )
+
+
+@whitelist_for_serdes
+class AgentHeartbeat(
+    namedtuple("_AgentHeartbeat", "timestamp agent_id agent_label agent_type errors")
+):
+    def __new__(cls, timestamp, agent_id, agent_label, agent_type, errors=None):
+        errors = check.opt_list_param(errors, "errors", of_type=TimestampedError)
+
+        return super(AgentHeartbeat, cls).__new__(
+            cls,
+            timestamp=check.float_param(timestamp, "timestamp"),
+            agent_id=agent_id,
+            agent_label=check.opt_str_param(agent_label, "agent_label"),
+            agent_type=check.opt_str_param(agent_type, "agent_type"),
+            errors=errors,
+        )

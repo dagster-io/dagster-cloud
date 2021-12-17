@@ -61,11 +61,6 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
         return DockerUserCodeLauncher(inst_data=inst_data, **config_value)
 
     def _create_container(self, client, location_name, metadata, container_name, hostname, port):
-        python_env = (
-            {"DAGSTER_CLI_API_GRPC_PYTHON_FILE": metadata.python_file}
-            if metadata.python_file
-            else {"DAGSTER_CLI_API_GRPC_PACKAGE_NAME": metadata.package_name}
-        )
         return client.containers.create(
             metadata.image,
             detach=True,
@@ -74,17 +69,10 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
             network=self._networks[0] if len(self._networks) else None,
             environment=merge_dicts(
                 ({env_name: os.getenv(env_name) for env_name in self.env_vars}),
-                {
-                    "DAGSTER_CURRENT_IMAGE": metadata.image,
-                    "PYTHONUNBUFFERED": "1",
-                    "DAGSTER_CLI_API_GRPC_PORT": str(port),
-                    "DAGSTER_CLI_API_GRPC_HOST": "0.0.0.0",
-                    "DAGSTER_CLI_API_GRPC_LAZY_LOAD_USER_CODE": "1",
-                },
-                python_env,
+                metadata.get_grpc_server_env(port),
             ),
             labels=[GRPC_SERVER_LABEL, self._get_label_for_location(location_name)],
-            command=["dagster", "api", "grpc"],
+            command=metadata.get_grpc_server_command(),
             ports={port: port} if hostname == "localhost" else None,
         )
 

@@ -174,9 +174,14 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
 
     def _get_loadable_target_origin(self, metadata: CodeDeploymentMetadata) -> LoadableTargetOrigin:
         return LoadableTargetOrigin(
-            executable_path=sys.executable,
+            executable_path=metadata.executable_path
+            if metadata.executable_path
+            else sys.executable,
             python_file=metadata.python_file,
             package_name=metadata.package_name,
+            module_name=metadata.module_name,
+            working_directory=metadata.working_directory,
+            attribute=metadata.attribute,
         )
 
     def _get_server_handles_for_location(self, location_name: str) -> Iterable[int]:
