@@ -1,5 +1,5 @@
 import json
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from dagster import check
 from dagster.core.definitions.events import AssetKey
@@ -31,6 +31,7 @@ from .queries import (
     GET_ALL_ASSET_KEYS_QUERY,
     GET_ASSET_RUN_IDS_QUERY,
     GET_EVENT_RECORDS_QUERY,
+    GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
     GET_LOGS_FOR_RUN_QUERY,
     GET_STATS_FOR_RUN_QUERY,
     GET_STEP_STATS_FOR_RUN_QUERY,
@@ -258,6 +259,14 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     )
                 ],
                 attempts=check.opt_int_elem(stats, "attempts"),
+                attempts_list=[
+                    deserialize_json_to_dagster_namedtuple(marker)
+                    for marker in check.opt_list_elem(stats, "attemptsList", of_type=str)
+                ],
+                markers=[
+                    deserialize_json_to_dagster_namedtuple(marker)
+                    for marker in check.opt_list_elem(stats, "markers", of_type=str)
+                ],
             )
             for stats in step_stats
         ]
@@ -379,6 +388,24 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             AssetKey.from_db_string(asset_key_string)
             for asset_key_string in res["data"]["eventLogs"]["getAllAssetKeys"]
         ]
+
+    def get_latest_materialization_events(
+        self, asset_keys: Sequence[AssetKey]
+    ) -> Mapping[AssetKey, Optional[EventLogEntry]]:
+        check.list_param(asset_keys, "asset_keys", of_type=AssetKey)
+
+        res = self._execute_query(
+            GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
+            variables={"assetKeys": [asset_key.to_string() for asset_key in asset_keys]},
+        )
+
+        result = {}
+        for entry in res["data"]["eventLogs"]["getLatestMaterializationEvents"]:
+            event = _event_log_entry_from_graphql(entry)
+            if event.dagster_event and event.dagster_event.asset_key is not None:
+                result[event.dagster_event.asset_key] = event
+
+        return result
 
     def get_asset_events(
         self,

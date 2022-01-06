@@ -116,6 +116,8 @@ GET_STEP_STATS_FOR_RUN_QUERY = """
                 materializations
                 expectationResults
                 attempts
+                attemptsList
+                markers
             }
         }
     }
@@ -160,6 +162,19 @@ HAS_ASSET_KEY_QUERY = """
         }
     }
     """
+
+GET_LATEST_MATERIALIZATION_EVENTS_QUERY = (
+    EVENT_LOG_ENTRY_FRAGMENT
+    + """
+    query getLatestMaterializationEvents($assetKeys: [String!]!) {
+        eventLogs {
+            getLatestMaterializationEvents(assetKeys: $assetKeys) {
+                ...EventLogEntryFragment
+            }
+        }
+    }
+    """
+)
 
 GET_ALL_ASSET_KEYS_QUERY = """
     query getAllAssetKeys {

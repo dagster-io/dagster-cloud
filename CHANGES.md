@@ -1,5 +1,33 @@
 # Dagster Cloud Changelog
 
+# 0.13.13
+
+## Dagster Cloud
+
+### New
+
+* Performance improvements in Dagit on the Run Viewer page, Runs page, and Workspace page.
+* The Status page in Dagit now displays more information about each agent that is currently running.
+* When the agent is down, the scheduler will now wait for the agent to be available again before running schedule ticks, instead of marking the tick as failed.
+* The Dagster Cloud Github Action now supports creating Dagit previews of your Dagster code when you create a pull request. To set up this feature, please see the [documentation](https://docs.dagster.cloud/deployment/code-previews).
+* The `dagster-cloud` CLI will now notify the user if their Dagster Cloud agent is not running when attempting to modify workspace locations, instead of polling for the agent to sync the update.
+* The `dagster-cloud configure` CLI command has been renamed to `dagster-cloud config setup`.
+* The default number of jobs that can run at once per deployment has in raised to 25 instead of 10. This value will become configurable per-deployment in an upcoming release.
+
+### Bugfixes
+
+* Fixed an issue where the Kubernetes agent would sometimes time out while creating a new code deployment on startup.
+* Fixed an issue where importing local modules in job code would sometimes fail to load unless you explicitly set a working directory via the `dagster-cloud` CLI.
+* Fixed an issue where switching organizations could cause a GraphQL error during the `dagster-cloud` CLI configuration process.
+* Fixed a bug where trying to load compute logs in Dagit for a step that hadn’t yet finished displayed an error.
+
+## Agent
+
+### New
+
+* Agents can now be optionally assigned a label with the `dagster_cloud_api.agent_label` configuration option in the `dagster.yaml` file.
+* ECS agent CloudFormation templates now append part of the stack ID to the Service Discovery name to prevent naming conflicts when launching multiple agents for the same deployment.
+
 # 0.13.12
 
 ## Agent

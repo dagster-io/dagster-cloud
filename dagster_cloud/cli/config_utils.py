@@ -223,14 +223,14 @@ def dagster_cloud_options(
                     f"A Dagster Cloud user token must be specified for this command.\n\nYou may specify a token by:\n"
                     f"- Providing the {ui.as_code('--' + TOKEN_CLI_ARGUMENT)} parameter.\n"
                     f"- Setting the {ui.as_code(TOKEN_ENV_VAR_NAME)} environment variable.\n"
-                    f"- Specifying {ui.as_code('user_token')} in your config file ({get_config_path()}), run {ui.as_code('dagster-cloud configure')}."
+                    f"- Specifying {ui.as_code('user_token')} in your config file ({get_config_path()}), run {ui.as_code('dagster-cloud config setup')}."
                 )
             if not kwargs.get(ORGANIZATION_CLI_ARGUMENT) and (not allow_empty or lacking_url):
                 raise ui.error(
                     f"A Dagster Cloud organization must be specified for this command.\n\nYou may specify your organization by:\n"
                     f"- Providing the {ui.as_code('--' + ORGANIZATION_CLI_ARGUMENT)} parameter.\n"
                     f"- Setting the {ui.as_code(ORGANIZATION_ENV_VAR_NAME)} environment variable.\n"
-                    f"- Specifying {ui.as_code('organization')} in your config file ({get_config_path()}), run {ui.as_code('dagster-cloud configure')}."
+                    f"- Specifying {ui.as_code('organization')} in your config file ({get_config_path()}), run {ui.as_code('dagster-cloud config setup')}."
                 )
             if (
                 DEPLOYMENT_CLI_ARGUMENT in kwargs

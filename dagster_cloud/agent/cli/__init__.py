@@ -3,14 +3,15 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+from dagster.core.errors import DagsterHomeNotSetError
 from dagster.utils.interrupts import capture_interrupts
 from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from typer import Argument, Typer
-from ...cli import ui
-from dagster.core.errors import DagsterHomeNotSetError
 
-app = Typer()
+from ...cli import ui
+
+app = Typer(help="Commands for interacting with the Dagster Cloud agent.")
 
 
 def agent_home_exception():
@@ -59,7 +60,8 @@ def run_local_agent_in_environment(dagster_home: Optional[Path]):
         "Runs the Dagster Cloud agent. Sources config from a dagster.yaml located in the "
         "optional provided directory, otherwise uses the directory specified by the DAGSTER_HOME "
         "environment variable."
-    )
+    ),
+    short_help="Runs the Dagster Cloud agent.",
 )
 def run(dagster_home: Optional[Path] = Argument(None)):
     run_local_agent_in_environment(dagster_home)

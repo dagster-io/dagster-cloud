@@ -4,7 +4,7 @@ from typing import Dict, Iterable, Optional
 
 import kubernetes
 import kubernetes.client as client
-from dagster import Array, BoolSource, Field, Noneable, Permissive, StringSource, check
+from dagster import Array, BoolSource, Field, IntSource, Noneable, Permissive, StringSource, check
 from dagster.config.field_utils import Shape
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
@@ -30,8 +30,8 @@ from .utils import (
     wait_for_deployment_complete,
 )
 
-DEPLOYMENT_TIMEOUT = 90  # Can take time to pull images
-SERVER_TIMEOUT = 60
+DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT = 300
+DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
 
 
 class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
@@ -49,6 +49,8 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
         volume_mounts=None,
         volumes=None,
         image_pull_secrets=None,
+        deployment_startup_timeout=None,
+        server_process_startup_timeout=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("K8sUserCodeLauncher")
@@ -60,13 +62,21 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             env_config_maps, "env_config_maps", of_type=str
         )
         self._env_secrets = check.opt_list_param(env_secrets, "env_secrets", of_type=str)
-        self._service_account_name = check.opt_str_param(
-            service_account_name, "service_account_name"
-        )
+        self._service_account_name = check.str_param(service_account_name, "service_account_name")
         self._volume_mounts = check.opt_list_param(volume_mounts, "volume_mounts")
         self._volumes = check.opt_list_param(volumes, "volumes")
         self._image_pull_secrets = check.opt_list_param(
             image_pull_secrets, "image_pull_secrets", of_type=dict
+        )
+        self._deployment_startup_timeout = check.opt_int_param(
+            deployment_startup_timeout,
+            "deployment_startup_timeout",
+            DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT,
+        )
+        self._server_process_startup_timeout = check.opt_int_param(
+            server_process_startup_timeout,
+            "server_process_startup_timeout",
+            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
 
         if kubeconfig_file:
@@ -127,9 +137,8 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             ),
             "service_account_name": Field(
                 Noneable(StringSource),
-                is_required=False,
-                description="Override the name of the Kubernetes service account under "
-                "which to run.",
+                is_required=True,
+                description="The name of the Kubernetes service account under which to run.",
             ),
             "volume_mounts": Field(
                 Array(
@@ -169,6 +178,18 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
                 description="Specifies that Kubernetes should get the credentials from "
                 "the Secrets named in this list.",
             ),
+            "deployment_startup_timeout": Field(
+                IntSource,
+                is_required=False,
+                default_value=DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT,
+                description="Timeout when creating a new Kubernetes deployment for a code server",
+            ),
+            "server_process_startup_timeout": Field(
+                IntSource,
+                is_required=False,
+                default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+                description="Timeout when waiting for a code server to be ready after its deployment is created",
+            ),
         }
 
     @staticmethod
@@ -186,6 +207,8 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             image_pull_secrets=config_value.get("image_pull_secrets"),
             volume_mounts=config_value.get("volume_mounts"),
             volumes=config_value.get("volumes"),
+            deployment_startup_timeout=config_value.get("deployment_startup_timeout"),
+            server_process_startup_timeout=config_value.get("server_process_startup_timeout"),
         )
 
     @contextmanager
@@ -241,10 +264,10 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             location_name,
             metadata,
             existing_pods=[],
-            timeout=DEPLOYMENT_TIMEOUT,
+            timeout=self._deployment_startup_timeout,
         )
         server_id = self._wait_for_server(
-            host=resource_name, port=SERVICE_PORT, timeout=SERVER_TIMEOUT
+            host=resource_name, port=SERVICE_PORT, timeout=self._server_process_startup_timeout
         )
 
         endpoint = GrpcServerEndpoint(

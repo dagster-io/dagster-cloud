@@ -15,12 +15,7 @@ from dagster.core.events import DagsterEvent
 from dagster.core.events.log import EventLogEntry
 from dagster.core.host_representation import RepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
-from dagster.core.workspace.dynamic_workspace import DynamicWorkspace
-from dagster.daemon.daemon import (
-    DAEMON_HEARTBEAT_ERROR_LIMIT,
-    DagsterDaemon,
-    get_default_daemon_logger,
-)
+from dagster.daemon.daemon import get_default_daemon_logger
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
@@ -60,8 +55,7 @@ CHECK_WORKSPACE_INTERVAL_SECONDS = 5
 # Interval at which Agent heartbeats are sent to the host cloud
 AGENT_HEARTBEAT_INTERVAL_SECONDS = 30
 
-# How long after an error is raised before it is hidden
-AGENT_ERROR_INTERVAL_SECONDS = 300
+AGENT_HEARTBEAT_ERROR_LIMIT = 25  # Send at most 25 errors
 
 
 class DagsterCloudApiFutureContext(
@@ -94,23 +88,6 @@ class DagsterCloudApiFutureContext(
         return pendulum.now("UTC").timestamp() > self.timeout
 
 
-# Stub class to ensure that dagit still displays the status of the agent
-# (Even though the actual implementation of the agent no longer uses
-# the DagsterDaemon base class)
-class DagsterCloudAgentDaemon(DagsterDaemon):
-    def __init__(self):
-        super(DagsterCloudAgentDaemon, self).__init__(interval_seconds=0.5)
-
-    def run_iteration(
-        self, instance: DagsterCloudAgentInstance, workspace: DynamicWorkspace
-    ) -> Iterator[Optional[SerializableErrorInfo]]:
-        raise NotImplementedError
-
-    @classmethod
-    def daemon_type(cls) -> str:
-        return "DAGSTER_CLOUD_API"
-
-
 class DagsterCloudAgent:
     MAX_THREADS_PER_CORE = 10
 
@@ -134,7 +111,7 @@ class DagsterCloudAgent:
         self._last_workspace_check_time = None
 
         self._errors = deque(
-            maxlen=DAEMON_HEARTBEAT_ERROR_LIMIT
+            maxlen=AGENT_HEARTBEAT_ERROR_LIMIT
         )  # (SerializableErrorInfo, timestamp) tuples
 
     def __enter__(self):
@@ -154,7 +131,6 @@ class DagsterCloudAgent:
 
     def run_loop(self, instance, user_code_launcher, agent_uuid):
         heartbeat_interval_seconds = AGENT_HEARTBEAT_INTERVAL_SECONDS
-        error_interval_seconds = AGENT_ERROR_INTERVAL_SECONDS
 
         self.initialize_workspace(instance, user_code_launcher)
 
@@ -176,12 +152,7 @@ class DagsterCloudAgent:
                 pass
 
             try:
-                self._check_add_heartbeat(
-                    instance,
-                    agent_uuid,
-                    heartbeat_interval_seconds,
-                    error_interval_seconds,
-                )
+                self._check_add_heartbeat(instance, agent_uuid, heartbeat_interval_seconds)
             except Exception:
                 self._logger.error(
                     "Failed to add heartbeat: \n{}".format(
@@ -221,17 +192,7 @@ class DagsterCloudAgent:
 
         self._query_for_workspace_updates(instance, user_code_launcher, upload_results=False)
 
-    def _check_add_heartbeat(
-        self, instance, agent_uuid, heartbeat_interval_seconds, error_interval_seconds
-    ):
-        error_max_time = pendulum.now("UTC").subtract(seconds=error_interval_seconds)
-
-        while len(self._errors):
-            _earliest_error, earliest_timestamp = self._errors[-1]
-            if earliest_timestamp >= error_max_time:
-                break
-            self._errors.pop()
-
+    def _check_add_heartbeat(self, instance, agent_uuid, heartbeat_interval_seconds):
         curr_time = pendulum.now("UTC")
 
         if (

@@ -21,6 +21,7 @@ from typing import (
 from dagster import check
 from dagster.api.get_server_id import sync_get_server_id
 from dagster.api.list_repositories import sync_list_repositories_grpc
+from dagster.core.errors import DagsterUserCodeUnreachableError
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation import ExternalRepositoryOrigin
 from dagster.core.host_representation.grpc_server_registry import (
@@ -483,11 +484,13 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
             endpoint = self._grpc_endpoints.get(location_name)
 
         if not endpoint:
-            raise Exception(f"No server endpoint exists for location {location_name}")
+            raise DagsterUserCodeUnreachableError(
+                f"No server endpoint exists for location {location_name}"
+            )
 
         if isinstance(endpoint, SerializableErrorInfo):
             # Consider raising the original exception here instead of a wrapped one
-            raise Exception(
+            raise DagsterUserCodeUnreachableError(
                 f"Failure loading server endpoint for location {location_name}: {endpoint}"
             )
 

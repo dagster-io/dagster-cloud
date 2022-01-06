@@ -82,6 +82,24 @@ class CliInputCodeLocation:
         return location_input
 
 
+AGENT_STATUS_QUERY = """
+query AgentStatus {
+    agents {
+        status
+        errors {
+            error {
+                message
+            }
+        }
+    }
+}
+"""
+
+
+def fetch_agent_status(client: GqlShimClient) -> List[Any]:
+    return client.execute(AGENT_STATUS_QUERY)["data"]["agents"]
+
+
 WORKSPACE_ENTRIES_QUERY = """
 query WorkspaceEntries {
     workspace {

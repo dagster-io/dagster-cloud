@@ -1,6 +1,5 @@
 from contextlib import ExitStack
-from typing import List, Optional, Dict, Any
-
+from typing import Any, Dict, List, Optional
 
 import yaml
 from dagster import Field, check
@@ -23,7 +22,9 @@ from ..util import get_env_names_from_config
 
 
 class DagsterCloudInstance(DagsterInstance):
-    pass
+    @property
+    def telemetry_enabled(self) -> bool:
+        return False
 
 
 class DagsterCloudAgentInstance(DagsterCloudInstance):
@@ -196,9 +197,7 @@ instance_class:
         return {"enabled": Field(Bool, is_required=False, default_value=False)}
 
     def get_required_daemon_types(self):
-        from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgentDaemon
-
-        return [DagsterCloudAgentDaemon.daemon_type()]
+        return []
 
     @staticmethod
     def config_defaults(base_dir):

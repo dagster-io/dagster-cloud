@@ -1,7 +1,8 @@
+from typing import Optional
+
 from typer import Argument, Context, Option, Typer
 
 from .. import gql, ui
-from typing import Optional
 from ..config_utils import (
     DagsterCloudCliConfig,
     available_deployment_names,
@@ -10,7 +11,7 @@ from ..config_utils import (
     write_config,
 )
 
-app = Typer()
+app = Typer(help="Configure the dagster-cloud CLI")
 
 
 @app.command()
@@ -18,6 +19,7 @@ app = Typer()
 def set_deployment(
     ctx: Context, deployment: str = Argument(..., autocompletion=available_deployment_names)
 ):
+    """Set the default deployment for CLI commands."""
     deployments = available_deployment_names(ctx=ctx)
     if not deployment or not deployment in deployments:
         raise ui.error(f"Deployment {ui.as_code(deployment)} not found")
@@ -35,6 +37,7 @@ def view(
         False, "--show-token", "-s", help="Whether to display the user token in plaintext."
     )
 ):
+    """View the current CLI configuration."""
     config = read_config()
     if not show_token and config.user_token:
         config = config._replace(user_token=ui.censor_token(config.user_token))
@@ -42,12 +45,7 @@ def view(
     ui.print_yaml(config_to_display)
 
 
-app_configure = Typer()
-
-
-@app_configure.command()
-@dagster_cloud_options(allow_empty=True)
-def configure(organization: str, deployment: str, api_token: str):
+def _setup(organization: str, deployment: str, api_token: str):
     new_org = ui.input("Dagster Cloud organization:", default=organization or "") or None
 
     new_api_token = ui.password_input("Dagster Cloud user token:", default=api_token or "") or None
@@ -69,7 +67,9 @@ def configure(organization: str, deployment: str, api_token: str):
     if deployment_names:
         options = ["None"] + deployment_names
         new_deployment = ui.list_input(
-            "Default deployment:", choices=options, default=deployment or "None"
+            "Default deployment:",
+            choices=options,
+            default=deployment if deployment in options else "None",
         )
         if new_deployment == "None":
             new_deployment = None
@@ -81,3 +81,21 @@ def configure(organization: str, deployment: str, api_token: str):
             organization=new_org, default_deployment=new_deployment, user_token=new_api_token
         )
     )
+
+
+@app.command()
+@dagster_cloud_options(allow_empty=True)
+def setup(organization: str, deployment: str, api_token: str):
+    """Populate the CLI configuration."""
+    _setup(organization, deployment, api_token)
+
+
+app_configure = Typer(hidden=True)
+
+# Legacy, to support the old `dagster-cloud configure` path
+# New command is `dagster-cloud config setup`
+@app_configure.command(name="configure", hidden=True)
+@dagster_cloud_options(allow_empty=True)
+def configure_legacy(organization: str, deployment: str, api_token: str):
+    """Populate the CLI configuration."""
+    _setup(organization, deployment, api_token)
