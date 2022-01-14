@@ -82,6 +82,9 @@ class DagsterCloudApi(Enum):
     CHECK_STEP_HEALTH = "CHECK_STEP_HEALTH"
     TERMINATE_STEP = "TERMINATE_STEP"
 
+    def __structlog__(self):
+        return self.name
+
 
 @whitelist_for_serdes
 class DagsterCloudApiThreadTelemetry(

@@ -6,6 +6,12 @@ import boto3
 from .service import Service
 
 
+class EcsServiceError(Exception):
+    def __init__(self, task_arn, logs):
+        message = f"ECS service failed because task {task_arn} failed:\n{logs}"
+        super().__init__(message)
+
+
 class Client:
     def __init__(
         self,
@@ -65,13 +71,16 @@ class Client:
         if not env:
             env = {}
 
+        family = name
+        container_name = name
+
         kwargs = dict(
-            family=name,
+            family=family,
             requiresCompatibilities=["FARGATE"],
             networkMode="awsvpc",
             containerDefinitions=[
                 {
-                    "name": name,
+                    "name": container_name,
                     "image": image,
                     "environment": [{"name": key, "value": value} for key, value in env.items()],
                     "command": command,
@@ -80,7 +89,7 @@ class Client:
                         "options": {
                             "awslogs-group": self.log_group,
                             "awslogs-region": self.ecs.meta.region_name,
-                            "awslogs-stream-prefix": name,
+                            "awslogs-stream-prefix": family,
                         },
                     },
                 },
@@ -225,16 +234,7 @@ class Client:
         )
 
         if exit_code:
-            task_id = task_arn.split("/")[-1]
-
-            log_stream = f"{name}/{name}/{task_id}"
-
-            events = self.logs.get_log_events(
-                logGroupName=self.log_group,
-                logStreamName=log_stream,
-            ).get("events")
-
-            raise Exception([event.get("message") for event in events])
+            raise Exception(self._get_logs(task_arn))
 
         return True
 
@@ -315,12 +315,26 @@ class Client:
             ).get("taskArns")
 
             if stopped:
-                tasks = self.ecs.describe_tasks(
-                    cluster=self.cluster_name,
-                    tasks=stopped,
-                ).get("tasks")
-                reasons = [task.get("stoppedReason") for task in tasks]
-                raise Exception(reasons)
+                logs = []
+                task_arn = stopped[0]
+
+                try:
+                    logs = self._get_logs(task_arn)
+                except:
+                    pass
+
+                if logs:
+                    raise EcsServiceError(task_arn=task_arn, logs=logs)
+
+                stopped_reason = (
+                    self.ecs.describe_tasks(
+                        cluster=self.cluster_name,
+                        tasks=[task_arn],
+                    )
+                    .get("tasks")[0]
+                    .get("stoppedReason")
+                )
+                raise EcsServiceError(task_arn=task_arn, logs=stopped_reason)
 
             if running:
                 task = self.ecs.describe_tasks(cluster=self.cluster_name, tasks=running,).get(
@@ -367,3 +381,27 @@ class Client:
             if any(route.nat_gateway_id for route in route_table.routes):
                 return "DISABLED"
         return "ENABLED"
+
+    def _get_logs(self, task_arn):
+        task = self.ecs.describe_tasks(cluster=self.cluster_name, tasks=[task_arn]).get("tasks")[0]
+
+        task_definition_arn = task.get("taskDefinitionArn")
+        task_definition = self.ecs.describe_task_definition(taskDefinition=task_definition_arn).get(
+            "taskDefinition"
+        )
+
+        container_definition = task_definition.get("containerDefinitions")[0]
+        log_stream_prefix = (
+            container_definition.get("logConfiguration").get("options").get("awslogs-stream-prefix")
+        )
+        container_name = container_definition.get("name")
+        task_id = task_arn.split("/")[-1]
+
+        log_stream = f"{log_stream_prefix}/{container_name}/{task_id}"
+
+        events = self.logs.get_log_events(
+            logGroupName=self.log_group,
+            logStreamName=log_stream,
+        ).get("events")
+
+        return [event.get("message") for event in events]

@@ -106,7 +106,7 @@ def get_agent_headers(config_value: Dict[str, Any]):
 @contextmanager
 def create_cloud_requests_session(retries: int):
     with requests.Session() as session:
-        urllib_version = parse(urllib3.__version__)
+        urllib_version = parse(urllib3.__version__)  # type: ignore[attr-defined]
         # method for whitelisting all methods (GET/POST/etc.) is moving from method_whitelist
         # to allowed_methods
         allowed_method_param = (
@@ -120,7 +120,7 @@ def create_cloud_requests_session(retries: int):
                 total=retries,
                 backoff_factor=RETRY_BACKOFF_FACTOR,
                 status_forcelist=[500, 502, 503, 504],
-                **allowed_method_param,
+                **allowed_method_param,  # type: ignore
             )
         )
         session.mount("https://", adapter)

@@ -2,8 +2,8 @@ from typing import List
 
 from typer import Option, Typer
 
-from ...cli import gql, ui
-from ...cli.config_utils import dagster_cloud_options
+from ... import gql, ui
+from ...config_utils import dagster_cloud_options
 
 app = Typer(help="Customize your login settings.")
 

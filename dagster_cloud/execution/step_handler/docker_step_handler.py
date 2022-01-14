@@ -13,10 +13,18 @@ from dagster_cloud.execution.utils.docker import check_on_container
 
 
 class DockerStepHandler(StepHandler):
-    def __init__(self, networks, env_vars):
+    def __init__(
+        self,
+        networks,
+        env_vars,
+        container_kwargs=None,
+    ):
         super().__init__()
         self._networks = check.opt_list_param(networks, "networks", of_type=str)
         self._env_vars = check.opt_list_param(env_vars, "env_vars", of_type=str)
+        self._container_kwargs = check.opt_dict_param(
+            container_kwargs, "container_kwargs", key_type=str
+        )
 
     @property
     def name(self) -> str:
@@ -45,6 +53,7 @@ class DockerStepHandler(StepHandler):
                 "step_key": execute_step_args.step_keys_to_execute[0],
                 "run_id": execute_step_args.pipeline_run_id,
             },
+            **self._container_kwargs,
         )
 
     def launch_step(self, step_handler_context: StepHandlerContext) -> List[DagsterEvent]:

@@ -15,7 +15,6 @@ from dagster.core.events import DagsterEvent
 from dagster.core.events.log import EventLogEntry
 from dagster.core.host_representation import RepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
-from dagster.daemon.daemon import get_default_daemon_logger
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
@@ -92,7 +91,7 @@ class DagsterCloudAgent:
     MAX_THREADS_PER_CORE = 10
 
     def __init__(self):
-        self._logger = get_default_daemon_logger(type(self).__name__)
+        self._logger = logging.getLogger("dagster_cloud")
 
         self._logger.info("Starting Dagster Cloud agent...")
 

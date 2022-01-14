@@ -1,12 +1,12 @@
+import logging
 import os
 import sys
 import uuid
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import docker
-from dagster import Array, Field, check
+from dagster import Array, Field, Permissive, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
-from dagster.daemon.daemon import get_default_daemon_logger
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
 from dagster_cloud.execution.step_handler.docker_step_handler import DockerStepHandler
@@ -25,11 +25,16 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
         inst_data=None,
         networks=None,
         env_vars=None,
+        container_kwargs=None,
     ):
         self._inst_data = inst_data
-        self._logger = get_default_daemon_logger("DockerUserCodeLauncher")
+        self._logger = logging.getLogger("dagster_cloud")
         self._networks = check.opt_list_param(networks, "networks", of_type=str)
         self._input_env_vars = check.opt_list_param(env_vars, "env_vars", of_type=str)
+
+        self._container_kwargs = check.opt_dict_param(
+            container_kwargs, "container_kwargs", key_type=str
+        )
 
         super(DockerUserCodeLauncher, self).__init__()
 
@@ -45,6 +50,10 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
     def env_vars(self) -> List[str]:
         return self._input_env_vars + self._instance.dagster_cloud_api_env_vars
 
+    @property
+    def container_kwargs(self) -> Dict[str, Any]:
+        return self._container_kwargs
+
     @classmethod
     def config_type(cls):
         return {
@@ -53,6 +62,13 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
                 [str],
                 is_required=False,
                 description="The list of environment variables names to forward to the docker container",
+            ),
+            "container_kwargs": Field(
+                Permissive(),
+                is_required=False,
+                description="key-value pairs that can be passed into containers.create. See "
+                "https://docker-py.readthedocs.io/en/stable/containers.html for the full list "
+                "of available options.",
             ),
         }
 
@@ -74,6 +90,7 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
             labels=[GRPC_SERVER_LABEL, self._get_label_for_location(location_name)],
             command=metadata.get_grpc_server_command(),
             ports={port: port} if hostname == "localhost" else None,
+            **self._container_kwargs,
         )
 
     def _get_server_handles_for_location(self, location_name: str) -> Iterable[Container]:
@@ -158,13 +175,14 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
             self._remove_server_handle(container)
 
     def get_step_handler(self, _execution_config: Optional[Dict]) -> DockerStepHandler:
-        return DockerStepHandler(self._networks, self.env_vars)
+        return DockerStepHandler(self._networks, self.env_vars, self._container_kwargs)
 
     def run_launcher(self):
         launcher = WatchfulDockerRunLauncher(
             image=None,
             env_vars=self.env_vars,
             networks=self._networks,
+            container_kwargs=self._container_kwargs,
         )
         launcher.register_instance(self._instance)
 

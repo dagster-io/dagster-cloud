@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import threading
@@ -6,7 +7,6 @@ from typing import Dict, Iterable, NamedTuple, Optional, Set
 from dagster import check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
-from dagster.daemon.daemon import get_default_daemon_logger
 from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster.grpc.server import GrpcServerProcess
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
@@ -49,7 +49,7 @@ class ProcessUserCodeEntry(
 class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
     def __init__(self, inst_data: ConfigurableClassData = None, wait_for_processes: bool = False):
         self._inst_data = inst_data
-        self._logger = get_default_daemon_logger("ProcessDagsterUserCodeLauncher")
+        self._logger = logging.getLogger("dagster_cloud")
 
         # map from pid to server being spun up
         # (including old servers in the process of being shut down)
@@ -174,9 +174,7 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
 
     def _get_loadable_target_origin(self, metadata: CodeDeploymentMetadata) -> LoadableTargetOrigin:
         return LoadableTargetOrigin(
-            executable_path=metadata.executable_path
-            if metadata.executable_path
-            else sys.executable,
+            executable_path=metadata.executable_path if metadata.executable_path else "",
             python_file=metadata.python_file,
             package_name=metadata.package_name,
             module_name=metadata.module_name,

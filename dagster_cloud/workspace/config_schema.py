@@ -23,9 +23,6 @@ def process_workspace_config(workspace_config):
             "Must supply exactly one of a file name, a package name, or a module name",
         )
 
-        if config.get("working_directory"):
-            check.invariant(python_file, "Can only set a working directory if python_file is set")
-
     return True
 
 

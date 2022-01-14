@@ -35,9 +35,6 @@ class CodeDeploymentMetadata(
             "Must supply exactly one of a file name, a package name, or a module name",
         )
 
-        if working_directory:
-            check.invariant(python_file, "Can only set a working directory if python_file is set")
-
         return super(CodeDeploymentMetadata, cls).__new__(
             cls,
             check.opt_str_param(image, "image"),
@@ -73,6 +70,11 @@ class CodeDeploymentMetadata(
                 else {}
             ),
             ({"DAGSTER_CLI_API_GRPC_ATTRIBUTE": self.attribute} if self.attribute else {}),
+            (
+                {"DAGSTER_CLI_API_GRPC_USE_PYTHON_ENVIRONMENT_ENTRY_POINT": "1"}
+                if self.executable_path
+                else {}
+            ),
         )
 
 

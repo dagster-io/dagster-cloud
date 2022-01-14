@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dagster_cloud.api.client import GqlShimClient, create_cloud_dagit_client
 
@@ -289,3 +289,50 @@ def reconcile_code_locations(
         )
     else:
         raise Exception(f"Unable to sync locations: {str(result)}")
+
+
+SET_DEPLOYMENT_SETTINGS_MUTATION = """
+    mutation SetDeploymentSettings($deploymentSettings: DeploymentSettingsInput!) {
+        setDeploymentSettings(deploymentSettings: $deploymentSettings) {
+            __typename
+            ... on DeploymentSettings {
+                settings
+            }
+            ...on UnauthorizedError {
+                message
+            }
+            ... on PythonError {
+                message
+                stack
+            }
+        }
+    }
+"""
+
+
+def set_deployment_settings(client: GqlShimClient, deployment_settings: Dict[str, Any]) -> None:
+    result = client.execute(
+        SET_DEPLOYMENT_SETTINGS_MUTATION,
+        variable_values={"deploymentSettings": deployment_settings},
+    )
+
+    if result["data"]["setDeploymentSettings"]["__typename"] != "DeploymentSettings":
+        raise Exception(f"Unable to set deployment settings: {str(result)}")
+
+
+DEPLOYMENT_SETTINGS_QUERY = """
+    query DeploymentSettings {
+        deploymentSettings {
+            settings
+        }
+    }
+"""
+
+
+def get_deployment_settings(client: GqlShimClient) -> Dict[str, Any]:
+    result = client.execute(DEPLOYMENT_SETTINGS_QUERY)
+
+    if result.get("data", {}).get("deploymentSettings", {}).get("settings") == None:
+        raise Exception(f"Unable to get deployment settings: {str(result)}")
+
+    return result["data"]["deploymentSettings"]["settings"]

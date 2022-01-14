@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -5,6 +6,7 @@ from typing import Optional
 
 from dagster.core.errors import DagsterHomeNotSetError
 from dagster.utils.interrupts import capture_interrupts
+from dagster.utils.log import default_date_format_string, default_format_string
 from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from typer import Argument, Typer
@@ -64,4 +66,10 @@ def run_local_agent_in_environment(dagster_home: Optional[Path]):
     short_help="Runs the Dagster Cloud agent.",
 )
 def run(dagster_home: Optional[Path] = Argument(None)):
+    logging.basicConfig(
+        level=logging.INFO,
+        format=default_format_string(),
+        datefmt=default_date_format_string(),
+        handlers=[logging.StreamHandler()],
+    )
     run_local_agent_in_environment(dagster_home)

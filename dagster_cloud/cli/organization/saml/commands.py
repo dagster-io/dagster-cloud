@@ -3,10 +3,10 @@ from pathlib import Path
 import requests
 from typer import Argument, Typer
 
-from ...cli import ui
-from ...cli.config_utils import dagster_cloud_options
-from ...errors import raise_http_error
-from ...headers.impl import get_dagster_cloud_api_headers
+from ....errors import raise_http_error
+from ....headers.impl import get_dagster_cloud_api_headers
+from ... import ui
+from ...config_utils import dagster_cloud_options
 
 app = Typer(help="Customize your SAML settings.")
 

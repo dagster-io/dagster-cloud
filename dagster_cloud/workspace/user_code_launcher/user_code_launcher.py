@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import tempfile
@@ -33,7 +34,6 @@ from dagster.core.host_representation.origin import (
     RepositoryLocationOrigin,
 )
 from dagster.core.instance import MayHaveInstanceWeakref
-from dagster.daemon.daemon import get_default_daemon_logger
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.grpc.types import GetCurrentImageResult
 from dagster.serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
@@ -65,7 +65,7 @@ class UserCodeLauncherEntry(
 
 class DagsterCloudUserCodeLauncher(GrpcServerRegistry, MayHaveInstanceWeakref):
     def __init__(self):
-        self._logger = get_default_daemon_logger("DagsterUserCodeLauncher")
+        self._logger = logging.getLogger("dagster_cloud")
         self._started: bool = False
 
     def start(self):
@@ -245,7 +245,6 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
     def __init__(self):
         self._grpc_endpoints: Dict[str, Union[GrpcServerEndpoint, SerializableErrorInfo]] = {}
         self._grpc_endpoints_lock = threading.Lock()
-        self._logger = get_default_daemon_logger("ReconcileUserCodeLauncher")
 
         # periodically reconciles to make desired = actual
         self._desired_entries: Optional[Dict[str, UserCodeLauncherEntry]] = None
