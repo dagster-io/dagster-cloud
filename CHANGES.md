@@ -1,5 +1,41 @@
 # Dagster Cloud Changelog
 
+# 0.13.14
+
+## Dagster Cloud
+
+### New
+
+* Deployment settings (run queue configuration, run start timeouts) can now be configured via the `dagster-cloud` CLI. For example: `dagster-cloud deployment settings set-from-file example-settings.yaml`. These settings will soon be available to configure within Dagit as well as the CLI.
+
+    ```
+    # example-settings.yaml
+    run_queue:
+      max_concurrent_runs: 10
+      tag_concurrency_limits: []
+    run_monitoring:
+      start_timeout_seconds: 300
+    ```
+
+* There is now documentation to set up SAML SSO for Google Workspace. See https://docs.dagster.cloud/auth/google-workspace for details.
+
+## Agent
+
+### New
+
+* Containers created by the Docker agent can now be configured with any configuration that’s available on the [`Container.run` call in the Docker Python client](https://docker-py.readthedocs.io/en/stable/containers.html#docker.models.containers.ContainerCollection.run). For example, to ensure that containers are automatically removed when they are finished running, you can configure your `dagster.yaml` as follows:
+
+    ```
+    user_code_launcher:
+      module: dagster_cloud.workspace.docker
+      class: DockerUserCodeLauncher
+      config:
+        container_kwargs:
+          auto_remove: true
+    ```
+
+* Logging is now emitted from the `dagster_cloud` logger.
+
 # 0.13.13
 
 ## Dagster Cloud
