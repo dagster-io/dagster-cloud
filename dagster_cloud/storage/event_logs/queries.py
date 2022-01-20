@@ -192,6 +192,23 @@ GET_ASSET_RUN_IDS_QUERY = """
     }
     """
 
+GET_MATERIALIZATION_COUNT_BY_PARTITION = """
+    query getMaterializationCountByPartition($assetKeys: [String!]!) {
+        eventLogs {
+            getMaterializationCountByPartition(assetKeys: $assetKeys) {
+                ... on AssetMaterializationCountByPartition {
+                    assetKey
+                    materializationCountByPartition {
+                        partition
+                        materializationCount
+                    }
+                }
+            }
+        }
+    }
+    """
+
+
 STORE_EVENT_MUTATION = """
     mutation StoreEvent($eventRecord: EventLogEntryInput!) {
         eventLogs {

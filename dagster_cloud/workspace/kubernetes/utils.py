@@ -82,6 +82,7 @@ def construct_repo_location_deployment(
     image_pull_secrets,
     volume_mounts,
     volumes,
+    labels,
 ):
     # TODO: enable liveness probes
     return client.V1Deployment(
@@ -96,7 +97,7 @@ def construct_repo_location_deployment(
         spec=client.V1DeploymentSpec(
             selector=client.V1LabelSelector(match_labels={"user-deployment": deployment_name}),
             template=client.V1PodTemplateSpec(
-                metadata=client.V1ObjectMeta(labels={"user-deployment": deployment_name}),
+                metadata=client.V1ObjectMeta(labels={"user-deployment": deployment_name, **labels}),
                 spec=client.V1PodSpec(
                     image_pull_secrets=[
                         client.V1LocalObjectReference(name=x["name"]) for x in image_pull_secrets

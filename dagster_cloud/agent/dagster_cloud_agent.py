@@ -43,6 +43,7 @@ from dagster_cloud.workspace.user_code_launcher import (
 )
 
 from ..errors import raise_http_error
+from ..version import __version__
 from .queries import (
     ADD_AGENT_HEARTBEAT_MUTATION,
     GET_USER_CLOUD_REQUESTS_QUERY,
@@ -201,16 +202,18 @@ class DagsterCloudAgent:
             return
 
         self._last_heartbeat_time = curr_time
-
         heartbeat = AgentHeartbeat(
             timestamp=curr_time.float_timestamp,
             agent_id=agent_uuid,
             agent_label=instance.dagster_cloud_api_agent_label,
-            agent_type=None,
+            agent_type=type(instance.user_code_launcher).__name__
+            if instance.user_code_launcher
+            else None,
             errors=[
                 TimestampedError(timestamp.float_timestamp, error)
                 for (error, timestamp) in self._errors
             ],
+            metadata={"version": __version__},
         )
 
         res = instance.graphql_client.execute(

@@ -371,7 +371,7 @@ class DagsterCloudUploadApiResponse(
 
 
 @whitelist_for_serdes
-class TimestampedError(namedtuple("_AgentHeartbeat", "timestamp error")):
+class TimestampedError(namedtuple("_TimestampedError", "timestamp error")):
     def __new__(cls, timestamp, error):
 
         return super(TimestampedError, cls).__new__(
@@ -383,9 +383,9 @@ class TimestampedError(namedtuple("_AgentHeartbeat", "timestamp error")):
 
 @whitelist_for_serdes
 class AgentHeartbeat(
-    namedtuple("_AgentHeartbeat", "timestamp agent_id agent_label agent_type errors")
+    namedtuple("_AgentHeartbeat", "timestamp agent_id agent_label agent_type errors metadata")
 ):
-    def __new__(cls, timestamp, agent_id, agent_label, agent_type, errors=None):
+    def __new__(cls, timestamp, agent_id, agent_label, agent_type, errors=None, metadata=None):
         errors = check.opt_list_param(errors, "errors", of_type=TimestampedError)
 
         return super(AgentHeartbeat, cls).__new__(
@@ -395,4 +395,5 @@ class AgentHeartbeat(
             agent_label=check.opt_str_param(agent_label, "agent_label"),
             agent_type=check.opt_str_param(agent_type, "agent_type"),
             errors=errors,
+            metadata=check.opt_dict_param(metadata, str, str),
         )

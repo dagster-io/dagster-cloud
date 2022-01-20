@@ -72,7 +72,8 @@ def _get_filters_input(filters) -> Optional[Dict[str, Any]]:
         if filters.tags
         else [],
         "snapshotId": filters.snapshot_id,
-        "updatedAfter": filters.updated_after.isoformat() if filters.updated_after else None,
+        "updatedAfter": filters.updated_after.timestamp() if filters.updated_after else None,
+        "createdBefore": filters.created_before.timestamp() if filters.created_before else None,
     }
 
 
@@ -92,6 +93,8 @@ def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
         update_timestamp=utc_datetime_from_timestamp(
             check.float_elem(graphene_run_record, "updateTimestamp")
         ),
+        start_time=graphene_run_record.get("startTime"),
+        end_time=graphene_run_record.get("endTime"),
     )
 
 
@@ -235,6 +238,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         limit: int = None,
         order_by: str = None,
         ascending: bool = False,
+        cursor: str = None,
     ) -> List[RunRecord]:
         res = self._execute_query(
             GET_RUN_RECORDS_QUERY,
@@ -243,6 +247,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "limit": check.opt_int_param(limit, "limit"),
                 "orderBy": check.opt_str_param(order_by, "order_by"),
                 "ascending": check.opt_bool_param(ascending, "ascending"),
+                "cursor": check.opt_str_param(cursor, "cursor"),
             },
         )
         return [_run_record_from_graphql(record) for record in res["data"]["runs"]["getRunRecords"]]

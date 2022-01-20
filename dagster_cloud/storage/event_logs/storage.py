@@ -33,6 +33,7 @@ from .queries import (
     GET_EVENT_RECORDS_QUERY,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
     GET_LOGS_FOR_RUN_QUERY,
+    GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_STATS_FOR_RUN_QUERY,
     GET_STEP_STATS_FOR_RUN_QUERY,
     HAS_ASSET_KEY_QUERY,
@@ -451,6 +452,32 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             GET_ASSET_RUN_IDS_QUERY, variables={"assetKey": asset_key.to_string()}
         )
         return res["data"]["eventLogs"]["getAssetRunIds"]
+
+    def get_materialization_count_by_partition(
+        self, asset_keys: Sequence[AssetKey]
+    ) -> Mapping[AssetKey, Mapping[str, int]]:
+        check.list_param(asset_keys, "asset_keys", of_type=AssetKey)
+
+        res = self._execute_query(
+            GET_MATERIALIZATION_COUNT_BY_PARTITION,
+            variables={"assetKeys": [asset_key.to_string() for asset_key in asset_keys]},
+        )
+
+        materialization_count_result = res["data"]["eventLogs"][
+            "getMaterializationCountByPartition"
+        ]
+
+        materialization_count_by_partition: Dict[AssetKey, Dict[str, int]] = {
+            asset_key: {} for asset_key in asset_keys
+        }
+        for asset_count in materialization_count_result:
+            asset_key = AssetKey.from_db_string(asset_count["assetKey"])
+            for graphene_partition_count in asset_count["materializationCountByPartition"]:
+                materialization_count_by_partition[asset_key][
+                    graphene_partition_count["partition"]
+                ] = graphene_partition_count["materializationCount"]
+
+        return materialization_count_by_partition
 
     def wipe_asset(self, asset_key: AssetKey):
         res = self._execute_query(

@@ -22,6 +22,8 @@ fragment runRecordFragment on RunRecord {
     serializedPipelineRun
     createTimestamp
     updateTimestamp
+    startTime
+    endTime
 }
 """
 

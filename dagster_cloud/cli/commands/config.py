@@ -1,5 +1,13 @@
-from typing import Optional
+import json
+import random
+import string
+import webbrowser
+from enum import Enum
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Optional, Tuple, Type
+from urllib import parse
 
+from dagster.utils import find_free_port
 from typer import Argument, Context, Option, Typer
 
 from .. import gql, ui
@@ -45,10 +53,146 @@ def view(
     ui.print_yaml(config_to_display)
 
 
-def _setup(organization: str, deployment: str, api_token: str):
-    new_org = ui.input("Dagster Cloud organization:", default=organization or "") or None
+app_configure = Typer()
 
-    new_api_token = ui.password_input("Dagster Cloud user token:", default=api_token or "") or None
+
+def create_token_callback_handler(nonce: str) -> Type[BaseHTTPRequestHandler]:
+    class TokenCallbackHandler(BaseHTTPRequestHandler):
+        def _send_shared_headers(self):
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "POST,OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+        def _error(self, code, message=None):
+            self.send_error(code, message)
+            self._send_shared_headers()
+            self.end_headers()
+
+        def do_OPTIONS(self):
+            self.send_response(200)
+            self._send_shared_headers()
+            self.end_headers()
+
+        def do_POST(self):
+            url = parse.urlparse(self.path)
+
+            if url.path != "/callback":
+                self._error(404, "Page not found")
+                return
+
+            content = self.rfile.read(int(self.headers["Content-Length"]))
+            body = json.loads(content)
+
+            if not body.get("nonce") or body.get("nonce") != nonce:
+                self._error(400, "Invalid nonce")
+                return
+            if not body.get("token"):
+                self._error(400, "No user token provided")
+                return
+            if not body.get("organization"):
+                self._error(400, "No organization provided")
+                return
+
+            organization = body.get("organization")
+            token = body.get("token")
+
+            self.send_response(200)
+            self._send_shared_headers()
+            response = b'{ "ok": true }'
+            self.send_header("Content-length", str(len(response)))
+            self.end_headers()
+
+            self.wfile.write(response)
+
+            # Pass back result values
+            assert isinstance(self.server, TokenServer)
+            self.server.set_result(organization=organization, token=token)
+            self.server.shutdown()
+
+        # Overridden so that the webserver doesn't log requests to the console
+        # pylint: disable=unused-argument
+        def log_request(self, code="-", size="-"):
+            return
+
+    return TokenCallbackHandler
+
+
+class TokenServer(HTTPServer):
+    organization: Optional[str] = None
+    token: Optional[str] = None
+
+    def __init__(self, host: Tuple[str, int], nonce: str):
+        super().__init__(host, create_token_callback_handler(nonce))
+
+    def shutdown(self):
+        # Stop serving the token server
+        # https://stackoverflow.com/a/36017741
+        setattr(self, "_BaseServer__shutdown_request", True)
+
+    def set_result(self, organization: str, token: str):
+        self.organization = organization
+        self.token = token
+
+    def get_organization(self) -> Optional[str]:
+        return self.organization
+
+    def get_token(self) -> Optional[str]:
+        return self.token
+
+
+class SetupAuthMethod(Enum):
+    WEB = "web"
+    CLI = "cli"
+
+
+def _settings_method_input(api_token: str):
+    if api_token:
+        choices = [
+            ui.choice(SetupAuthMethod.CLI, "Authenticate using token or keep current settings"),
+            ui.choice(SetupAuthMethod.WEB, "Authenticate in browser"),
+        ]
+    else:
+        choices = [
+            ui.choice(SetupAuthMethod.WEB, "Authenticate in browser"),
+            ui.choice(SetupAuthMethod.CLI, "Authenticate using token"),
+        ]
+    return ui.list_input(
+        "How would you like to authenticate the CLI?",
+        choices,
+    )
+
+
+def _generate_nonce():
+    return "".join(
+        random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(8)
+    )
+
+
+def _setup(organization: str, deployment: str, api_token: str):
+    setup_method = _settings_method_input(api_token)
+
+    if setup_method == SetupAuthMethod.WEB:
+        port = find_free_port()
+        nonce = _generate_nonce()
+        escaped = parse.quote(f"/cli-auth/{nonce}?port={port}")
+        auth_url = f"https://dagster.cloud?next={escaped}"
+        try:
+            webbrowser.open(auth_url, new=0, autoraise=True)
+        except webbrowser.Error as e:
+            ui.warn(
+                f"Error launching web browser: {str(e)}\n\nTo finish authorization, visit {auth_url}\n"
+            )
+
+        server = TokenServer(("localhost", port), nonce)
+        server.serve_forever()
+        new_org = server.get_organization()
+        new_api_token = server.get_token()
+        ui.print(f"Authorized for organization {ui.as_code(str(new_org))}\n")
+    else:
+        new_org = ui.input("Dagster Cloud organization:", default=organization or "") or None
+        new_api_token = (
+            ui.password_input("Dagster Cloud user token:", default=api_token or "") or None
+        )
 
     # Attempt to fetch deployment names from server, fallback to a text input upon failure
     deployment_names = []

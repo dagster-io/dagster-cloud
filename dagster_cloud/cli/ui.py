@@ -61,6 +61,10 @@ def list_input(
     return questionary.select(prompt, choices=choices, default=default).unsafe_ask()
 
 
+def choice(value: Any, name: str) -> Any:
+    return questionary.Choice(title=name, value=value)
+
+
 # pylint: disable=redefined-builtin
 def input(prompt: str, default: str = "", validate: Callable = None) -> str:
     """

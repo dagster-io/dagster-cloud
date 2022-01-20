@@ -51,6 +51,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
         image_pull_secrets=None,
         deployment_startup_timeout=None,
         server_process_startup_timeout=None,
+        labels=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("K8sUserCodeLauncher")
@@ -78,6 +79,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             "server_process_startup_timeout",
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
+        self._labels = check.opt_dict_param(labels, "labels", key_type=str, value_type=str)
 
         if kubeconfig_file:
             kubernetes.config.load_kube_config(kubeconfig_file)
@@ -178,6 +180,11 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
                 description="Specifies that Kubernetes should get the credentials from "
                 "the Secrets named in this list.",
             ),
+            "labels": Field(
+                dict,
+                is_required=False,
+                description="Labels to apply to the pods created by the agent.",
+            ),
             "deployment_startup_timeout": Field(
                 IntSource,
                 is_required=False,
@@ -209,6 +216,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             volumes=config_value.get("volumes"),
             deployment_startup_timeout=config_value.get("deployment_startup_timeout"),
             server_process_startup_timeout=config_value.get("server_process_startup_timeout"),
+            labels=config_value.get("labels"),
         )
 
     @contextmanager
@@ -236,6 +244,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
                         self._image_pull_secrets,
                         self._volume_mounts,
                         self._volumes,
+                        self._labels,
                     ),
                 )
             self._logger.info("Created deployment: {}".format(api_response.metadata.name))

@@ -49,13 +49,16 @@ _DEPLOYMENT_METADATA_OPTIONS = {
             None,
             "--working-directory",
             "-d",
-            help="Working directory to use when loading the repositories. Can only be used along with -f/--python-file.",
+            help="Base directory to use for local imports when loading the repositories.",
         ),
     ),
     "package_name": (
         str,
         Option(
-            None, "--package-name", "-p", help="Installed Python package where repositories live"
+            None,
+            "--package-name",
+            "-p",
+            help="Local or installed Python package where repositories live",
         ),
     ),
     "module_name": (

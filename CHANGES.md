@@ -1,7 +1,5 @@
 # Dagster Cloud Changelog
-
 # 0.13.14
-
 ## Dagster Cloud
 
 ### New
