@@ -1,4 +1,30 @@
 # Dagster Cloud Changelog
+
+# 0.13.16
+
+## Dagster Cloud
+
+### New
+
+* `dagster-cloud config setup` now allows the user to authenticate the CLI by logging in through the browser.
+
+### Bugfixes
+
+* When uploading SAML metadata via the `dagster-cloud` CLI, a deployment no longer needs to be specified.
+
+## Agent
+
+### New
+
+* If your agent’s Dagster Cloud version is >=0.13.15, its version will now surface on your Dagster Cloud instance status page.
+* The Kubernetes agent can now specify a dictionary of labels that will be applied to the pods spun up by the agent. Here is an example `values.yaml` snippet that adds pod labels:
+
+    ```
+    workspace:
+      labels:
+        my_label_key: my_label_value
+    ```
+
 # 0.13.14
 ## Dagster Cloud
 
@@ -103,4 +129,3 @@
 ### New
 
 * Support specifying a Docker target stage when building multistage Dockerfiles.
-
