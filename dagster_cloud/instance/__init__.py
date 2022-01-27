@@ -1,3 +1,4 @@
+import uuid
 from contextlib import ExitStack
 from typing import Any, Dict, List, Optional
 
@@ -60,6 +61,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._agent_replicas_config = self._get_processed_config(
             "agent_replicas", agent_replicas, self._agent_replicas_config_schema()
         )
+
+        self._instance_uuid = str(uuid.uuid4())
 
     def _get_processed_config(
         self, name: str, config: Optional[Dict[str, Any]], config_type: Dict[str, Any]
@@ -145,6 +148,17 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     @property
     def dagster_cloud_api_agent_label(self) -> Optional[str]:
         return self._dagster_cloud_api_config.get("agent_label")
+
+    @property
+    def instance_uuid(self) -> str:
+        return self._instance_uuid
+
+    @property
+    def agent_display_name(self) -> str:
+        if self.dagster_cloud_api_agent_label:
+            return f"Agent {self.instance_uuid[:8]} ({self.dagster_cloud_api_agent_label})"
+        else:
+            return f"Agent {self.instance_uuid[:8]}"
 
     @property
     def dagster_cloud_api_env_vars(self) -> List[str]:

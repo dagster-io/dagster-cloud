@@ -54,9 +54,9 @@ HANDLE_RUN_EVENT_MUTATION = """
 """
 
 GET_RUNS_QUERY = """
-    query getRunsQuery($filters: RunsFilter, $cursor: String, $limit: Int) {
+    query getRunsQuery($filters: RunsFilter, $cursor: String, $limit: Int, $bucketBy: RunBucket) {
         runs {
-            getRuns(filters: $filters, cursor: $cursor, limit: $limit)
+            getRuns(filters: $filters, cursor: $cursor, limit: $limit, bucketBy: $bucketBy)
         }
     }
 """
@@ -134,9 +134,9 @@ GET_RUN_GROUPS_QUERY = """
 GET_RUN_RECORDS_QUERY = (
     RUN_ROW_FRAGMENT
     + """
-    query getRunRecordsQuery($filters: RunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean) {
+    query getRunRecordsQuery($filters: RunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean, $bucketBy: RunBucket) {
         runs {
-            getRunRecords(filters: $filters, limit: $limit, orderBy: $orderBy, ascending: $ascending) {
+            getRunRecords(filters: $filters, limit: $limit, orderBy: $orderBy, ascending: $ascending, bucketBy: $bucketBy) {
                 ...runRecordFragment
             }
         }

@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 import requests
 import yaml
-from dagster import __version__, check
+from dagster import check
 from dagster.core.host_representation import ManagedGrpcPythonEnvRepositoryLocationOrigin
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.serdes import serialize_dagster_namedtuple
@@ -33,7 +33,7 @@ from ...headers.impl import get_dagster_cloud_api_headers
 
 DEFAULT_LOCATIONS_YAML_FILENAME = "locations.yaml"
 
-app = Typer(help="Commands for managing a Dagster Cloud workspace.")
+app = Typer(help="Manage your Dagster Cloud workspace.")
 
 _DEPLOYMENT_METADATA_OPTIONS = {
     "image": (str, Option(None, "--image", help="Docker image.")),
@@ -84,6 +84,26 @@ _DEPLOYMENT_METADATA_OPTIONS = {
             ),
         ),
     ),
+    "commit_hash": (
+        str,
+        Option(
+            None,
+            "--commit-hash",
+            help=(
+                "Optional metadata which indicates the commit sha associated with this location."
+            ),
+        ),
+    ),
+    "git_url": (
+        str,
+        Option(
+            None,
+            "--git-url",
+            help=(
+                "Optional metadata which specifies a source code reference link for this location."
+            ),
+        ),
+    ),
 }
 
 
@@ -99,6 +119,10 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
         working_directory=kwargs.get("working_directory"),
         executable_path=kwargs.get("executable_path"),
         attribute=kwargs.get("attribute"),
+        commit_hash=kwargs["git"].get("commit_hash")
+        if "git" in kwargs
+        else kwargs.get("commit_hash"),
+        url=kwargs["git"].get("url") if "git" in kwargs else kwargs.get("git_url"),
     )
 
 
@@ -292,7 +316,7 @@ def execute_sync_command(client, workspace):
         raise ui.error(str(e))
 
 
-@app.command(name="snapshot")
+@app.command(name="snapshot", hidden=True)
 @dagster_cloud_options(allow_empty=True, requires_url=True)
 @add_options(_DEPLOYMENT_METADATA_OPTIONS)
 def snapshot_command(

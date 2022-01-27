@@ -16,7 +16,13 @@ from dagster.core.snap import (
     create_execution_plan_snapshot_id,
     create_pipeline_snapshot_id,
 )
-from dagster.core.storage.pipeline_run import PipelineRun, PipelineRunsFilter, RunRecord
+from dagster.core.storage.pipeline_run import (
+    JobBucket,
+    PipelineRun,
+    PipelineRunsFilter,
+    RunRecord,
+    TagBucket,
+)
 from dagster.core.storage.runs.base import RunStorage
 from dagster.daemon.types import DaemonHeartbeat
 from dagster.serdes import (
@@ -98,6 +104,21 @@ def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
     )
 
 
+def _get_bucket_input(bucket_by: Optional[Union[JobBucket, TagBucket]]) -> Optional[Dict[str, Any]]:
+    if not bucket_by:
+        return None
+
+    bucket_type = "job" if isinstance(bucket_by, JobBucket) else "tag"
+    tag_key = bucket_by.tag_key if isinstance(bucket_by, TagBucket) else None
+    values = bucket_by.job_names if isinstance(bucket_by, JobBucket) else bucket_by.tag_values
+    return {
+        "bucketType": bucket_type,
+        "tagKey": tag_key,
+        "values": values,
+        "bucketLimit": bucket_by.bucket_limit,
+    }
+
+
 class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def __init__(self, inst_data: ConfigurableClassData = None, override_graphql_client=None):
         """Initialize this class directly only for test (using `override_graphql_client`).
@@ -163,7 +184,11 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
 
     def get_runs(
-        self, filters: PipelineRunsFilter = None, cursor: str = None, limit: int = None
+        self,
+        filters: PipelineRunsFilter = None,
+        cursor: str = None,
+        limit: int = None,
+        bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
     ) -> Iterable[PipelineRun]:
         res = self._execute_query(
             GET_RUNS_QUERY,
@@ -171,6 +196,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "filters": _get_filters_input(filters),
                 "cursor": check.opt_str_param(cursor, "cursor"),
                 "limit": check.opt_int_param(limit, "limit"),
+                "bucketBy": _get_bucket_input(bucket_by),
             },
         )
         return [deserialize_as(run, PipelineRun) for run in res["data"]["runs"]["getRuns"]]
@@ -239,6 +265,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         order_by: str = None,
         ascending: bool = False,
         cursor: str = None,
+        bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
     ) -> List[RunRecord]:
         res = self._execute_query(
             GET_RUN_RECORDS_QUERY,
@@ -248,6 +275,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "orderBy": check.opt_str_param(order_by, "order_by"),
                 "ascending": check.opt_bool_param(ascending, "ascending"),
                 "cursor": check.opt_str_param(cursor, "cursor"),
+                "bucketBy": _get_bucket_input(bucket_by),
             },
         )
         return [_run_record_from_graphql(record) for record in res["data"]["runs"]["getRunRecords"]]

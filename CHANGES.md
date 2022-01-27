@@ -1,5 +1,22 @@
 # Dagster Cloud Changelog
 
+# 0.13.17
+
+### New
+
+* Dagster Cloud now supports authenticating with Github. Verified emails associated with your Github user can be used for login authorization for Dagster Cloud.
+* Various improvements to the Dagster Cloud CLI.
+    * You can now display your version of Dagster Cloud by invoking `dagster-cloud --version`.
+    * Enabled `-h` as another alias for `--help`
+    * If you’ve configured a default organization, deployment, and token using `dagster-cloud config setup`, your default values will now show in the help text for any command.
+    * Installing completions using `--install-completion` no longer requires you to pass the name of your shell.
+
+### Documentation
+
+* The Dagster Cloud tutorial at https://docs.dagster.cloud has been streamlined and rewritten.
+* Added documentation for running multiple agents for the same Dagster Cloud deployment at https://docs.dagster.cloud/deployment/multiple-agents.
+* Added documentation for installing completions to the dagster-cloud CLI at https://docs.dagster.cloud/dagster-cloud-cli#completions.
+
 # 0.13.16
 
 ## Dagster Cloud
@@ -24,7 +41,6 @@
       labels:
         my_label_key: my_label_value
     ```
-
 # 0.13.14
 ## Dagster Cloud
 

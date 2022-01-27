@@ -1,8 +1,6 @@
 from pathlib import Path
-from typing import List
 
 import yaml
-from dagster.utils import merge_dicts
 from typer import Argument, Typer
 
 from .. import gql, ui
@@ -10,8 +8,8 @@ from ..config_utils import dagster_cloud_options
 
 app = Typer(help="Customize your Dagster Cloud deployment.")
 
-settings_app = Typer(help="Change your deployment settings.")
-app.add_typer(settings_app, name="settings")
+settings_app = Typer(help="Customize your deployment settings.")
+app.add_typer(settings_app, name="settings", no_args_is_help=True)
 
 
 @settings_app.command(name="set-from-file")

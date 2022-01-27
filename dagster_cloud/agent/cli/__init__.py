@@ -1,6 +1,5 @@
 import logging
 import os
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -13,7 +12,7 @@ from typer import Argument, Typer
 
 from ...cli import ui
 
-app = Typer(help="Commands for interacting with the Dagster Cloud agent.")
+app = Typer(help="Interact with the Dagster Cloud agent.")
 
 
 def agent_home_exception():
@@ -40,7 +39,7 @@ def run_local_agent():
             user_code_launcher.start()
 
             with DagsterCloudAgent() as agent:
-                agent.run_loop(instance, user_code_launcher, agent_uuid=str(uuid.uuid4()))
+                agent.run_loop(instance, user_code_launcher, agent_uuid=instance.instance_uuid)
     except DagsterHomeNotSetError:
         raise agent_home_exception()
 
@@ -63,7 +62,7 @@ def run_local_agent_in_environment(dagster_home: Optional[Path]):
         "optional provided directory, otherwise uses the directory specified by the DAGSTER_HOME "
         "environment variable."
     ),
-    short_help="Runs the Dagster Cloud agent.",
+    short_help="Run the Dagster Cloud agent.",
 )
 def run(dagster_home: Optional[Path] = Argument(None)):
     logging.basicConfig(

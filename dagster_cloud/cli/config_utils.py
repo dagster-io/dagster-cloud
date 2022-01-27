@@ -137,7 +137,11 @@ def get_url(ctx: Optional[Context] = None) -> Optional[str]:
 
 # Typer Option definitions for common CLI config options (organization, deployment, user token)
 ORGANIZATION_OPTION = Option(
-    get_organization, "--organization", "-o", help="Organization to target."
+    get_organization,
+    "--organization",
+    "-o",
+    help="Organization to target.",
+    show_default=get_organization(),  # type: ignore
 )
 DEPLOYMENT_OPTION = Option(
     get_deployment,
@@ -145,6 +149,7 @@ DEPLOYMENT_OPTION = Option(
     "-d",
     help="Deployment to target.",
     autocompletion=available_deployment_names,
+    show_default=get_deployment(),  # type: ignore
 )
 USER_TOKEN_OPTION = Option(
     get_user_token,
@@ -152,12 +157,13 @@ USER_TOKEN_OPTION = Option(
     "--user-token",
     "-u",
     help="Cloud user token.",
-    show_default=False,
+    show_default=ui.censor_token(get_user_token()) if get_user_token() else None,  # type: ignore
 )
 URL_OPTION = Option(
     get_url,
     "--url",
     help="[DEPRECATED] Your Dagster Cloud url, in the form of 'https://{ORGANIZATION_NAME}.dagster.cloud/{DEPLOYMENT_NAME}'.",
+    hidden=True,
 )
 
 

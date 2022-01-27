@@ -28,7 +28,7 @@ if __name__ == "__main__":
         author_email="hello@elementl.com",
         packages=find_packages(exclude=["dagster_cloud_tests"]),
         include_package_data=True,
-        install_requires=[f"dagster{pin}", "questionary", "requests", "typer"],
+        install_requires=[f"dagster{pin}", "questionary", "requests", "typer[all]"],
         extras_require={
             "tests": [
                 "black",

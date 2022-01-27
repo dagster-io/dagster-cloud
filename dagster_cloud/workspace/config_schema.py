@@ -35,5 +35,14 @@ LOCATION_CONFIG_SCHEMA = Shape(
         "module_name": Field(config=StringSource, is_required=False),
         "executable_path": Field(config=StringSource, is_required=False),
         "attribute": Field(config=StringSource, is_required=False),
+        "git": Field(
+            Shape(
+                fields={
+                    "commit_hash": Field(config=StringSource, is_required=False),
+                    "url": Field(config=StringSource, is_required=False),
+                }
+            ),
+            is_required=False,
+        ),
     }
 )

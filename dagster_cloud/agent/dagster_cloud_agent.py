@@ -17,6 +17,7 @@ from dagster.core.host_representation import RepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
+from dagster.utils import merge_dicts
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster.utils.interrupts import raise_interrupts_as
 from dagster_cloud.api.dagster_cloud_api import (
@@ -399,10 +400,21 @@ class DagsterCloudAgent:
             return DagsterCloudApiGrpcResponse(response.decode())
         elif api_name == DagsterCloudApi.LAUNCH_RUN:
             run = request.request_args.pipeline_run
+
             instance.report_engine_event(
-                f"Received request from {instance.dagster_cloud_url} to launch all steps for pipeline {run.pipeline_name}",
+                f"{instance.agent_display_name} is launching run {run.run_id}",
                 run,
                 cls=self.__class__,
+            )
+
+            instance.add_run_tags(
+                run.run_id,
+                merge_dicts(
+                    {"dagster/agent_label": instance.dagster_cloud_api_agent_label}
+                    if instance.dagster_cloud_api_agent_label
+                    else {},
+                    {"dagster/agent_id": instance.instance_uuid},
+                ),
             )
 
             launcher = user_code_launcher.run_launcher()
@@ -422,14 +434,14 @@ class DagsterCloudAgent:
             run = request.request_args.pipeline_run
             if instance.agent_replicas_enabled:
                 instance.report_engine_event(
-                    f"Received request from {instance.dagster_cloud_url} to mark run as canceling",
+                    f"{instance.agent_display_name} received request to mark run as canceling",
                     run,
                     cls=self.__class__,
                 )
                 instance.report_run_canceling(run)
             else:
                 instance.report_engine_event(
-                    f"Received request from {instance.dagster_cloud_url} to terminate run",
+                    f"{instance.agent_display_name} received request to terminate run",
                     run,
                     cls=self.__class__,
                 )

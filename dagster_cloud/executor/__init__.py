@@ -19,9 +19,8 @@ DAGSTER_CLOUD_K8S_EXECUTOR_CONFIG_SCHEMA = {
     "job_image": Field(
         Noneable(StringSource),
         is_required=False,
-        description="Docker image to use for launched task Jobs. If the repository is not "
-        "loaded from a GRPC server, then this field is required. If the repository is "
-        "loaded from a GRPC server, then leave this field empty."
+        description="Docker image to use for launched Jobs. If this field is empty, "
+        "the image that was used to originally load the Dagster repository will be used."
         '(Ex: "mycompany.com/dagster-k8s-image:latest").',
     ),
     "image_pull_policy": Field(
@@ -29,7 +28,6 @@ DAGSTER_CLOUD_K8S_EXECUTOR_CONFIG_SCHEMA = {
         is_required=False,
         description="Image pull policy to set on the launched task Job Pods. Defaults to "
         '"IfNotPresent".',
-        default_value=None,
     ),
     "image_pull_secrets": Field(
         Noneable(Array(Shape({"name": StringSource}))),
@@ -95,6 +93,12 @@ DAGSTER_CLOUD_K8S_EXECUTOR_CONFIG_SCHEMA = {
         description="A list of volumes to include in the Job's Pod. Default: ``[]``. For the many "
         "possible volume source types that can be included, see: "
         "https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#volume-v1-core",
+    ),
+    "labels": Field(
+        dict,
+        is_required=False,
+        description="Additional labels that should be included in the Job's Pod. See: "
+        "https://kubernetes.io/docs/concepts/overview/working-with-objects/labels",
     ),
 }
 

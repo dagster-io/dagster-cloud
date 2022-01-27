@@ -45,6 +45,8 @@ class CliInputCodeLocation:
         working_directory: str = None,
         executable_path: str = None,
         attribute: str = None,
+        commit_hash: str = None,
+        url: str = None,
     ):
         self.name = name
 
@@ -60,6 +62,8 @@ class CliInputCodeLocation:
         self.working_directory = working_directory
         self.executable_path = executable_path
         self.attribute = attribute
+        self.commit_hash = commit_hash
+        self.url = url
 
     def get_location_input(self):
         location_input = {"name": self.name}
@@ -78,6 +82,10 @@ class CliInputCodeLocation:
             location_input["executablePath"] = self.executable_path
         if self.attribute:
             location_input["attribute"] = self.attribute
+        if self.commit_hash:
+            location_input["commitHash"] = self.commit_hash
+        if self.url:
+            location_input["url"] = self.url
 
         return location_input
 

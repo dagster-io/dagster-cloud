@@ -19,7 +19,7 @@ from ..config_utils import (
     write_config,
 )
 
-app = Typer(help="Configure the dagster-cloud CLI")
+app = Typer(help="Configure the Dagster Cloud CLI.")
 
 
 @app.command()

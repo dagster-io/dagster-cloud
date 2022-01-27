@@ -6,6 +6,21 @@ from dagster.utils import merge_dicts
 
 
 @whitelist_for_serdes
+class GitMetadata(
+    NamedTuple(
+        "_GitMetadata",
+        [("commit_hash", Optional[str]), ("url", Optional[str])],
+    )
+):
+    def __new__(cls, commit_hash=None, url=None):
+        return super(GitMetadata, cls).__new__(
+            cls,
+            check.opt_str_param(commit_hash, "commit_hash"),
+            check.opt_str_param(url, "url"),
+        )
+
+
+@whitelist_for_serdes
 class CodeDeploymentMetadata(
     NamedTuple(
         "_CodeDeploymentMetadata",
@@ -17,6 +32,7 @@ class CodeDeploymentMetadata(
             ("working_directory", Optional[str]),
             ("executable_path", Optional[str]),
             ("attribute", Optional[str]),
+            ("git_metadata", Optional[GitMetadata]),
         ],
     )
 ):
@@ -29,6 +45,7 @@ class CodeDeploymentMetadata(
         working_directory=None,
         executable_path=None,
         attribute=None,
+        git_metadata=None,
     ):
         check.invariant(
             len([val for val in [python_file, package_name, module_name] if val]) == 1,
@@ -44,6 +61,7 @@ class CodeDeploymentMetadata(
             check.opt_str_param(working_directory, "working_directory"),
             check.opt_str_param(executable_path, "executable_path"),
             check.opt_str_param(attribute, "attribute"),
+            check.opt_inst_param(git_metadata, "git_metadata", GitMetadata),
         )
 
     def get_grpc_server_command(self) -> List[str]:

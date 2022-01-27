@@ -20,10 +20,11 @@ def upload_identity_provider_metadata_command(
         None,
         "--url",
         help="[DEPRECATED] Your Dagster Cloud url, in the form of 'https://{ORGANIZATION_NAME}.dagster.cloud'.",
+        hidden=True,
     ),
     metadata_file: Path = Argument(..., readable=True, metavar="METADATA_FILE_PATH"),
 ):
-    """Uploads your identity provider's metadata to enable SAML Single sign-on (SSO)."""
+    """Upload your identity provider's metadata to enable SAML Single sign-on (SSO)."""
 
     if not url and not organization:
         raise ui.error("Must provide either organization name or URL.")

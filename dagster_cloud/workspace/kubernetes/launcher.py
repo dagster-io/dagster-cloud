@@ -9,7 +9,7 @@ from dagster.config.field_utils import Shape
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
-from dagster.utils import ensure_single_item
+from dagster.utils import ensure_single_item, merge_dicts
 from dagster_cloud.execution.watchful_run_launcher.k8s import WatchfulK8sRunLauncher
 from dagster_cloud.executor import (
     DAGSTER_CLOUD_EXECUTOR_K8S_CONFIG_KEY,
@@ -101,6 +101,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             job_namespace=self._namespace,
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
+            labels=self._labels,
         )
 
     @property
@@ -348,6 +349,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
                 env_secrets=self._env_secrets + (k8s_cfg.get("env_secrets") or []),
                 volume_mounts=self._volume_mounts + (k8s_cfg.get("volume_mounts") or []),
                 volumes=self._volumes + (k8s_cfg.get("volumes") or []),
+                labels=merge_dicts(self._labels, exc_cfg.get("labels", {})),
             ),
             job_namespace=(
                 k8s_cfg.get("job_namespace")
