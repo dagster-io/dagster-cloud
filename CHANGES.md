@@ -1,5 +1,38 @@
 # Dagster Cloud Changelog
 
+# 0.13.18
+
+### New
+
+* Secrets in the ECS Agent: When using Dagster Cloud in ECS, you can specify a list of AWS Secrets Manager ARNs to include in all tasks that the agent spins up. Any secrets that are tagged with the key “dagster” in AWS Secrets Manager (or a custom key that you specify) will also be included in all tasks. You can customize the secrets in your ECS Agent in your `dagster.yaml` file as follows:
+
+```
+user_code_launcher:
+  module: dagster_cloud.workspace.ecs
+  class: EcsUserCodeLauncher
+  config:
+    cluster: your-cluster-name
+    subnets:
+      - your-subnet-name
+    service_discovery_namespace_id: your-service-discovery-namespace-id
+    execution_role_arn: your-execution-role-arn
+    log_group: your-log-group
+    secrets_tag: "my-tag-name"
+    secrets:- "arn:aws:secretsmanager:us-east-1:1234567890:secret:MY_SECRET"`
+```
+
+* Added support in Dagster Cloud for disabling compute logs, which display the stdout/stderr output from your Dagster jobs within Dagit. When using the Dagster Cloud helm chart, by setting `Values.computeLogs.enabled` to false, users can prevent compute logs from being forwarded into Dagster Cloud. Logging configured separately from Dagster on Kubernetes will continue to work, but won’t be viewable in the Dagster Cloud UI.
+
+### Bugfixes
+
+* Fixed an issue where omitting the Dagster Cloud agent endpoint when installing the Kubernetes agent using the helm chart would sometimes cause the agent to fail to start. The agent endpoint is no longer a required field on the helm chart.
+* Fixed an issue with dagster-cloud CLI web authentication where users who did not have an available user token could not be authenticated.
+
+### Documentation
+
+* Added a “Customizing your agent” section to the docs, including documentation on how to disable compute logging when manually authoring an agent’s `dagster.yaml`.
+
+
 # 0.13.17
 
 ### New

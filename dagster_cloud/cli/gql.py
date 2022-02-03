@@ -259,7 +259,7 @@ def delete_code_location(client: GqlShimClient, location_name: str) -> None:
     )
 
     if result["data"]["deleteLocation"]["__typename"] != "DeleteLocationSuccess":
-        raise Exception(f"Unable to delete location: {str(location_name)}")
+        raise Exception(f"Unable to delete location: {str(result['data']['deleteLocation'])}")
 
 
 RECONCILE_LOCATIONS_MUTATION = """

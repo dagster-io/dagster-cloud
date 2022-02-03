@@ -1,7 +1,10 @@
 import time
 import uuid
+from typing import List, Optional
 
 import boto3
+from dagster import check
+from dagster.utils import merge_dicts
 
 from .service import Service
 
@@ -15,24 +18,29 @@ class EcsServiceError(Exception):
 class Client:
     def __init__(
         self,
-        cluster_name,
-        service_discovery_namespace_id,
-        log_group,
-        execution_role_arn,
-        subnet_ids=None,
-        security_group_ids=None,
+        cluster_name: str,
+        service_discovery_namespace_id: str,
+        log_group: str,
+        execution_role_arn: str,
+        subnet_ids: Optional[List[str]] = None,
+        security_group_ids: Optional[List[str]] = None,
+        ecs_client=None,
+        wait_for_service: bool = True,
     ):
-        self.ecs = boto3.client("ecs")
+        self.ecs = ecs_client if ecs_client else boto3.client("ecs")
         self.logs = boto3.client("logs")
         self.service_discovery = boto3.client("servicediscovery")
         self.ec2 = boto3.resource("ec2")
 
         self.cluster_name = cluster_name.split("/")[-1]
-        self.subnet_ids = subnet_ids if subnet_ids else []
-        self.security_group_ids = security_group_ids if security_group_ids else []
-        self.service_discovery_namespace_id = service_discovery_namespace_id
-        self.log_group = log_group
-        self.execution_role_arn = execution_role_arn
+        self.subnet_ids = check.opt_list_param(subnet_ids, "subnet_ids")
+        self.security_group_ids = check.opt_list_param(security_group_ids, "security_group_ids")
+        self.service_discovery_namespace_id = check.str_param(
+            service_discovery_namespace_id, "service_discovery_namespace_id"
+        )
+        self.log_group = check.str_param(log_group, "log_group")
+        self.execution_role_arn = check.str_param(execution_role_arn, "execution_role_arn")
+        self.wait_for_service = check.bool_param(wait_for_service, "wait_for_service")
 
     @property
     def namespace(self):
@@ -67,32 +75,45 @@ class Client:
 
         return network_configuration
 
-    def register_task_definition(self, name, image, command, task_role_arn=None, env=None):
+    def register_task_definition(
+        self, name, image, command, task_role_arn=None, env=None, secrets=None
+    ):
         if not env:
             env = {}
 
         family = name
         container_name = name
 
+        secrets_dict = (
+            {"secrets": [{"name": key, "valueFrom": value} for key, value in secrets.items()]}
+            if secrets
+            else {}
+        )
+
         kwargs = dict(
             family=family,
             requiresCompatibilities=["FARGATE"],
             networkMode="awsvpc",
             containerDefinitions=[
-                {
-                    "name": container_name,
-                    "image": image,
-                    "environment": [{"name": key, "value": value} for key, value in env.items()],
-                    "command": command,
-                    "logConfiguration": {
-                        "logDriver": "awslogs",
-                        "options": {
-                            "awslogs-group": self.log_group,
-                            "awslogs-region": self.ecs.meta.region_name,
-                            "awslogs-stream-prefix": family,
+                merge_dicts(
+                    {
+                        "name": container_name,
+                        "image": image,
+                        "environment": [
+                            {"name": key, "value": value} for key, value in env.items()
+                        ],
+                        "command": command,
+                        "logConfiguration": {
+                            "logDriver": "awslogs",
+                            "options": {
+                                "awslogs-group": self.log_group,
+                                "awslogs-region": self.ecs.meta.region_name,
+                                "awslogs-stream-prefix": family,
+                            },
                         },
                     },
-                },
+                    secrets_dict,
+                )
             ],
             executionRoleArn=self.execution_role_arn,
             # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
@@ -120,6 +141,7 @@ class Client:
         env=None,
         tags=None,
         register_service_discovery=True,
+        secrets=None,
     ):
         # Append a unique suffix to the service name so we can do blue/green
         # deploys without setting up a load balancer.
@@ -132,6 +154,7 @@ class Client:
             task_role_arn=task_role_arn,
             command=command,
             env=env,
+            secrets=secrets,
         )
 
         service_registry_arn = None
@@ -150,8 +173,9 @@ class Client:
             tags=tags,
         )
 
-        # Poll until the service is available
-        self._wait_for_service(service)
+        if self.wait_for_service:
+            # Poll until the service is available
+            self._wait_for_service(service)
 
         return service
 

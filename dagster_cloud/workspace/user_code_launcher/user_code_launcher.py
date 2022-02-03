@@ -504,10 +504,17 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
     def _gen_update_server(
         self, location_name: str, new_metadata: CodeDeploymentMetadata
     ) -> Iterator[GrpcServerEndpoint]:
+        self._logger.info(
+            "Updating server for location {location_name}".format(location_name=location_name)
+        )
         # Update the server for the given location. Is a generator - should yield the new
         # GrpcServerEndpoint, then clean up any no longer needed resources
         existing_server_handles = self._get_server_handles_for_location(location_name)
         updated_server = self._create_new_server_endpoint(location_name, new_metadata)
+
+        self._logger.info(
+            "Created a new server for location {location_name}".format(location_name=location_name)
+        )
 
         yield updated_server
 
@@ -515,6 +522,9 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
             self._remove_server_handle(server_handle)
 
     def _remove_server(self, location_name: str):
+        self._logger.info(
+            "Removing server for location {location_name}".format(location_name=location_name)
+        )
         existing_server_handles = self._get_server_handles_for_location(location_name)
         for server_handle in existing_server_handles:
             self._remove_server_handle(server_handle)
@@ -525,16 +535,21 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         # Wait for the server to be ready (while also loading the server ID)
         server_id = None
         start_time = time.time()
+
+        last_error = None
+
         while True:
             client = DagsterGrpcClient(port=port, host=host, socket=socket)
             try:
                 server_id = sync_get_server_id(client)
                 break
             except Exception:
-                pass
+                last_error = serializable_error_info_from_exc_info(sys.exc_info())
 
             if time.time() - start_time > timeout:
-                raise Exception(f"Timed out waiting for server {host}:{port}")
+                raise Exception(
+                    f"Timed out waiting for server {host}:{port}. Most recent connection error: {str(last_error)}"
+                )
 
             time.sleep(1)
         return server_id

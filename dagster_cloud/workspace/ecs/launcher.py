@@ -1,11 +1,12 @@
 from typing import Any, Dict, Iterable, List, Optional
 
 import boto3
-from dagster import Array, Field, StringSource, check
+from dagster import Array, Field, IntSource, StringSource, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.launcher import RunLauncher
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
 from dagster_aws.ecs import EcsRunLauncher
+from dagster_aws.secretsmanager import get_secrets_from_arns, get_tagged_secrets
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
 from ..user_code_launcher import ReconcileUserCodeLauncher
@@ -13,6 +14,8 @@ from .client import Client
 from .service import Service
 
 EcsServerHandleType = Service
+
+DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
 
 
 class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], ConfigurableClass):
@@ -25,11 +28,15 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         service_discovery_namespace_id: str,
         task_role_arn: str = None,
         security_group_ids: List[str] = None,
+        server_process_startup_timeout=None,
         inst_data: Optional[ConfigurableClassData] = None,
+        secrets=None,
+        secrets_tag="dagster",
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
         self.service_discovery = boto3.client("servicediscovery")
+        self.secrets_manager = boto3.client("secretsmanager")
 
         self.cluster = cluster
         self.subnets = subnets
@@ -39,6 +46,14 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         self.task_role_arn = task_role_arn
         self.log_group = log_group
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
+        self.secrets = secrets or []
+        self.secrets_tag = secrets_tag
+
+        self._server_process_startup_timeout = check.opt_int_param(
+            server_process_startup_timeout,
+            "server_process_startup_timeout",
+            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+        )
 
         self.client = Client(
             cluster_name=self.cluster,
@@ -64,6 +79,29 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
             "task_role_arn": Field(StringSource, is_required=False),
             "log_group": Field(StringSource),
             "service_discovery_namespace_id": Field(StringSource),
+            "secrets": Field(
+                Array(StringSource),
+                is_required=False,
+                description=(
+                    "An array of AWS Secrets Manager secrets arns. These secrets will "
+                    "be mounted as environment variabls in the container."
+                ),
+            ),
+            "secrets_tag": Field(
+                StringSource,
+                is_required=False,
+                default_value="dagster",
+                description=(
+                    "AWS Secrets Manager secrets with this tag will be mounted as "
+                    "environment variables in the container. Defaults to 'dagster'."
+                ),
+            ),
+            "server_process_startup_timeout": Field(
+                IntSource,
+                is_required=False,
+                default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+                description="Timeout when waiting for a code server to be ready after its deployment is created",
+            ),
         }
 
     @staticmethod
@@ -85,8 +123,19 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
             env=metadata.get_grpc_server_env(port),
             tags={"dagster/location_name": location_name},
             task_role_arn=self.task_role_arn,
+            secrets={
+                **get_tagged_secrets(self.secrets_manager, self.secrets_tag),
+                **get_secrets_from_arns(self.secrets_manager, self.secrets),
+            },
         )
-        server_id = self._wait_for_server(host=service.hostname, port=port, timeout=60)
+        self._logger.info(
+            "Created a new service at hostname {} for location {}, waiting for it to be ready...".format(
+                service.hostname, location_name
+            )
+        )
+        server_id = self._wait_for_server(
+            host=service.hostname, port=port, timeout=self._server_process_startup_timeout
+        )
 
         endpoint = GrpcServerEndpoint(
             server_id=server_id,
@@ -116,7 +165,7 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         pass
 
     def run_launcher(self) -> RunLauncher:
-        launcher = EcsRunLauncher()
+        launcher = EcsRunLauncher(secrets=self.secrets, secrets_tag=self.secrets_tag)
         launcher.register_instance(self._instance)
 
         return launcher
