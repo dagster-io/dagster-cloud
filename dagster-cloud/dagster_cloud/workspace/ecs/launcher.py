@@ -1,10 +1,11 @@
 from typing import Any, Dict, Iterable, List, Optional
 
 import boto3
-from dagster import Array, Field, IntSource, StringSource, check
+from dagster import Array, Field, IntSource, Noneable, StringSource, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.launcher import RunLauncher
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
+from dagster.utils import merge_dicts
 from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.secretsmanager import get_secrets_from_arns, get_tagged_secrets
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
@@ -88,7 +89,7 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
                 ),
             ),
             "secrets_tag": Field(
-                StringSource,
+                Noneable(StringSource),
                 is_required=False,
                 default_value="dagster",
                 description=(
@@ -123,10 +124,14 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
             env=metadata.get_grpc_server_env(port),
             tags={"dagster/location_name": location_name},
             task_role_arn=self.task_role_arn,
-            secrets={
-                **get_tagged_secrets(self.secrets_manager, self.secrets_tag),
-                **get_secrets_from_arns(self.secrets_manager, self.secrets),
-            },
+            secrets=merge_dicts(
+                (
+                    get_tagged_secrets(self.secrets_manager, self.secrets_tag)
+                    if self.secrets_tag
+                    else {}
+                ),
+                get_secrets_from_arns(self.secrets_manager, self.secrets),
+            ),
         )
         self._logger.info(
             "Created a new service at hostname {} for location {}, waiting for it to be ready...".format(

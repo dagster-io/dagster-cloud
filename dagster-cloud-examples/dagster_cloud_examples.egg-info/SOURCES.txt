@@ -1,0 +1,11 @@
+README.md
+setup.py
+dagster_cloud_examples/__init__.py
+dagster_cloud_examples/version.py
+dagster_cloud_examples.egg-info/PKG-INFO
+dagster_cloud_examples.egg-info/SOURCES.txt
+dagster_cloud_examples.egg-info/dependency_links.txt
+dagster_cloud_examples.egg-info/requires.txt
+dagster_cloud_examples.egg-info/top_level.txt
+dagster_cloud_examples/cereals/__init__.py
+dagster_cloud_examples/cereals/process_cereals.py

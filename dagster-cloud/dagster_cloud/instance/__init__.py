@@ -114,6 +114,17 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return f"https://{organization}.agent.dagster.cloud"
 
     @property
+    def dagit_url(self):
+        organization = get_organization_name_from_agent_token(self.dagster_cloud_agent_token)
+        if not organization:
+            raise Exception(
+                "Could not derive Dagster Cloud URL from agent token to generate a Dagit URL. Generate a new agent token in the Dagit UI."
+            )
+
+        deployment = self._dagster_cloud_api_config.get("deployment")
+        return f"https://{organization}.dagster.cloud/" + (f"{deployment}/" if deployment else "")
+
+    @property
     def dagster_cloud_graphql_url(self):
         return f"{self.dagster_cloud_url}/graphql"
 

@@ -178,6 +178,9 @@ def _setup(organization: str, deployment: str, api_token: str):
         auth_url = f"https://dagster.cloud?next={escaped}"
         try:
             webbrowser.open(auth_url, new=0, autoraise=True)
+            ui.print(
+                f"Opening browser...\nIf a window does not open automatically, visit {auth_url} to finish authorization"
+            )
         except webbrowser.Error as e:
             ui.warn(
                 f"Error launching web browser: {str(e)}\n\nTo finish authorization, visit {auth_url}\n"

@@ -1,5 +1,43 @@
 # Dagster Cloud Changelog
 
+# 0.13.19
+
+### New
+
+* The Dagster Cloud workspace page now allows creating, deleting, and updating code locations from Cloud Dagit in addition to via the CLI. 
+* The ECS agent can now override the `secrets_tag` parameter to None, which will cause it to not look for any secrets to be included in the tasks that the agent creates. This can be useful in situations where the agent does not have permissions to query AWS Secretsmanager
+* Added a `dagit_url` property to the DagsterInstance in Dagster Cloud that can be used to reference the Dagster Cloud Dagit URL within ops and sensors.
+* Introduced a path to run the local Dagster Cloud agent ephemerally without specifying a `dagster.yaml`, by using CLI arguments.
+* Added the ability to configure [Python logging](https://docs.dagster.io/concepts/logging/python-logging#python-logging) in the Kubernetes agent helm chart. For example:
+
+```
+pythonLogs:
+   # The names of python loggers that will be captured as Dagster logs
+   managedPythonLoggers:
+     - foo_logger
+   # The log level for the instance. Logs emitted below this severity will be ignored.
+   # One of [NOTSET, DEBUG, INFO, WARNING, WARN, ERROR, FATAL, CRITICAL]
+   pythonLogLevel: INFO
+   # Python log handlers that will be applied to all Dagster logs
+   dagsterHandlerConfig:
+     handlers:
+       myHandler:
+         class: logging.FileHandler
+         filename: "/logs/my_dagster_logs.log"
+         mode: "a"
+```
+
+### Bugfixes
+
+* Added a missing AWS secretsmanager permission to the example CloudFormation template for creating an ECS agent.
+* Improved dagster-cloud CLI web authentication error messages on the client and server, including troubleshooting steps and instructions on alternative token authentication.
+* Fixed an issue where deleting a deployment from Dagit would sometimes fail.
+
+### Documentation
+
+* Added a setup guide for SAML SSO using PingOne.
+* Added a documentation page detailing switching, creating, and deleting deployments.
+
 # 0.13.18
 
 ### New

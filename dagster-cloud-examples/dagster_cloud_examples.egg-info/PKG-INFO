@@ -1,0 +1,14 @@
+Metadata-Version: 2.1
+Name: dagster-cloud-examples
+Version: 0.13.19
+Summary: UNKNOWN
+Home-page: UNKNOWN
+Author: Elementl
+Author-email: hello@elementl.com
+License: Apache-2.0
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3.8
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Provides-Extra: tests

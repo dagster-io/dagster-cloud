@@ -14,7 +14,7 @@ from dagster.core.host_representation import ManagedGrpcPythonEnvRepositoryLocat
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.serdes import serialize_dagster_namedtuple
 from dagster.serdes.serdes import deserialize_json_to_dagster_namedtuple
-from dagster.utils import DEFAULT_WORKSPACE_YAML_FILENAME
+from dagster.utils import DEFAULT_WORKSPACE_YAML_FILENAME, frozendict
 from dagster.utils.error import serializable_error_info_from_exc_info
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
@@ -306,10 +306,21 @@ def execute_sync_command(client, workspace):
         process_workspace_config(config)
 
     try:
-        locations = gql.reconcile_code_locations(
-            client,
-            [_get_location_input(name, m) for name, m in config["locations"].items()],
-        )
+        # Process legacy format (location name as key, no code_source field)
+        if isinstance(config["locations"], (dict, frozendict)):
+            locations = gql.reconcile_code_locations(
+                client,
+                [_get_location_input(name, m) for name, m in config["locations"].items()],
+            )
+        # Process modern format (location name as property, code_source field)
+        else:
+            locations = gql.reconcile_code_locations(
+                client,
+                [
+                    _get_location_input(m.get("location_name"), {**m, **m.get("code_source")})
+                    for m in config["locations"]
+                ],
+            )
         ui.print(f"Synced locations: {', '.join(locations)}")
         wait_for_load(client, locations)
     except Exception as e:
