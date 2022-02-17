@@ -3,12 +3,12 @@ from dagster.grpc.types import ExecuteRunArgs
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process, launch_process
 
-from . import WatchfulRunLauncher
+from . import CloudRunLauncher
 
 PID_TAG = "process/pid"
 
 
-class ProcessRunLauncher(WatchfulRunLauncher):
+class CloudProcessRunLauncher(CloudRunLauncher):
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.pipeline_run
         pipeline_code_origin = context.pipeline_code_origin

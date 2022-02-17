@@ -122,6 +122,15 @@ def _get_event_records_filter_input(event_records_filter) -> Optional[Dict[str, 
     if event_records_filter is None:
         return None
 
+    run_updated_timestamp = None
+    if isinstance(event_records_filter.after_cursor, RunShardedEventsCursor):
+        # we should parse this correctly, even if this is a vestigial field that only has semantic
+        # meaning in the context of a run-sharded cursor against a SQLite backed event-log
+        updated_dt = event_records_filter.after_cursor.run_updated_after
+        run_updated_timestamp = (
+            updated_dt.timestamp() if updated_dt.tzinfo else datetime_as_float(updated_dt)
+        )
+
     return {
         "eventType": event_records_filter.event_type.value
         if event_records_filter.event_type
@@ -138,9 +147,7 @@ def _get_event_records_filter_input(event_records_filter) -> Optional[Dict[str, 
         "afterCursor": event_records_filter.after_cursor.id
         if isinstance(event_records_filter.after_cursor, RunShardedEventsCursor)
         else event_records_filter.after_cursor,
-        "runUpdatedAfter": datetime_as_float(event_records_filter.after_cursor.run_updated_after)
-        if isinstance(event_records_filter.after_cursor, RunShardedEventsCursor)
-        else None,
+        "runUpdatedAfter": run_updated_timestamp,
     }
 
 
@@ -247,10 +254,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 ),
                 start_time=check.opt_float_elem(stats, "startTime"),
                 end_time=check.opt_float_elem(stats, "endTime"),
-                materializations=[
-                    deserialize_json_to_dagster_namedtuple(materialization)
-                    for materialization in check.opt_list_elem(
-                        stats, "materializations", of_type=str
+                materialization_events=[
+                    deserialize_json_to_dagster_namedtuple(materialization_event)
+                    for materialization_event in check.opt_list_elem(
+                        stats, "materializationEvents", of_type=str
                     )
                 ],
                 expectation_results=[

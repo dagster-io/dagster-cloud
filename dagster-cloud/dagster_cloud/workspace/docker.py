@@ -2,15 +2,15 @@ import logging
 import os
 import sys
 import uuid
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Collection, Dict, List, Optional
 
 import docker
 from dagster import Array, Field, Permissive, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
+from dagster_cloud.execution.cloud_run_launcher.docker import CloudDockerRunLauncher
 from dagster_cloud.execution.step_handler.docker_step_handler import DockerStepHandler
-from dagster_cloud.execution.watchful_run_launcher.docker import WatchfulDockerRunLauncher
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from docker.models.containers import Container
 
@@ -93,7 +93,7 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
             **self._container_kwargs,
         )
 
-    def _get_server_handles_for_location(self, location_name: str) -> Iterable[Container]:
+    def _get_server_handles_for_location(self, location_name: str) -> Collection[Container]:
         client = docker.client.from_env()
         return client.containers.list(
             all=True, filters={"label": self._get_label_for_location(location_name)}
@@ -178,7 +178,7 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
         return DockerStepHandler(self._networks, self.env_vars, self._container_kwargs)
 
     def run_launcher(self):
-        launcher = WatchfulDockerRunLauncher(
+        launcher = CloudDockerRunLauncher(
             image=None,
             env_vars=self.env_vars,
             networks=self._networks,

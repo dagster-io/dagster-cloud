@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 import threading
-from typing import Dict, Iterable, NamedTuple, Optional, Set
+from typing import Collection, Dict, NamedTuple, Optional, Set
 
 from dagster import check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
@@ -10,8 +10,8 @@ from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster.grpc.server import GrpcServerProcess
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
+from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.execution.step_handler.process_step_handler import ProcessStepHandler
-from dagster_cloud.execution.watchful_run_launcher.process import ProcessRunLauncher
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
 from .user_code_launcher import ReconcileUserCodeLauncher
@@ -182,7 +182,7 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
             attribute=metadata.attribute,
         )
 
-    def _get_server_handles_for_location(self, location_name: str) -> Iterable[int]:
+    def _get_server_handles_for_location(self, location_name: str) -> Collection[int]:
         return self._active_pids.get(location_name, set()).copy()
 
     def _remove_server_handle(self, server_handle: int) -> None:
@@ -204,8 +204,8 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
     def get_step_handler(self, _execution_config: Optional[Dict]) -> ProcessStepHandler:
         return self._step_handler
 
-    def run_launcher(self) -> ProcessRunLauncher:
-        launcher = ProcessRunLauncher()
+    def run_launcher(self) -> CloudProcessRunLauncher:
+        launcher = CloudProcessRunLauncher()
         launcher.register_instance(self._instance)
 
         return launcher

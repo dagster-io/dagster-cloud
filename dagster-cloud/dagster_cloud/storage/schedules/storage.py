@@ -1,13 +1,13 @@
 from typing import Iterable
 
 from dagster import check
-from dagster.core.definitions.run_request import JobType
-from dagster.core.scheduler.job import (
-    JobState,
-    JobTick,
-    JobTickData,
-    JobTickStatsSnapshot,
-    JobTickStatus,
+from dagster.core.definitions.run_request import InstigatorType
+from dagster.core.scheduler.instigation import (
+    InstigatorState,
+    InstigatorTick,
+    TickData,
+    TickStatsSnapshot,
+    TickStatus,
 )
 from dagster.core.storage.schedules.base import ScheduleStorage
 from dagster.serdes import (
@@ -25,7 +25,6 @@ from .queries import (
     GET_JOB_STATE_QUERY,
     GET_JOB_TICKS_QUERY,
     GET_JOB_TICK_STATS_QUERY,
-    LATEST_JOB_TICK_QUERY,
     PURGE_JOB_TICKS_MUTATION,
     UPDATE_JOB_STATE_MUTATION,
     UPDATE_JOB_TICK_MUTATION,
@@ -68,66 +67,66 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
     def wipe(self):
         raise Exception("Not allowed to wipe from user cloud")
 
-    def all_stored_job_state(
-        self, repository_origin_id: str = None, job_type: JobType = None
-    ) -> Iterable[JobState]:
+    def all_instigator_state(
+        self, repository_origin_id: str = None, instigator_type: InstigatorType = None
+    ) -> Iterable[InstigatorState]:
         res = self._execute_query(
             ALL_STORED_JOB_STATE_QUERY,
             variables={
                 "repositoryOriginId": repository_origin_id,
-                "jobType": job_type.value if job_type else None,
+                "jobType": instigator_type.value if instigator_type else None,
             },
         )
 
         return [
-            deserialize_as(job_state, JobState)
-            for job_state in res["data"]["schedules"]["jobStates"]
+            deserialize_as(state, InstigatorState)
+            for state in res["data"]["schedules"]["jobStates"]
         ]
 
-    def get_job_state(self, job_origin_id: str) -> JobState:
+    def get_instigator_state(self, origin_id: str) -> InstigatorState:
         res = self._execute_query(
             GET_JOB_STATE_QUERY,
             variables={
-                "jobOriginId": job_origin_id,
+                "jobOriginId": origin_id,
             },
         )
 
-        job_state = res["data"]["schedules"]["jobState"]
-        if job_state is None:
+        state = res["data"]["schedules"]["jobState"]
+        if state is None:
             return None
 
-        return deserialize_as(job_state, JobState)
+        return deserialize_as(state, InstigatorState)
 
-    def add_job_state(self, job: JobState):
+    def add_instigator_state(self, state: InstigatorState):
         self._execute_query(
             ADD_JOB_STATE_MUTATION,
             variables={
                 "serializedJobState": serialize_dagster_namedtuple(
-                    check.inst_param(job, "job", JobState)
+                    check.inst_param(state, "state", InstigatorState)
                 )
             },
         )
 
-    def update_job_state(self, job: JobState):
+    def update_instigator_state(self, state: InstigatorState):
         self._execute_query(
             UPDATE_JOB_STATE_MUTATION,
             variables={
                 "serializedJobState": serialize_dagster_namedtuple(
-                    check.inst_param(job, "job", JobState)
+                    check.inst_param(state, "state", InstigatorState)
                 )
             },
         )
 
-    def delete_job_state(self, job_origin_id: str):
+    def delete_instigator_state(self, origin_id: str):
         raise NotImplementedError("Not callable from user cloud")
 
-    def get_job_ticks(
-        self, job_origin_id: str, before: float = None, after: float = None, limit: int = None
-    ) -> Iterable[JobTick]:
+    def get_ticks(
+        self, origin_id: str, before: float = None, after: float = None, limit: int = None
+    ) -> Iterable[InstigatorTick]:
         res = self._execute_query(
             GET_JOB_TICKS_QUERY,
             variables={
-                "jobOriginId": job_origin_id,
+                "jobOriginId": origin_id,
                 "before": before,
                 "after": after,
                 "limit": limit,
@@ -135,68 +134,54 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         )
 
         return [
-            deserialize_as(job_tick, JobTick) for job_tick in res["data"]["schedules"]["jobTicks"]
+            deserialize_as(tick, InstigatorTick) for tick in res["data"]["schedules"]["jobTicks"]
         ]
 
-    def get_latest_job_tick(self, job_origin_id: str) -> JobTick:
-        res = self._execute_query(
-            LATEST_JOB_TICK_QUERY,
-            variables={
-                "jobOriginId": job_origin_id,
-            },
-        )
-
-        latest_tick = res["data"]["schedules"]["latestJobTick"]
-        if not latest_tick:
-            return None
-
-        return deserialize_as(latest_tick, JobTick)
-
-    def create_job_tick(self, job_tick_data: JobTickData):
+    def create_tick(self, tick_data: TickData):
         res = self._execute_query(
             CREATE_JOB_TICK_MUTATION,
             variables={
                 "serializedJobTickData": serialize_dagster_namedtuple(
-                    check.inst_param(job_tick_data, "job_tick_data", JobTickData)
+                    check.inst_param(tick_data, "tick_data", TickData)
                 )
             },
         )
 
         tick_id = res["data"]["schedules"]["createJobTick"]["tickId"]
-        return JobTick(tick_id, job_tick_data)
+        return InstigatorTick(tick_id, tick_data)
 
-    def update_job_tick(self, tick: JobTick):
+    def update_tick(self, tick: InstigatorTick):
         self._execute_query(
             UPDATE_JOB_TICK_MUTATION,
             variables={
                 "tickId": tick.tick_id,
                 "serializedJobTickData": serialize_dagster_namedtuple(
-                    check.inst_param(tick.job_tick_data, "job_tick_data", JobTickData)
+                    check.inst_param(tick.tick_data, "tick_data", TickData)
                 ),
             },
         )
         return tick
 
-    def purge_job_ticks(self, job_origin_id: str, tick_status: JobTickStatus, before: float):
+    def purge_ticks(self, origin_id: str, tick_status: TickStatus, before: float):
         self._execute_query(
             PURGE_JOB_TICKS_MUTATION,
             variables={
-                "jobOriginId": job_origin_id,
+                "jobOriginId": origin_id,
                 "tickStatus": tick_status.value if tick_status else None,
                 "before": before,
             },
         )
 
-    def get_job_tick_stats(self, job_origin_id: str):
+    def get_tick_stats(self, origin_id: str):
         res = self._execute_query(
             GET_JOB_TICK_STATS_QUERY,
             variables={
-                "jobOriginId": job_origin_id,
+                "jobOriginId": origin_id,
             },
         )
 
         stats = res["data"]["schedules"]["jobTickStats"]
-        return JobTickStatsSnapshot(
+        return TickStatsSnapshot(
             ticks_started=stats["ticksStarted"],
             ticks_succeeded=stats["ticksSucceeded"],
             ticks_skipped=stats["ticksSkipped"],

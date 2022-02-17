@@ -33,7 +33,7 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadApiResponse,
     TimestampedError,
 )
-from dagster_cloud.execution.watchful_run_launcher.base import WatchfulRunLauncher
+from dagster_cloud.execution.cloud_run_launcher.base import CloudRunLauncher
 from dagster_cloud.executor.step_handler_context import DagsterCloudStepHandlerContext
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.storage.errors import GraphQLStorageError
@@ -423,7 +423,7 @@ class DagsterCloudAgent:
         elif api_name == DagsterCloudApi.CHECK_RUN_HEALTH:
             run = request.request_args.pipeline_run
             launcher = user_code_launcher.run_launcher()
-            check.inst(launcher, WatchfulRunLauncher)
+            check.inst(launcher, CloudRunLauncher)
             launcher.check_run_health(run.run_id)
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.TERMINATE_RUN:

@@ -68,14 +68,6 @@ GET_JOB_TICKS_QUERY = """
     }
 """
 
-LATEST_JOB_TICK_QUERY = """
-    query latestJobTick($jobOriginId: String!) {
-        schedules {
-            latestJobTick(jobOriginId: $jobOriginId)
-        }
-    }
-"""
-
 UPDATE_JOB_STATE_MUTATION = """
     mutation updateJobStateMutation($serializedJobState: String!) {
         schedules {

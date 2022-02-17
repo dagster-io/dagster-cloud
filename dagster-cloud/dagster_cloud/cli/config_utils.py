@@ -2,7 +2,7 @@ import collections
 import functools
 import inspect
 import os
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, cast
 
 import yaml
 from click import Context
@@ -28,6 +28,11 @@ URL_ENV_VAR_NAME = "DAGSTER_CLOUD_DAGIT_URL"
 DEFAULT_CLOUD_CLI_FOLDER = os.path.join(os.path.expanduser("~"), ".dagster_cloud_cli")
 DEFAULT_CLOUD_CLI_CONFIG = os.path.join(DEFAULT_CLOUD_CLI_FOLDER, "config")
 
+AGENT_TIMEOUT_CLI_ARGUMENT = "agent-timeout"
+AGENT_TIMEOUT_ARGUMENT_VAR = AGENT_TIMEOUT_CLI_ARGUMENT.replace("-", "_")
+AGENT_TIMEOUT_ENV_VAR_NAME = "DAGSTER_CLOUD_AGENT_TIMEOUT"
+DEFAULT_AGENT_TIMEOUT = 300
+
 
 class DagsterCloudCliConfig(
     NamedTuple(
@@ -36,6 +41,7 @@ class DagsterCloudCliConfig(
             ("organization", Optional[str]),
             ("default_deployment", Optional[str]),
             ("user_token", Optional[str]),
+            ("agent_timeout", Optional[int]),
         ],
     )
 ):
@@ -94,6 +100,21 @@ def get_organization(ctx: Optional[Context] = None) -> Optional[str]:
     if ctx and ctx.params.get(ORGANIZATION_CLI_ARGUMENT):
         return ctx.params[ORGANIZATION_CLI_ARGUMENT]
     return os.getenv(ORGANIZATION_ENV_VAR_NAME, read_config().organization)
+
+
+def get_agent_timeout() -> int:
+    """
+    Gets the configured agent timeout to target.
+    Highest precedence is an agent-timeout argument, then `DAGTER_CLOUD_AGENT_TIMEOUT`
+    env var, then `~/.dagster_cloud_cli/config` value.
+    """
+    config_timeout = read_config().agent_timeout
+    default_timeout = config_timeout if config_timeout != None else DEFAULT_AGENT_TIMEOUT
+    assert default_timeout is not None
+
+    env_val = os.getenv(AGENT_TIMEOUT_ENV_VAR_NAME)
+
+    return int(cast(str, env_val)) if env_val != None else default_timeout
 
 
 def get_user_token(ctx: Optional[Context] = None) -> Optional[str]:
@@ -166,9 +187,17 @@ URL_OPTION = Option(
     hidden=True,
 )
 
+AGENT_TIMEOUT_OPTION = Option(
+    get_agent_timeout(),
+    "--agent-timeout",
+    help="After making changes to the workspace. how long in seconds to wait for the agent before timing out with an error",
+)
+
 
 def dagster_cloud_options(
-    allow_empty: bool = False, allow_empty_deployment: bool = False, requires_url: bool = False
+    allow_empty: bool = False,
+    allow_empty_deployment: bool = False,
+    requires_url: bool = False,
 ):
     """
     Apply this decorator to Typer commands to make them take the
@@ -202,6 +231,10 @@ def dagster_cloud_options(
         ) or requires_url
         if has_deployment_param:
             options[DEPLOYMENT_CLI_ARGUMENT] = (str, DEPLOYMENT_OPTION)
+
+        has_agent_timeout_param = AGENT_TIMEOUT_ARGUMENT_VAR in params
+        if has_agent_timeout_param:
+            options[AGENT_TIMEOUT_ARGUMENT_VAR] = (int, AGENT_TIMEOUT_OPTION)
 
         with_options = add_options(options)(to_wrap)
 

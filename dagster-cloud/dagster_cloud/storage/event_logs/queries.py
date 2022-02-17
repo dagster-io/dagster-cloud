@@ -113,7 +113,7 @@ GET_STEP_STATS_FOR_RUN_QUERY = """
                 status
                 startTime
                 endTime
-                materializations
+                materializationEvents
                 expectationResults
                 attempts
                 attemptsList

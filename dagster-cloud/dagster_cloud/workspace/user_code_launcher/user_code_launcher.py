@@ -6,18 +6,8 @@ import threading
 import time
 import zlib
 from abc import abstractmethod, abstractproperty
-from typing import (
-    Dict,
-    Generic,
-    Iterable,
-    Iterator,
-    List,
-    NamedTuple,
-    Optional,
-    Set,
-    TypeVar,
-    Union,
-)
+from contextlib import AbstractContextManager
+from typing import Collection, Dict, Generic, List, NamedTuple, Optional, Set, TypeVar, Union
 
 from dagster import check
 from dagster.api.get_server_id import sync_get_server_id
@@ -25,10 +15,7 @@ from dagster.api.list_repositories import sync_list_repositories_grpc
 from dagster.core.errors import DagsterUserCodeUnreachableError
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation import ExternalRepositoryOrigin
-from dagster.core.host_representation.grpc_server_registry import (
-    GrpcServerEndpoint,
-    GrpcServerRegistry,
-)
+from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.host_representation.origin import (
     RegisteredRepositoryLocationOrigin,
     RepositoryLocationOrigin,
@@ -44,7 +31,7 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadWorkspaceEntry,
 )
 from dagster_cloud.errors import raise_http_error
-from dagster_cloud.execution.watchful_run_launcher.base import WatchfulRunLauncher
+from dagster_cloud.execution.cloud_run_launcher.base import CloudRunLauncher
 from dagster_cloud.util import diff_serializable_namedtuple_map
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
@@ -63,7 +50,7 @@ class UserCodeLauncherEntry(
     pass
 
 
-class DagsterCloudUserCodeLauncher(GrpcServerRegistry, MayHaveInstanceWeakref):
+class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakref):
     def __init__(self):
         self._logger = logging.getLogger("dagster_cloud")
         self._started: bool = False
@@ -95,8 +82,11 @@ class DagsterCloudUserCodeLauncher(GrpcServerRegistry, MayHaveInstanceWeakref):
     def supports_reload(self) -> bool:
         return False
 
-    def reload_grpc_endpoint(self, repository_location_origin: RepositoryLocationOrigin):
-        raise NotImplementedError("Call update_grpc_metadata to update gRPC endpoints")
+    @abstractmethod
+    def get_grpc_endpoint(
+        self, repository_location_origin: RepositoryLocationOrigin
+    ) -> GrpcServerEndpoint:
+        pass
 
     @abstractmethod
     def _get_repository_location_origin(self, location_name: str) -> RepositoryLocationOrigin:
@@ -272,7 +262,7 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         pass
 
     @abstractmethod
-    def _get_server_handles_for_location(self, location_name: str) -> Iterable[ServerHandle]:
+    def _get_server_handles_for_location(self, location_name: str) -> Collection[ServerHandle]:
         """Return a list of 'handles' that represent all running servers for a given location.
         Typically this will be a single server (unless an error was previous raised during a
         reconciliation loop. ServerHandle can be any type that is sufficient for
@@ -300,7 +290,7 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         pass
 
     @abstractmethod
-    def run_launcher(self) -> WatchfulRunLauncher:
+    def run_launcher(self) -> CloudRunLauncher:
         pass
 
     def start(self):
@@ -340,6 +330,7 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         check.set_param(upload_locations, "upload_locations", str)
 
         with self._metadata_lock:
+            # Change the inputs for the next reconciliation loop
             self._desired_entries = desired_metadata
             self._upload_locations = self._upload_locations.union(upload_locations)
 
@@ -365,16 +356,20 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
 
     def reconcile(self):
         with self._metadata_lock:
-            if self._desired_entries == None:
-                # Wait for the first time the desired metadata is set before reconciling
-                return
+            desired_entries = self._desired_entries.copy()
+            upload_locations = self._upload_locations.copy()
+            self._upload_locations = set()
 
-            self._reconcile()
-            self._reconcile_count += 1
+        if desired_entries == None:
+            # Wait for the first time the desired metadata is set before reconciling
+            return
 
-            if self._reconcile_count == 1:
-                with self._is_workspace_ready_lock:
-                    self._is_workspace_ready = True
+        self._reconcile(desired_entries, upload_locations)
+        self._reconcile_count += 1
+
+        if self._reconcile_count == 1:
+            with self._is_workspace_ready_lock:
+                self._is_workspace_ready = True
 
     def _check_for_image(self, metadata: CodeDeploymentMetadata):
         if self.requires_images and not metadata.image:
@@ -391,24 +386,36 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
                 "field in your agent's `dagster.yaml` file to a launcher that can load Docker images. "
             )
 
-    def _reconcile(self):
-        diff = diff_serializable_namedtuple_map(self._desired_entries, self._actual_entries)
+    def _reconcile(self, desired_entries, upload_locations):
+        diff = diff_serializable_namedtuple_map(desired_entries, self._actual_entries)
 
         to_update_keys = diff.to_add.union(diff.to_update)
-        update_gens: Dict[str, Iterator[GrpcServerEndpoint]] = {}
+        existing_server_handles: Dict[str, List[ServerHandle]] = {}
         for to_update_key in to_update_keys:
             try:
 
-                code_deployment_metadata = self._desired_entries[
+                code_deployment_metadata = desired_entries[to_update_key].code_deployment_metadata
+
+                self._logger.info(
+                    "Updating server for location {location_name}".format(
+                        location_name=to_update_key
+                    )
+                )
+                existing_server_handles[to_update_key] = self._get_server_handles_for_location(
                     to_update_key
-                ].code_deployment_metadata
+                )
 
                 self._check_for_image(code_deployment_metadata)
-                update_gens[to_update_key] = self._gen_update_server(
-                    to_update_key,
-                    code_deployment_metadata,
+
+                new_updated_endpoint = self._create_new_server_endpoint(
+                    to_update_key, code_deployment_metadata
                 )
-                new_updated_endpoint: GrpcServerEndpoint = next(update_gens[to_update_key])
+
+                self._logger.info(
+                    "Created a new server for location {location_name}".format(
+                        location_name=to_update_key
+                    )
+                )
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 self._logger.error(
@@ -422,20 +429,27 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
             with self._grpc_endpoints_lock:
                 self._grpc_endpoints[to_update_key] = new_updated_endpoint
 
-            if to_update_key in self._upload_locations:
-                self._upload_locations.remove(to_update_key)
+            if to_update_key in upload_locations:
+                upload_locations.remove(to_update_key)
                 self._update_location_data(
                     to_update_key,
                     new_updated_endpoint,
-                    self._desired_entries[to_update_key].code_deployment_metadata,
+                    desired_entries[to_update_key].code_deployment_metadata,
                 )
 
         for to_update_key in to_update_keys:
-            update_gen = update_gens.get(to_update_key)
-            if update_gen:
-                # Finish any remaining cleanup
+            server_handles = existing_server_handles.get(to_update_key, [])
+
+            if server_handles:
+                self._logger.info(
+                    "Removing {num_servers} existing servers for location {location_name}".format(
+                        num_servers=len(server_handles), location_name=to_update_key
+                    )
+                )
+
+            for server_handle in server_handles:
                 try:
-                    list(update_gen)
+                    self._remove_server_handle(server_handle)
                 except Exception:
                     self._logger.error(
                         "Error while cleaning up after updating server for {to_update_key}: {error_info}".format(
@@ -444,7 +458,14 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
                         )
                     )
 
-            self._actual_entries[to_update_key] = self._desired_entries[to_update_key]
+            if server_handles:
+                self._logger.info(
+                    "Removed all previous servers for {location_name}".format(
+                        location_name=to_update_key
+                    )
+                )
+
+            self._actual_entries[to_update_key] = desired_entries[to_update_key]
 
         for to_remove_key in diff.to_remove:
             try:
@@ -463,7 +484,7 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
 
         # Upload any locations that were requested to be uploaded, but weren't updated
         # as part of this reconciliation loop
-        for location in self._upload_locations:
+        for location in upload_locations:
             with self._grpc_endpoints_lock:
                 endpoint = self._grpc_endpoints.get(location)
 
@@ -472,8 +493,6 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
                 endpoint,
                 self._actual_entries[location].code_deployment_metadata,
             )
-
-        self._upload_locations = set()
 
     def get_grpc_endpoint(
         self, repository_location_origin: RepositoryLocationOrigin
@@ -500,26 +519,6 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
     ) -> Dict[str, Union[GrpcServerEndpoint, SerializableErrorInfo]]:
         with self._grpc_endpoints_lock:
             return self._grpc_endpoints.copy()
-
-    def _gen_update_server(
-        self, location_name: str, new_metadata: CodeDeploymentMetadata
-    ) -> Iterator[GrpcServerEndpoint]:
-        self._logger.info(
-            "Updating server for location {location_name}".format(location_name=location_name)
-        )
-        # Update the server for the given location. Is a generator - should yield the new
-        # GrpcServerEndpoint, then clean up any no longer needed resources
-        existing_server_handles = self._get_server_handles_for_location(location_name)
-        updated_server = self._create_new_server_endpoint(location_name, new_metadata)
-
-        self._logger.info(
-            "Created a new server for location {location_name}".format(location_name=location_name)
-        )
-
-        yield updated_server
-
-        for server_handle in existing_server_handles:
-            self._remove_server_handle(server_handle)
 
     def _remove_server(self, location_name: str):
         self._logger.info(

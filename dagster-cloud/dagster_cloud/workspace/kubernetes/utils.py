@@ -159,7 +159,14 @@ def did_pod_image_fail(pod):
 
 
 def wait_for_deployment_complete(
-    deployment_name, namespace, logger, location_name, metadata, existing_pods, timeout=60
+    deployment_name,
+    namespace,
+    logger,
+    location_name,
+    metadata,
+    existing_pods,
+    timeout,
+    image_pull_grace_period,
 ):
     """
     Translated from
@@ -171,8 +178,14 @@ def wait_for_deployment_complete(
     existing_pod_names = (pod.metadata.name for pod in existing_pods)
 
     start = time.time()
-    while time.time() - start < timeout:
+    while True:
         time.sleep(2)
+
+        time_elapsed = time.time() - start
+
+        if time_elapsed >= timeout:
+            raise Exception(f"Timed out waiting for deployment {deployment_name}")
+
         deployment = api.read_namespaced_deployment(deployment_name, namespace)
         status = deployment.status
         spec = deployment.spec
@@ -194,10 +207,10 @@ def wait_for_deployment_complete(
         pod_list = core_api.list_namespaced_pod(
             namespace, label_selector="user-deployment={}".format(deployment_name)
         )
-        for pod in pod_list.items:
-            if pod.metadata.name not in existing_pod_names and did_pod_image_fail(pod):
-                raise Exception(
-                    f"Failed to pull image {metadata.image} for location {location_name}"
-                )
 
-    raise Exception(f"Timed out waiting for deployment {deployment_name}")
+        if time_elapsed >= image_pull_grace_period:
+            for pod in pod_list.items:
+                if pod.metadata.name not in existing_pod_names and did_pod_image_fail(pod):
+                    raise Exception(
+                        f"Failed to pull image {metadata.image} for location {location_name}"
+                    )

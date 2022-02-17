@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Collection, Dict, List, Optional
 
 import boto3
 from dagster import Array, Field, IntSource, Noneable, StringSource, check
@@ -151,9 +151,16 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         return endpoint
 
     def _remove_server_handle(self, server_handle: EcsServerHandleType) -> None:
+        self._logger.info(
+            "Deleting service {} at hostname {}...".format(
+                server_handle.name, server_handle.hostname
+            )
+        )
         self.client.delete_service(server_handle)
 
-    def _get_server_handles_for_location(self, location_name: str) -> Iterable[EcsServerHandleType]:
+    def _get_server_handles_for_location(
+        self, location_name: str
+    ) -> Collection[EcsServerHandleType]:
         tags = {"dagster/location_name": location_name}
         services = self.client.list_services()
         location_services = [

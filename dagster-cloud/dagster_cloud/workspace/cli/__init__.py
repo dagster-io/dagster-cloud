@@ -27,7 +27,7 @@ from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from typer import Argument, Option, Typer
 
 from ...cli import gql, ui
-from ...cli.config_utils import dagster_cloud_options
+from ...cli.config_utils import DEFAULT_AGENT_TIMEOUT, dagster_cloud_options
 from ...cli.utils import add_options
 from ...headers.impl import get_dagster_cloud_api_headers
 
@@ -126,11 +126,13 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
     )
 
 
-def _add_or_update_location(client: GqlShimClient, location_data: gql.CliInputCodeLocation) -> None:
+def _add_or_update_location(
+    client: GqlShimClient, location_data: gql.CliInputCodeLocation, agent_timeout: int
+) -> None:
     try:
         gql.add_or_update_code_location(client, location_data)
         ui.print(f"Added or updated location {location_data.name}.")
-        wait_for_load(client, [location_data.name])
+        wait_for_load(client, [location_data.name], agent_timeout)
     except Exception as e:
         raise ui.error(str(e))
 
@@ -141,13 +143,14 @@ def _add_or_update_location(client: GqlShimClient, location_data: gql.CliInputCo
 def add_command(
     api_token: str,
     url: str,
+    agent_timeout: int,
     location: str = Argument(..., help="Code location name."),
     **kwargs,
 ):
     """Add or update the image for a repository location in the workspace."""
     client = gql.graphql_client_from_url(url, api_token)
     location_data = _get_location_input(location, kwargs)
-    _add_or_update_location(client, location_data)
+    _add_or_update_location(client, location_data, agent_timeout)
 
 
 def list_locations(location_names: List[str]) -> str:
@@ -165,16 +168,17 @@ def list_locations(location_names: List[str]) -> str:
 def update_command(
     api_token: str,
     url: str,
+    agent_timeout: int,
     location: str = Argument(..., help="Code location name."),
     **kwargs,
 ):
     """Update the image for a repository location in the workspace."""
     client = gql.graphql_client_from_url(url, api_token)
     location_data = _get_location_input(location, kwargs)
-    _add_or_update_location(client, location_data)
+    _add_or_update_location(client, location_data, agent_timeout)
 
 
-def wait_for_load(client, locations):
+def wait_for_load(client, locations, timeout=DEFAULT_AGENT_TIMEOUT):
     try:
         agents = gql.fetch_agent_status(client)
     except Exception as e:
@@ -187,8 +191,12 @@ def wait_for_load(client, locations):
 
     start_time = time.time()
     ui.print(f"Waiting for agent to sync changes to {list_locations(locations)}...")
+
+    if not timeout:
+        return
+
     while True:
-        if time.time() - start_time > 300:
+        if time.time() - start_time > timeout:
             raise ui.error("Timed out waiting for location data to update.")
 
         try:
@@ -287,6 +295,7 @@ def execute_list_command(client):
 def sync_command(
     url: str,
     api_token: str,
+    agent_timeout: int,
     workspace: Path = Option(
         DEFAULT_WORKSPACE_YAML_FILENAME,
         "--workspace",
@@ -297,10 +306,10 @@ def sync_command(
 ):
     """"Sync the workspace with the contents of a workspace.yaml file."""
     client = gql.graphql_client_from_url(url, api_token)
-    execute_sync_command(client, workspace)
+    execute_sync_command(client, workspace, agent_timeout)
 
 
-def execute_sync_command(client, workspace):
+def execute_sync_command(client, workspace, agent_timeout):
     with open(str(workspace), "r") as f:
         config = yaml.load(f.read(), Loader=yaml.SafeLoader)
         process_workspace_config(config)
@@ -322,7 +331,7 @@ def execute_sync_command(client, workspace):
                 ],
             )
         ui.print(f"Synced locations: {', '.join(locations)}")
-        wait_for_load(client, locations)
+        wait_for_load(client, locations, agent_timeout)
     except Exception as e:
         raise ui.error(str(e))
 
@@ -437,7 +446,7 @@ def get_location_or_load_error(location_data: gql.CliInputCodeLocation):
     )
 
     try:
-        with origin.create_test_location() as location:
+        with origin.create_single_location() as location:
             yield (location, None)
     except Exception:
         load_error = serializable_error_info_from_exc_info(sys.exc_info())

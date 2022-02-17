@@ -3,7 +3,7 @@ from abc import abstractmethod
 from dagster.core.launcher import RunLauncher
 
 
-class WatchfulRunLauncher(RunLauncher):
+class CloudRunLauncher(RunLauncher):
     @abstractmethod
     def check_run_health(self, run_id):
         """

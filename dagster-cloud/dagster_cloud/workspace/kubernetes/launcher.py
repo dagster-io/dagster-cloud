@@ -1,6 +1,6 @@
 import logging
 from contextlib import contextmanager
-from typing import Dict, Iterable, Optional
+from typing import Collection, Dict, Optional
 
 import kubernetes
 import kubernetes.client as client
@@ -10,7 +10,7 @@ from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import ensure_single_item, merge_dicts
-from dagster_cloud.execution.watchful_run_launcher.k8s import WatchfulK8sRunLauncher
+from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.executor import (
     DAGSTER_CLOUD_EXECUTOR_K8S_CONFIG_KEY,
     DAGSTER_CLOUD_EXECUTOR_NAME,
@@ -32,6 +32,7 @@ from .utils import (
 
 DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT = 300
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
+DEFAULT_IMAGE_PULL_GRACE_PERIOD = 30
 
 
 class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
@@ -51,6 +52,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
         image_pull_secrets=None,
         deployment_startup_timeout=None,
         server_process_startup_timeout=None,
+        image_pull_grace_period=None,
         labels=None,
     ):
         self._inst_data = inst_data
@@ -79,6 +81,11 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             "server_process_startup_timeout",
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
+        self._image_pull_grace_period = check.opt_int_param(
+            image_pull_grace_period,
+            "image_pull_grace_period",
+            DEFAULT_IMAGE_PULL_GRACE_PERIOD,
+        )
         self._labels = check.opt_dict_param(labels, "labels", key_type=str, value_type=str)
 
         if kubeconfig_file:
@@ -88,7 +95,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
 
         super(K8sUserCodeLauncher, self).__init__()
 
-        self._launcher = WatchfulK8sRunLauncher(
+        self._launcher = CloudK8sRunLauncher(
             dagster_home=self._dagster_home,
             instance_config_map=self._instance_config_map,
             postgres_password_secret=None,
@@ -198,6 +205,11 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
                 default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
                 description="Timeout when waiting for a code server to be ready after its deployment is created",
             ),
+            "image_pull_grace_period": Field(
+                IntSource,
+                is_required=False,
+                default_value=DEFAULT_IMAGE_PULL_GRACE_PERIOD,
+            ),
         }
 
     @staticmethod
@@ -217,6 +229,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             volumes=config_value.get("volumes"),
             deployment_startup_timeout=config_value.get("deployment_startup_timeout"),
             server_process_startup_timeout=config_value.get("server_process_startup_timeout"),
+            image_pull_grace_period=config_value.get("image_pull_grace_period"),
             labels=config_value.get("labels"),
         )
 
@@ -275,6 +288,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
             metadata,
             existing_pods=[],
             timeout=self._deployment_startup_timeout,
+            image_pull_grace_period=self._image_pull_grace_period,
         )
         server_id = self._wait_for_server(
             host=resource_name, port=SERVICE_PORT, timeout=self._server_process_startup_timeout
@@ -289,7 +303,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
 
         return endpoint
 
-    def _get_server_handles_for_location(self, location_name: str) -> Iterable[str]:
+    def _get_server_handles_for_location(self, location_name: str) -> Collection[str]:
         with self._get_api_instance() as api_instance:
             deployments = api_instance.list_namespaced_deployment(
                 self._namespace,
