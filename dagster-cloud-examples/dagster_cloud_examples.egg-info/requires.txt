@@ -1,4 +1,4 @@
-dagster_cloud==0.14.0
+dagster_cloud==0.14.1
 
 [tests]
 mypy==0.812
