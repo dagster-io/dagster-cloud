@@ -1,5 +1,17 @@
 import json
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Union,
+    cast,
+)
 
 from dagster import check
 from dagster.core.definitions.events import AssetKey
@@ -22,6 +34,7 @@ from dagster.serdes import (
 )
 from dagster.utils import datetime_as_float
 from dagster.utils.error import SerializableErrorInfo
+from dagster_cloud.storage.event_logs.utils import truncate_event
 
 from ..errors import GraphQLStorageError
 from .queries import (
@@ -197,16 +210,32 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         self,
         run_id: str,
         cursor: Optional[int] = -1,
-        of_type: Optional[DagsterEventType] = None,
+        of_type: Optional[Union[DagsterEventType, Set[DagsterEventType]]] = None,
         limit: Optional[int] = None,
     ) -> Iterable[EventLogEntry]:
-        check.opt_inst_param(of_type, "of_type", DagsterEventType)
+        check.invariant(
+            not of_type
+            or isinstance(of_type, DagsterEventType)
+            or isinstance(of_type, (frozenset, set))
+        )
+
+        is_of_type_set = isinstance(of_type, (set, frozenset))
+
         res = self._execute_query(
             GET_LOGS_FOR_RUN_QUERY,
             variables={
                 "runId": check.str_param(run_id, "run_id"),
                 "cursor": check.int_param(cursor, "cursor"),
-                "ofType": of_type.value if of_type else None,
+                "ofType": (
+                    cast(DagsterEventType, of_type).value
+                    if of_type and not is_of_type_set
+                    else None
+                ),
+                "ofTypes": (
+                    [dagster_type.value for dagster_type in of_type]
+                    if of_type and is_of_type_set
+                    else None
+                ),
                 "limit": limit,
             },
         )
@@ -282,12 +311,15 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def store_event(self, event: EventLogEntry):
         check.inst_param(event, "event", EventLogEntry)
 
+        event = truncate_event(event)
+
         self._execute_query(
             STORE_EVENT_MUTATION,
             variables={
                 "eventRecord": {
                     "errorInfo": _input_for_serializable_error_info(event.error_info),
-                    "message": event.message,
+                    # If this is a user log, we already store the message in userMessage
+                    "message": event.message if event.dagster_event_type else "",
                     "level": event.level,
                     "userMessage": event.user_message,
                     "runId": event.run_id,

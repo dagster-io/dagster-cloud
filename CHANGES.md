@@ -1,5 +1,25 @@
 # Dagster Cloud Changelog
 
+# 0.14.2
+
+### New
+
+* Individual `context.log` messages which appear in the Dagster event log will now be truncated after 50,000 characters. The full contents of these messages remain available in the compute logs tab. For large logs, we recommend logging straight to stdout or stderr rather than using `context.log`.
+
+### Bugfixes
+
+* Added a missing IAM permission to the ECS Agent Cloudformation template that was preventing the ECS agent from being able to terminate runs.
+
+### Documentation
+
+* Added a new [guide](https://docs.dagster.cloud/guides/adding-code) to the Dagster Cloud docs covering how to add and update code.
+
+# 0.14.1
+
+### Bugfixes
+
+- Sensors that have a default status can now be manually started. Previously, this would fail with an invariant exception.
+
 # 0.14.0
 
 ### New

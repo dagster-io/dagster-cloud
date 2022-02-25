@@ -76,9 +76,9 @@ EVENT_RECORD_FRAGMENT = (
 GET_LOGS_FOR_RUN_QUERY = (
     EVENT_LOG_ENTRY_FRAGMENT
     + """
-    query getLogsForRun($runId: String!, $cursor: Int, $ofType: String, $limit: Int) {
+    query getLogsForRun($runId: String!, $cursor: Int, $ofType: String, $ofTypes: [String!], $limit: Int) {
         eventLogs {
-            getLogsForRun(runId: $runId, cursor: $cursor, ofType: $ofType, limit: $limit) {
+            getLogsForRun(runId: $runId, cursor: $cursor, ofType: $ofType, ofTypes: $ofTypes, limit: $limit) {
                 ...EventLogEntryFragment
             }
         }
