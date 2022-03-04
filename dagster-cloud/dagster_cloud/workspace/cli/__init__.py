@@ -304,7 +304,7 @@ def sync_command(
         help="Path to workspace file.",
     ),
 ):
-    """"Sync the workspace with the contents of a workspace.yaml file."""
+    """ "Sync the workspace with the contents of a workspace.yaml file."""
     client = gql.graphql_client_from_url(url, api_token)
     execute_sync_command(client, workspace, agent_timeout)
 

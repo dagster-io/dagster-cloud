@@ -5,7 +5,7 @@ import tempfile
 import threading
 import time
 import zlib
-from abc import abstractmethod, abstractproperty
+from abc import abstractmethod
 from contextlib import AbstractContextManager
 from typing import Collection, Dict, Generic, List, NamedTuple, Optional, Set, TypeVar, Union
 
@@ -21,6 +21,7 @@ from dagster.core.host_representation.origin import (
     RepositoryLocationOrigin,
 )
 from dagster.core.instance import MayHaveInstanceWeakref
+from dagster.core.launcher import RunLauncher
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.grpc.types import GetCurrentImageResult
 from dagster.serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
@@ -31,7 +32,10 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadWorkspaceEntry,
 )
 from dagster_cloud.errors import raise_http_error
-from dagster_cloud.execution.cloud_run_launcher.base import CloudRunLauncher
+from dagster_cloud.execution.monitoring import (
+    CloudRunWorkerStatuses,
+    start_run_worker_monitoring_thread,
+)
 from dagster_cloud.util import diff_serializable_namedtuple_map
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
@@ -54,6 +58,10 @@ class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakre
     def __init__(self):
         self._logger = logging.getLogger("dagster_cloud")
         self._started: bool = False
+        self._run_worker_monitoring_thread = None
+        self._run_worker_monitoring_thread_shutdown_event = None
+        self._run_worker_statuses_list = []
+        self._run_worker_statuses_list_lock = threading.Lock()
 
     def start(self):
         check.invariant(
@@ -62,6 +70,43 @@ class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakre
         )
         # Begin spinning user code up and down
         self._started = True
+
+        if self._instance.run_launcher.supports_check_run_worker_health:
+            self._logger.debug("Starting run worker monitoring.")
+            (
+                self._run_worker_monitoring_thread,
+                self._run_worker_monitoring_thread_shutdown_event,
+            ) = start_run_worker_monitoring_thread(
+                self._instance, self._run_worker_statuses_list, self._run_worker_statuses_list_lock
+            )
+        else:
+            self._logger.debug(
+                "Not starting run worker monitoring, because it's not supported on this agent."
+            )
+
+    def is_run_worker_monitoring_thread_alive(self):
+        return (
+            self._run_worker_monitoring_thread is not None
+            and self._run_worker_monitoring_thread.is_alive()
+        )
+
+    def get_cloud_run_worker_statuses(self):
+        if not self._instance.run_launcher.supports_check_run_worker_health:
+            return CloudRunWorkerStatuses(
+                None, run_worker_monitoring_supported=False, run_worker_monitoring_thread_alive=None
+            )
+
+        self._logger.debug("Getting cloud run worker statuses for a heartbeat")
+
+        with self._run_worker_statuses_list_lock:
+            # values are immutable, don't need deepcopy
+            statuses_list = self._run_worker_statuses_list.copy()
+        self._logger.debug("Returning statuses_list: {}".format(statuses_list))
+        return CloudRunWorkerStatuses(
+            statuses=statuses_list,
+            run_worker_monitoring_supported=True,
+            run_worker_monitoring_thread_alive=self.is_run_worker_monitoring_thread_alive(),
+        )
 
     @abstractmethod
     def update_grpc_metadata(
@@ -74,7 +119,8 @@ class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakre
     def supports_origin(self, repository_location_origin: RepositoryLocationOrigin) -> bool:
         return isinstance(repository_location_origin, RegisteredRepositoryLocationOrigin)
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def is_workspace_ready(self) -> bool:
         pass
 
@@ -257,7 +303,8 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         with self._is_workspace_ready_lock:
             return self._is_workspace_ready
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def requires_images(self) -> bool:
         pass
 
@@ -290,7 +337,7 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         pass
 
     @abstractmethod
-    def run_launcher(self) -> CloudRunLauncher:
+    def run_launcher(self) -> RunLauncher:
         pass
 
     def start(self):
@@ -310,6 +357,10 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         if self._reconcile_grpc_metadata_thread:
             self._reconcile_grpc_metadata_shutdown_event.set()
             self._reconcile_grpc_metadata_thread.join()
+
+        if self._run_worker_monitoring_thread:
+            self._run_worker_monitoring_thread_shutdown_event.set()
+            self._run_worker_monitoring_thread.join()
 
         if self._started:
             self._cleanup_servers()

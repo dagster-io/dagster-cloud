@@ -32,7 +32,7 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         server_process_startup_timeout=None,
         inst_data: Optional[ConfigurableClassData] = None,
         secrets=None,
-        secrets_tag="dagster",
+        secrets_tag=None,
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
@@ -91,10 +91,9 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
             "secrets_tag": Field(
                 Noneable(StringSource),
                 is_required=False,
-                default_value="dagster",
                 description=(
                     "AWS Secrets Manager secrets with this tag will be mounted as "
-                    "environment variables in the container. Defaults to 'dagster'."
+                    "environment variables in the container."
                 ),
             ),
             "server_process_startup_timeout": Field(

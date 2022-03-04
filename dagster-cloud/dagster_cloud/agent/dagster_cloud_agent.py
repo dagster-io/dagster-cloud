@@ -33,7 +33,6 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadApiResponse,
     TimestampedError,
 )
-from dagster_cloud.execution.cloud_run_launcher.base import CloudRunLauncher
 from dagster_cloud.executor.step_handler_context import DagsterCloudStepHandlerContext
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.storage.errors import GraphQLStorageError
@@ -202,6 +201,13 @@ class DagsterCloudAgent:
         ):
             return
 
+        errors = [
+            TimestampedError(timestamp.float_timestamp, error)
+            for (error, timestamp) in self._errors
+        ]
+
+        run_worker_statuses = instance.user_code_launcher.get_cloud_run_worker_statuses()
+
         self._last_heartbeat_time = curr_time
         heartbeat = AgentHeartbeat(
             timestamp=curr_time.float_timestamp,
@@ -210,11 +216,9 @@ class DagsterCloudAgent:
             agent_type=type(instance.user_code_launcher).__name__
             if instance.user_code_launcher
             else None,
-            errors=[
-                TimestampedError(timestamp.float_timestamp, error)
-                for (error, timestamp) in self._errors
-            ],
+            errors=errors,
             metadata={"version": __version__},
+            run_worker_statuses=run_worker_statuses,
         )
 
         res = instance.graphql_client.execute(
@@ -279,8 +283,7 @@ class DagsterCloudAgent:
 
         return [
             EventLogEntry(
-                message=event.message,
-                user_message=event.message,
+                user_message="",
                 level=logging.INFO,
                 pipeline_name=context.pipeline_run.pipeline_name,
                 run_id=context.pipeline_run.run_id,
@@ -419,12 +422,6 @@ class DagsterCloudAgent:
 
             launcher = user_code_launcher.run_launcher()
             launcher.launch_run(LaunchRunContext(pipeline_run=run, workspace=None))
-            return DagsterCloudApiSuccess()
-        elif api_name == DagsterCloudApi.CHECK_RUN_HEALTH:
-            run = request.request_args.pipeline_run
-            launcher = user_code_launcher.run_launcher()
-            check.inst(launcher, CloudRunLauncher)
-            launcher.check_run_health(run.run_id)
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.TERMINATE_RUN:
             # With agent replicas enabled:

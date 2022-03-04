@@ -9,9 +9,9 @@ from dagster import Array, Field, Permissive, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
-from dagster_cloud.execution.cloud_run_launcher.docker import CloudDockerRunLauncher
 from dagster_cloud.execution.step_handler.docker_step_handler import DockerStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_docker import DockerRunLauncher
 from docker.models.containers import Container
 
 from .user_code_launcher import ReconcileUserCodeLauncher
@@ -178,7 +178,7 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
         return DockerStepHandler(self._networks, self.env_vars, self._container_kwargs)
 
     def run_launcher(self):
-        launcher = CloudDockerRunLauncher(
+        launcher = DockerRunLauncher(
             image=None,
             env_vars=self.env_vars,
             networks=self._networks,

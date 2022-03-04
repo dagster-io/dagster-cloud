@@ -10,12 +10,12 @@ from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import ensure_single_item, merge_dicts
-from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.executor import (
     DAGSTER_CLOUD_EXECUTOR_K8S_CONFIG_KEY,
     DAGSTER_CLOUD_EXECUTOR_NAME,
 )
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_k8s import K8sRunLauncher
 from dagster_k8s.executor import K8sStepHandler
 from dagster_k8s.job import DagsterK8sJobConfig
 from kubernetes.client.rest import ApiException
@@ -95,7 +95,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
 
         super(K8sUserCodeLauncher, self).__init__()
 
-        self._launcher = CloudK8sRunLauncher(
+        self._launcher = K8sRunLauncher(
             dagster_home=self._dagster_home,
             instance_config_map=self._instance_config_map,
             postgres_password_secret=None,

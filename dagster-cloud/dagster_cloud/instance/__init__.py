@@ -263,3 +263,7 @@ instance_class:
     @property
     def agent_replicas_enabled(self):
         return self._agent_replicas_config.get("enabled", False)
+
+    @property
+    def dagster_cloud_run_worker_monitoring_interval_seconds(self):
+        return 30

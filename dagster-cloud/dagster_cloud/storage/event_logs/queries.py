@@ -50,7 +50,6 @@ SERIALIZABLE_ERROR_INFO_FRAGMENT = """
 EVENT_LOG_ENTRY_FRAGMENT = """
 fragment EventLogEntryFragment on EventLogEntry {
     errorInfo
-    message
     level
     userMessage
     runId

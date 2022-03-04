@@ -1,5 +1,15 @@
 # Dagster Cloud Changelog
 
+# 0.14.3
+
+### New
+
+* [K8s] The agent now monitors active runs. Failures in the underlying Kubernetes Job (e.g. an out of memory error) will now be reported in Dagit.
+
+### Bugfixes
+
+* Fixed an issue where the favicon didn’t update to reflect success, pending, or failure status when looking at a job’s run page.
+
 # 0.14.2
 
 ### New

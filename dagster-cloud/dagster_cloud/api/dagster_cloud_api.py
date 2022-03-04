@@ -10,6 +10,7 @@ from dagster.core.host_representation import ExternalRepositoryData, RepositoryL
 from dagster.core.storage.pipeline_run import PipelineRun
 from dagster.serdes import whitelist_for_serdes
 from dagster.utils.error import SerializableErrorInfo
+from dagster_cloud.execution.monitoring import CloudRunWorkerStatuses
 from dagster_cloud.executor.step_handler_context import PersistedDagsterCloudStepHandlerContext
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
@@ -76,11 +77,11 @@ class DagsterCloudApi(Enum):
     GET_EXTERNAL_NOTEBOOK_DATA = "GET_EXTERNAL_NOTEBOOK_DATA"
 
     LAUNCH_RUN = "LAUNCH_RUN"
-    CHECK_RUN_HEALTH = "CHECK_RUN_HEALTH"
+    CHECK_RUN_HEALTH = "CHECK_RUN_HEALTH"  # deprecated, agents now surface this in heartbeats
     TERMINATE_RUN = "TERMINATE_RUN"
-    LAUNCH_STEP = "LAUNCH_STEP"
-    CHECK_STEP_HEALTH = "CHECK_STEP_HEALTH"
-    TERMINATE_STEP = "TERMINATE_STEP"
+    LAUNCH_STEP = "LAUNCH_STEP"  # deprecated with cloud executor
+    CHECK_STEP_HEALTH = "CHECK_STEP_HEALTH"  # deprecated with cloud executor
+    TERMINATE_STEP = "TERMINATE_STEP"  # deprecated with cloud executor
 
     def __structlog__(self):
         return self.name
@@ -273,15 +274,6 @@ class LaunchRunArgs(namedtuple("_LaunchRunArgs", "pipeline_run")):
 
 
 @whitelist_for_serdes
-class CheckRunHealthArgs(namedtuple("_CheckRunHealthArgs", "pipeline_run")):
-    def __new__(cls, pipeline_run):
-        return super(cls, CheckRunHealthArgs).__new__(
-            cls,
-            check.inst_param(pipeline_run, "pipeline_run", PipelineRun),
-        )
-
-
-@whitelist_for_serdes
 class TerminateRunArgs(namedtuple("_TerminateRunArgs", "pipeline_run")):
     def __new__(cls, pipeline_run):
         return super(cls, TerminateRunArgs).__new__(
@@ -383,17 +375,30 @@ class TimestampedError(namedtuple("_TimestampedError", "timestamp error")):
 
 @whitelist_for_serdes
 class AgentHeartbeat(
-    namedtuple("_AgentHeartbeat", "timestamp agent_id agent_label agent_type errors metadata")
+    namedtuple(
+        "_AgentHeartbeat",
+        "timestamp agent_id agent_label agent_type errors metadata run_worker_statuses",
+    )
 ):
-    def __new__(cls, timestamp, agent_id, agent_label, agent_type, errors=None, metadata=None):
-        errors = check.opt_list_param(errors, "errors", of_type=TimestampedError)
-
+    def __new__(
+        cls,
+        timestamp,
+        agent_id,
+        agent_label,
+        agent_type,
+        errors=None,
+        metadata=None,
+        run_worker_statuses=None,
+    ):
         return super(AgentHeartbeat, cls).__new__(
             cls,
             timestamp=check.float_param(timestamp, "timestamp"),
             agent_id=agent_id,
             agent_label=check.opt_str_param(agent_label, "agent_label"),
             agent_type=check.opt_str_param(agent_type, "agent_type"),
-            errors=errors,
+            errors=check.opt_list_param(errors, "errors", of_type=TimestampedError),
             metadata=check.opt_dict_param(metadata, str, str),
+            run_worker_statuses=check.opt_inst_param(
+                run_worker_statuses, "run_worker_statuses", CloudRunWorkerStatuses
+            ),
         )

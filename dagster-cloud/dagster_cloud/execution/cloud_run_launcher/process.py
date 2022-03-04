@@ -1,14 +1,13 @@
+from dagster.core.launcher import RunLauncher
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.types import ExecuteRunArgs
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process, launch_process
 
-from . import CloudRunLauncher
-
 PID_TAG = "process/pid"
 
 
-class CloudProcessRunLauncher(CloudRunLauncher):
+class CloudProcessRunLauncher(RunLauncher):
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.pipeline_run
         pipeline_code_origin = context.pipeline_code_origin
@@ -60,13 +59,3 @@ class CloudProcessRunLauncher(CloudRunLauncher):
         kill_process(pid)
 
         return True
-
-    def check_run_health(self, run_id):
-        run = self._instance.get_run_by_id(run_id)
-        pid = self._get_pid(run)
-
-        if not pid:
-            return
-
-        if check_on_process(pid) == TaskStatus.NOT_FOUND:
-            self._instance.report_run_failed(run, f"Process pid {pid} is not running")

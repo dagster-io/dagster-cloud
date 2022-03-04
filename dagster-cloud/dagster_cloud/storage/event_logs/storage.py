@@ -112,7 +112,6 @@ def _event_log_entry_from_graphql(graphene_event_log_entry: Dict) -> EventLogEnt
             if graphene_event_log_entry.get("errorInfo") is not None
             else None
         ),
-        message=check.str_elem(graphene_event_log_entry, "message"),
         level=check.int_elem(graphene_event_log_entry, "level"),
         user_message=check.str_elem(graphene_event_log_entry, "userMessage"),
         run_id=check.str_elem(graphene_event_log_entry, "runId"),
@@ -318,8 +317,6 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             variables={
                 "eventRecord": {
                     "errorInfo": _input_for_serializable_error_info(event.error_info),
-                    # If this is a user log, we already store the message in userMessage
-                    "message": event.message if event.dagster_event_type else "",
                     "level": event.level,
                     "userMessage": event.user_message,
                     "runId": event.run_id,
