@@ -1,7 +1,7 @@
 from collections import namedtuple
 from datetime import timedelta
 from enum import Enum
-from typing import Any, List, NamedTuple, Optional, Union
+from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, Union
 
 import pendulum
 from dagster import check
@@ -375,25 +375,33 @@ class TimestampedError(namedtuple("_TimestampedError", "timestamp error")):
 
 @whitelist_for_serdes
 class AgentHeartbeat(
-    namedtuple(
+    NamedTuple(
         "_AgentHeartbeat",
-        "timestamp agent_id agent_label agent_type errors metadata run_worker_statuses",
+        [
+            ("timestamp", float),
+            ("agent_id", str),
+            ("agent_label", Optional[str]),
+            ("agent_type", Optional[str]),
+            ("errors", Optional[Sequence[TimestampedError]]),
+            ("metadata", Optional[Mapping[str, str]]),
+            ("run_worker_statuses", Optional[CloudRunWorkerStatuses]),
+        ],
     )
 ):
     def __new__(
         cls,
-        timestamp,
-        agent_id,
-        agent_label,
-        agent_type,
-        errors=None,
-        metadata=None,
-        run_worker_statuses=None,
+        timestamp: float,
+        agent_id: str,
+        agent_label: Optional[str],
+        agent_type: Optional[str],
+        errors: Optional[Sequence[TimestampedError]] = None,
+        metadata: Optional[Mapping[str, str]] = None,
+        run_worker_statuses: Optional[CloudRunWorkerStatuses] = None,
     ):
         return super(AgentHeartbeat, cls).__new__(
             cls,
             timestamp=check.float_param(timestamp, "timestamp"),
-            agent_id=agent_id,
+            agent_id=check.str_param(agent_id, "agent_id"),
             agent_label=check.opt_str_param(agent_label, "agent_label"),
             agent_type=check.opt_str_param(agent_type, "agent_type"),
             errors=check.opt_list_param(errors, "errors", of_type=TimestampedError),

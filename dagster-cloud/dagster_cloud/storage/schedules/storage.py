@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, List, Optional
 
 from dagster import check
 from dagster.core.definitions.run_request import InstigatorType
@@ -121,8 +121,14 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         raise NotImplementedError("Not callable from user cloud")
 
     def get_ticks(
-        self, origin_id: str, before: float = None, after: float = None, limit: int = None
+        self,
+        origin_id: str,
+        before: float = None,
+        after: float = None,
+        limit: int = None,
+        statuses: Optional[List[TickStatus]] = None,
     ) -> Iterable[InstigatorTick]:
+        statuses = [status.value for status in statuses] if statuses else None
         res = self._execute_query(
             GET_JOB_TICKS_QUERY,
             variables={
@@ -130,6 +136,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
                 "before": before,
                 "after": after,
                 "limit": limit,
+                "statuses": statuses,
             },
         )
 

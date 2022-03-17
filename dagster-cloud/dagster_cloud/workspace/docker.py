@@ -1,11 +1,12 @@
 import logging
 import os
 import sys
+import time
 import uuid
 from typing import Any, Collection, Dict, List, Optional
 
 import docker
-from dagster import Array, Field, Permissive, check
+from dagster import Array, Field, IntSource, Permissive, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
@@ -14,9 +15,11 @@ from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from docker.models.containers import Container
 
-from .user_code_launcher import ReconcileUserCodeLauncher
+from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
+
+IMAGE_PULL_LOG_INTERVAL = 15
 
 
 class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableClass):
@@ -26,6 +29,7 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
         networks=None,
         env_vars=None,
         container_kwargs=None,
+        server_process_startup_timeout=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("dagster_cloud")
@@ -34,6 +38,12 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
 
         self._container_kwargs = check.opt_dict_param(
             container_kwargs, "container_kwargs", key_type=str
+        )
+
+        self._server_process_startup_timeout = check.opt_int_param(
+            server_process_startup_timeout,
+            "server_process_startup_timeout",
+            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
 
         super(DockerUserCodeLauncher, self).__init__()
@@ -69,6 +79,12 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
                 description="key-value pairs that can be passed into containers.create. See "
                 "https://docker-py.readthedocs.io/en/stable/containers.html for the full list "
                 "of available options.",
+            ),
+            "server_process_startup_timeout": Field(
+                IntSource,
+                is_required=False,
+                default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+                description="Timeout when waiting for a code server to be ready after it is created",
             ),
         }
 
@@ -125,7 +141,13 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
                 client, location_name, metadata, container_name, hostname, port
             )
         except docker.errors.ImageNotFound:
-            client.images.pull(metadata.image)
+            last_log_time = time.time()
+            self._logger.info("Pulling image {image}...".format(image=metadata.image))
+            for _line in docker.APIClient().pull(metadata.image, stream=True):
+                if time.time() - last_log_time > IMAGE_PULL_LOG_INTERVAL:
+                    self._logger.info("Still pulling image {image}...".format(image=metadata.image))
+                    last_log_time = time.time()
+
             container = self._create_container(
                 client, location_name, metadata, container_name, hostname, port
             )
@@ -139,7 +161,9 @@ class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableC
 
         self._logger.info("Started container {container_id}".format(container_id=container.id))
 
-        server_id = self._wait_for_server(host=hostname, port=port)
+        server_id = self._wait_for_server(
+            host=hostname, port=port, timeout=self._server_process_startup_timeout
+        )
 
         endpoint = GrpcServerEndpoint(
             server_id=server_id,

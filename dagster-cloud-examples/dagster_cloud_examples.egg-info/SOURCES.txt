@@ -9,5 +9,9 @@ dagster_cloud_examples.egg-info/requires.txt
 dagster_cloud_examples.egg-info/top_level.txt
 dagster_cloud_examples/cereals/__init__.py
 dagster_cloud_examples/cereals/repository.py
+dagster_cloud_examples/cereals/jobs/__init__.py
+dagster_cloud_examples/cereals/jobs/compute_cereal_properties/__init__.py
+dagster_cloud_examples/cereals/jobs/compute_cereal_properties/process_cereals.py
+dagster_cloud_examples/cereals/jobs/compute_cereal_properties/ops/__init__.py
 dagster_cloud_examples/cereals/schedules/__init__.py
 dagster_cloud_examples/cereals/schedules/daily_process_cereals.py

@@ -1,7 +1,7 @@
 from typing import Any, Collection, Dict, List, Optional
 
 import boto3
-from dagster import Array, Field, IntSource, Noneable, StringSource, check
+from dagster import Array, Field, IntSource, Noneable, ScalarUnion, StringSource, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.launcher import RunLauncher
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
@@ -10,13 +10,11 @@ from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.secretsmanager import get_secrets_from_arns, get_tagged_secrets
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
-from ..user_code_launcher import ReconcileUserCodeLauncher
+from ..user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
 from .client import Client
 from .service import Service
 
 EcsServerHandleType = Service
-
-DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
 
 
 class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], ConfigurableClass):
@@ -81,11 +79,17 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
             "log_group": Field(StringSource),
             "service_discovery_namespace_id": Field(StringSource),
             "secrets": Field(
-                Array(StringSource),
+                Array(
+                    ScalarUnion(
+                        scalar_type=str,
+                        non_scalar_schema={"name": StringSource, "valueFrom": StringSource},
+                    )
+                ),
                 is_required=False,
                 description=(
-                    "An array of AWS Secrets Manager secrets arns. These secrets will "
-                    "be mounted as environment variabls in the container."
+                    "An array of AWS Secrets Manager secrets. These secrets will "
+                    "be mounted as environment variabls in the container. See "
+                    "https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_Secret.html."
                 ),
             ),
             "secrets_tag": Field(
@@ -100,7 +104,7 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
                 IntSource,
                 is_required=False,
                 default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                description="Timeout when waiting for a code server to be ready after its deployment is created",
+                description="Timeout when waiting for a code server to be ready after it is created",
             ),
         }
 
@@ -116,6 +120,12 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
         self, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
         port = 4000
+
+        if all(isinstance(secret, str) for secret in self.secrets):
+            secrets = get_secrets_from_arns(self.secrets_manager, self.secrets)
+        else:
+            secrets = {secret["name"]: secret["valueFrom"] for secret in self.secrets}
+
         service = self.client.create_service(
             name=location_name,
             image=metadata.image,
@@ -129,7 +139,7 @@ class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], Config
                     if self.secrets_tag
                     else {}
                 ),
-                get_secrets_from_arns(self.secrets_manager, self.secrets),
+                secrets,
             ),
         )
         self._logger.info(

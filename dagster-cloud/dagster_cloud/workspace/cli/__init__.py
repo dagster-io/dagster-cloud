@@ -11,10 +11,11 @@ import requests
 import yaml
 from dagster import check
 from dagster.core.host_representation import ManagedGrpcPythonEnvRepositoryLocationOrigin
+from dagster.core.test_utils import remove_none_recursively
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.serdes import serialize_dagster_namedtuple
 from dagster.serdes.serdes import deserialize_json_to_dagster_namedtuple
-from dagster.utils import DEFAULT_WORKSPACE_YAML_FILENAME, frozendict
+from dagster.utils import DEFAULT_WORKSPACE_YAML_FILENAME
 from dagster.utils.error import serializable_error_info_from_exc_info
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
@@ -22,7 +23,10 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadWorkspaceEntry,
 )
 from dagster_cloud.storage.client import GqlShimClient
-from dagster_cloud.workspace.config_schema import process_workspace_config
+from dagster_cloud.workspace.config_schema import (
+    process_workspace_config,
+    validate_workspace_location,
+)
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from typer import Argument, Option, Typer
 
@@ -126,13 +130,35 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
     )
 
 
+def _get_location_document(name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    python_file = kwargs.get("python_file")
+    python_file_str = str(python_file) if python_file else None
+
+    return remove_none_recursively(
+        {
+            "location_name": name,
+            "code_source": {
+                "python_file": python_file_str,
+                "module_name": kwargs.get("module_name"),
+                "package_name": kwargs.get("package_name"),
+            },
+            "working_directory": kwargs.get("working_directory"),
+            "image": kwargs.get("image"),
+            "executable_path": kwargs.get("executable_path"),
+            "attribute": kwargs.get("attribute"),
+            "git": {"commit_hash": kwargs.get("commit_hash"), "url": kwargs.get("git_url")},
+        }
+    )
+
+
 def _add_or_update_location(
-    client: GqlShimClient, location_data: gql.CliInputCodeLocation, agent_timeout: int
+    client: GqlShimClient, location_document: Dict[str, Any], agent_timeout: int
 ) -> None:
     try:
-        gql.add_or_update_code_location(client, location_data)
-        ui.print(f"Added or updated location {location_data.name}.")
-        wait_for_load(client, [location_data.name], agent_timeout)
+        gql.add_or_update_code_location(client, location_document)
+        name = location_document["location_name"]
+        ui.print(f"Added or updated location {name}.")
+        wait_for_load(client, [name], agent_timeout)
     except Exception as e:
         raise ui.error(str(e))
 
@@ -149,8 +175,11 @@ def add_command(
 ):
     """Add or update the image for a repository location in the workspace."""
     client = gql.graphql_client_from_url(url, api_token)
-    location_data = _get_location_input(location, kwargs)
-    _add_or_update_location(client, location_data, agent_timeout)
+    location_document = _get_location_document(location, kwargs)
+    errors = validate_workspace_location(location_document)
+    if errors:
+        raise ui.error("Error in location config:\n" + "\n".join(errors))
+    _add_or_update_location(client, location_document, agent_timeout)
 
 
 def list_locations(location_names: List[str]) -> str:
@@ -174,8 +203,11 @@ def update_command(
 ):
     """Update the image for a repository location in the workspace."""
     client = gql.graphql_client_from_url(url, api_token)
-    location_data = _get_location_input(location, kwargs)
-    _add_or_update_location(client, location_data, agent_timeout)
+    location_document = _get_location_document(location, kwargs)
+    errors = validate_workspace_location(location_document)
+    if errors:
+        raise ui.error("Error in location config:\n" + "\n".join(errors))
+    _add_or_update_location(client, location_document, agent_timeout)
 
 
 def wait_for_load(client, locations, timeout=DEFAULT_AGENT_TIMEOUT):
@@ -312,24 +344,10 @@ def sync_command(
 def execute_sync_command(client, workspace, agent_timeout):
     with open(str(workspace), "r") as f:
         config = yaml.load(f.read(), Loader=yaml.SafeLoader)
-        process_workspace_config(config)
+        processed_config = process_workspace_config(config)
 
     try:
-        # Process legacy format (location name as key, no code_source field)
-        if isinstance(config["locations"], (dict, frozendict)):
-            locations = gql.reconcile_code_locations(
-                client,
-                [_get_location_input(name, m) for name, m in config["locations"].items()],
-            )
-        # Process modern format (location name as property, code_source field)
-        else:
-            locations = gql.reconcile_code_locations(
-                client,
-                [
-                    _get_location_input(m.get("location_name"), {**m, **m.get("code_source")})
-                    for m in config["locations"]
-                ],
-            )
+        locations = gql.reconcile_code_locations(client, processed_config)
         ui.print(f"Synced locations: {', '.join(locations)}")
         wait_for_load(client, locations, agent_timeout)
     except Exception as e:

@@ -18,9 +18,10 @@ from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_k8s import K8sRunLauncher
 from dagster_k8s.executor import K8sStepHandler
 from dagster_k8s.job import DagsterK8sJobConfig
+from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
 
-from ..user_code_launcher import ReconcileUserCodeLauncher
+from ..user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
 from .utils import (
     SERVICE_PORT,
     construct_repo_location_deployment,
@@ -31,7 +32,6 @@ from .utils import (
 )
 
 DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT = 300
-DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
 DEFAULT_IMAGE_PULL_GRACE_PERIOD = 30
 
 
@@ -66,8 +66,14 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
         )
         self._env_secrets = check.opt_list_param(env_secrets, "env_secrets", of_type=str)
         self._service_account_name = check.str_param(service_account_name, "service_account_name")
-        self._volume_mounts = check.opt_list_param(volume_mounts, "volume_mounts")
-        self._volumes = check.opt_list_param(volumes, "volumes")
+        self._volume_mounts = [
+            k8s_snake_case_dict(kubernetes.client.V1VolumeMount, mount)
+            for mount in check.opt_list_param(volume_mounts, "volume_mounts")
+        ]
+        self._volumes = [
+            k8s_snake_case_dict(kubernetes.client.V1Volume, volume)
+            for volume in check.opt_list_param(volumes, "volumes")
+        ]
         self._image_pull_secrets = check.opt_list_param(
             image_pull_secrets, "image_pull_secrets", of_type=dict
         )
@@ -203,7 +209,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
                 IntSource,
                 is_required=False,
                 default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                description="Timeout when waiting for a code server to be ready after its deployment is created",
+                description="Timeout when waiting for a code server to be ready after it is created",
             ),
             "image_pull_grace_period": Field(
                 IntSource,

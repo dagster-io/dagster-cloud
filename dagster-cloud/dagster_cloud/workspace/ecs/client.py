@@ -1,3 +1,4 @@
+import json
 import time
 import uuid
 from typing import List, Optional
@@ -305,21 +306,35 @@ class Client:
 
     def _wait_for_service(self, service):
         service_name = service.name
+        messages = []
         start_time = time.time()
         while start_time + 300 > time.time():
-            service = self.ecs.describe_services(
+            response = self.ecs.describe_services(
                 cluster=self.cluster_name,
+                # We only expect our API call to describe one service
                 services=[service_name],
-            ).get("services")[0]
-            messages = [event.get("message") for event in service.get("events")]
-            # Poll until at least 1 task to starts instead of at least 1 task failing
-            # This is because IAM is eventually consistent so the first event or two
-            # will sometimes fail with "ECS was unable to assume the role" but will
-            # resolve itself with enough time:
-            # https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency
-            if any(["has started 1 tasks" in message for message in messages]):
-                return self._wait_for_task(service_name)
-            time.sleep(1)
+            )
+            if response.get("services"):
+                service = response.get("services")[0]
+                messages = [event.get("message") for event in service.get("events")]
+                # Poll until at least 1 task to starts instead of at least 1 task failing
+                # This is because IAM is eventually consistent so the first event or two
+                # will sometimes fail with "ECS was unable to assume the role" but will
+                # resolve itself with enough time:
+                # https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency
+                if any(["has started 1 tasks" in message for message in messages]):
+                    return self._wait_for_task(service_name)
+                time.sleep(1)
+            elif response.get("failures"):
+                failures = response.get("failures")
+                raise Exception(f"ECS DescribeTasks API returned failures: {json.dumps(failures)}")
+            else:
+                # This might not be a possible state; it's unclear if the ECS API can return empty lists for both
+                # "failures" and "services":
+                # https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeServices.html
+                raise Exception(
+                    f"ECS DescribeTasks API returned an empty response for service {service.arn}."
+                )
         raise Exception(messages)
 
     def _wait_for_task(self, service_name):

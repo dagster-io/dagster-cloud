@@ -1,5 +1,22 @@
 # Dagster Cloud Changelog
 
+# 0.14.4
+
+### New
+
+* You can now [set secrets with the ECS Agent using the same syntax that you use to set secrets in the ECS API]((https://docs.dagster.io/0.14.4/deployment/guides/aws#secrets-management-in-ecs)).
+* The ECS Agent now raises the underlying ECS API failure if it cannot successfully start a task or service.
+* You can now delete a code location without running an agent.
+
+Bugfixes
+
+* Fixed a Python packaging issue which caused the `dagster_cloud_examples` package to fail to load when used with the local agent.
+
+Documentation
+
+* Document a strategy for developing your Dagster jobs locally using Dagster Cloud and the DockerUserCodeLauncher.
+* Document how to grant AWS IAM permissions to Dagster K8s pods using service accounts.
+
 # 0.14.3
 
 ### New

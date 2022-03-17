@@ -4,7 +4,7 @@ import sys
 import threading
 from typing import Collection, Dict, NamedTuple, Optional, Set
 
-from dagster import check
+from dagster import BoolSource, Field, IntSource, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
@@ -14,7 +14,7 @@ from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLa
 from dagster_cloud.execution.step_handler.process_step_handler import ProcessStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
-from .user_code_launcher import ReconcileUserCodeLauncher
+from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
 
 CLEANUP_ZOMBIE_PROCESSES_INTERVAL = 5
 
@@ -47,7 +47,12 @@ class ProcessUserCodeEntry(
 
 
 class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
-    def __init__(self, inst_data: ConfigurableClassData = None, wait_for_processes: bool = False):
+    def __init__(
+        self,
+        server_process_startup_timeout=None,
+        inst_data: ConfigurableClassData = None,
+        wait_for_processes: bool = False,
+    ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("dagster_cloud")
 
@@ -68,6 +73,12 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
 
         # the process handler keeps pids in memory, so we keep a single instance of it
         self._step_handler = ProcessStepHandler()
+
+        self._server_process_startup_timeout = check.opt_int_param(
+            server_process_startup_timeout,
+            "server_process_startup_timeout",
+            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+        )
 
         super(ProcessUserCodeLauncher, self).__init__()
 
@@ -113,13 +124,27 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
 
     @classmethod
     def config_type(cls) -> Dict:
-        return {}
+        return {
+            "server_process_startup_timeout": Field(
+                IntSource,
+                is_required=False,
+                default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+                description="Timeout when waiting for a code server to be ready after it is created",
+            ),
+            "wait_for_processes": Field(
+                BoolSource,
+                is_required=False,
+                default_value=False,
+                description="When cleaning up the agent, wait for any subprocesses to "
+                "finish before shutting down. Generally only needed in tests/automation.",
+            ),
+        }
 
     @staticmethod
     def from_config_value(
         inst_data: ConfigurableClassData, config_value: Dict
     ) -> "ProcessUserCodeLauncher":
-        return ProcessUserCodeLauncher(inst_data=inst_data)
+        return ProcessUserCodeLauncher(inst_data=inst_data, **config_value)
 
     def _create_new_server_endpoint(
         self, location_name: str, metadata: CodeDeploymentMetadata
@@ -131,7 +156,10 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
             heartbeat_timeout=self._heartbeat_ttl,
         )
         server_id = self._wait_for_server(
-            host="localhost", port=server_process.port, socket=server_process.socket
+            host="localhost",
+            port=server_process.port,
+            socket=server_process.socket,
+            timeout=self._server_process_startup_timeout,
         )
 
         client = DagsterGrpcClient(

@@ -161,58 +161,9 @@ def fetch_code_locations(client: GqlShimClient) -> List[Any]:
     return result["locationEntries"]
 
 
-UPDATE_LOCATION_MUTATION = """
-mutation ($location: LocationSelector!) {
-    updateLocation(location: $location) {
-        __typename
-            ... on WorkspaceEntry {
-            locationName
-        }
-        ... on PythonError {
-            message
-            stack
-        }
-    }
-}
-"""
-
-
-def update_code_location(client: GqlShimClient, location_details: CliInputCodeLocation) -> None:
-    result = client.execute(
-        UPDATE_LOCATION_MUTATION,
-        variable_values={"location": location_details.get_location_input()},
-    )["data"]["updateLocation"]
-    if result["__typename"] != "WorkspaceEntry":
-        raise Exception("Unable to update code location: ", result["message"])
-
-
-ADD_LOCATION_MUTATION = """
-mutation ($location: LocationSelector!) {
-    addLocation(location: $location) {
-        __typename
-            ... on WorkspaceEntry {
-            locationName
-        }
-        ... on PythonError {
-            message
-            stack
-        }
-    }
-}
-"""
-
-
-def add_code_location(client: GqlShimClient, location_details: CliInputCodeLocation) -> None:
-    result = client.execute(
-        ADD_LOCATION_MUTATION, variable_values={"location": location_details.get_location_input()}
-    )["data"]["addLocation"]
-    if result["__typename"] != "WorkspaceEntry":
-        raise Exception("Unable to add code location: ", result["message"])
-
-
-ADD_OR_UPDATE_LOCATION_MUTATION = """
-mutation ($location: LocationSelector!) {
-    addOrUpdateLocation(location: $location) {
+ADD_OR_UPDATE_LOCATION_FROM_DOCUMENT_MUTATION = """
+mutation ($document: GenericScalar!) {
+    addOrUpdateLocationFromDocument(document: $document) {
         __typename
         ... on WorkspaceEntry {
             locationName
@@ -226,13 +177,11 @@ mutation ($location: LocationSelector!) {
 """
 
 
-def add_or_update_code_location(
-    client: GqlShimClient, location_details: CliInputCodeLocation
-) -> None:
+def add_or_update_code_location(client: GqlShimClient, location_document: Dict[str, Any]) -> None:
     result = client.execute(
-        ADD_OR_UPDATE_LOCATION_MUTATION,
-        variable_values={"location": location_details.get_location_input()},
-    )["data"]["addOrUpdateLocation"]
+        ADD_OR_UPDATE_LOCATION_FROM_DOCUMENT_MUTATION,
+        variable_values={"document": location_document},
+    )["data"]["addOrUpdateLocationFromDocument"]
     if result["__typename"] != "WorkspaceEntry":
         raise Exception("Unable to add/update code location: ", result["message"])
 
@@ -262,9 +211,9 @@ def delete_code_location(client: GqlShimClient, location_name: str) -> None:
         raise Exception(f"Unable to delete location: {str(result['data']['deleteLocation'])}")
 
 
-RECONCILE_LOCATIONS_MUTATION = """
-mutation ($locations: [LocationSelector]!) {
-    reconcileLocations(locations: $locations) {
+RECONCILE_LOCATIONS_FROM_DOCUMENT_MUTATION = """
+mutation ($document: GenericScalar!) {
+    reconcileLocationsFromDocument(document: $document) {
         __typename
         ... on ReconcileLocationsSuccess {
             locations {
@@ -281,18 +230,21 @@ mutation ($locations: [LocationSelector]!) {
 
 
 def reconcile_code_locations(
-    client: GqlShimClient, locations: List[CliInputCodeLocation]
+    client: GqlShimClient, locations_document: Dict[str, Any]
 ) -> List[str]:
     result = client.execute(
-        RECONCILE_LOCATIONS_MUTATION,
-        variable_values={"locations": [location.get_location_input() for location in locations]},
+        RECONCILE_LOCATIONS_FROM_DOCUMENT_MUTATION,
+        variable_values={"document": locations_document},
     )
 
-    if result["data"]["reconcileLocations"]["__typename"] == "ReconcileLocationsSuccess":
+    if (
+        result["data"]["reconcileLocationsFromDocument"]["__typename"]
+        == "ReconcileLocationsSuccess"
+    ):
         return sorted(
             [
                 location["locationName"]
-                for location in result["data"]["reconcileLocations"]["locations"]
+                for location in result["data"]["reconcileLocationsFromDocument"]["locations"]
             ]
         )
     else:

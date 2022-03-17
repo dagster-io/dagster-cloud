@@ -101,7 +101,10 @@ class DagsterCloudAgent:
 
         max_workers = os.cpu_count() * self.MAX_THREADS_PER_CORE
         self._executor = self._exit_stack.enter_context(
-            concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers,
+                thread_name_prefix="dagster_cloud_agent_worker",
+            )
         )
 
         self._request_ids_to_future_context: Dict[str, DagsterCloudApiFutureContext] = {}
@@ -123,8 +126,8 @@ class DagsterCloudAgent:
     def initialize_workspace(self, instance, user_code_launcher):
         self._check_update_workspace(instance, user_code_launcher)
 
+        self._logger.info("Loading Dagster repositories...")
         while not user_code_launcher.is_workspace_ready:
-            self._logger.info("Waiting for workspace to be ready...")
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
                 time.sleep(5)

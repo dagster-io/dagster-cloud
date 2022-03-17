@@ -39,6 +39,9 @@ from dagster_cloud.execution.monitoring import (
 from dagster_cloud.util import diff_serializable_namedtuple_map
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
+DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
+
+
 USER_CODE_LAUNCHER_RECONCILE_INTERVAL = 1
 
 ServerHandle = TypeVar("ServerHandle")
@@ -401,13 +404,15 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
             except Exception:
                 self._logger.error(
                     "Failure updating user code servers: {exc_info}".format(
-                        exc_info=sys.exc_info(),
+                        exc_info=serializable_error_info_from_exc_info(sys.exc_info()),
                     )
                 )
 
     def reconcile(self):
         with self._metadata_lock:
-            desired_entries = self._desired_entries.copy()
+            desired_entries = (
+                self._desired_entries.copy() if self._desired_entries != None else None
+            )
             upload_locations = self._upload_locations.copy()
             self._upload_locations = set()
 
@@ -579,9 +584,7 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
         for server_handle in existing_server_handles:
             self._remove_server_handle(server_handle)
 
-    def _wait_for_server(
-        self, host: str, port: int, timeout=15, socket: Optional[str] = None
-    ) -> str:
+    def _wait_for_server(self, host: str, port: int, timeout, socket: Optional[str] = None) -> str:
         # Wait for the server to be ready (while also loading the server ID)
         server_id = None
         start_time = time.time()

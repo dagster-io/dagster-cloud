@@ -1,7 +1,7 @@
 import logging
 import threading
 from collections import namedtuple
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 from dagster import check
 from dagster.core.errors import DagsterInvariantViolationError
@@ -13,9 +13,9 @@ from dagster_cloud.instance import DagsterCloudAgentInstance, InstanceRef
 
 @whitelist_for_serdes
 class CloudRunWorkerStatus(
-    namedtuple(
+    NamedTuple(
         "_CloudRunWorkerStatus",
-        "run_id status_type message",
+        [("run_id", str), ("status_type", WorkerStatus), ("message", Optional[str])],
     )
 ):
     def __new__(cls, run_id: str, status_type: WorkerStatus, message: Optional[str] = None):
@@ -34,9 +34,13 @@ class CloudRunWorkerStatus(
 
 @whitelist_for_serdes
 class CloudRunWorkerStatuses(
-    namedtuple(
+    NamedTuple(
         "_CloudRunWorkerStatuses",
-        "statuses run_worker_monitoring_supported run_worker_monitoring_thread_alive",
+        [
+            ("statuses", List[CloudRunWorkerStatus]),
+            ("run_worker_monitoring_supported", bool),
+            ("run_worker_monitoring_thread_alive", Optional[bool]),
+        ],
     )
 ):
     def __new__(

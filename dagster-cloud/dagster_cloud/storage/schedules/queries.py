@@ -61,9 +61,9 @@ GET_JOB_STATE_QUERY = """
 """
 
 GET_JOB_TICKS_QUERY = """
-    query jobTicks($jobOriginId: String!, $before: Float, $after: Float, $limit: Int) {
+    query jobTicks($jobOriginId: String!, $before: Float, $after: Float, $limit: Int, $statuses: [InstigationTickStatus!]) {
         schedules {
-            jobTicks(jobOriginId: $jobOriginId, before: $before, after: $after, limit: $limit)
+            jobTicks(jobOriginId: $jobOriginId, before: $before, after: $after, limit: $limit, statuses: $statuses)
         }
     }
 """
