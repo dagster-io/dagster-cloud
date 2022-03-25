@@ -40,6 +40,7 @@ DEFAULT_LOCATIONS_YAML_FILENAME = "locations.yaml"
 app = Typer(help="Manage your Dagster Cloud workspace.")
 
 _DEPLOYMENT_METADATA_OPTIONS = {
+    # Options to specify code location metadata inline
     "image": (str, Option(None, "--image", help="Docker image.")),
     "python_file": (
         Path,
@@ -110,6 +111,20 @@ _DEPLOYMENT_METADATA_OPTIONS = {
     ),
 }
 
+_LOCATION_FILE_OPTIONS = {
+    # Specify code location metadata via file
+    "location_file": (
+        Path,
+        Option(
+            None,
+            "--location-file",
+            "--from",
+            exists=True,
+            help="YAML file specifying code location metadata.",
+        ),
+    ),
+}
+
 
 def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCodeLocation:
     python_file = kwargs.get("python_file")
@@ -131,24 +146,54 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
 
 
 def _get_location_document(name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-    python_file = kwargs.get("python_file")
-    python_file_str = str(python_file) if python_file else None
 
-    return remove_none_recursively(
-        {
-            "location_name": name,
-            "code_source": {
-                "python_file": python_file_str,
-                "module_name": kwargs.get("module_name"),
-                "package_name": kwargs.get("package_name"),
-            },
-            "working_directory": kwargs.get("working_directory"),
-            "image": kwargs.get("image"),
-            "executable_path": kwargs.get("executable_path"),
-            "attribute": kwargs.get("attribute"),
-            "git": {"commit_hash": kwargs.get("commit_hash"), "url": kwargs.get("git_url")},
-        }
-    )
+    location_file = kwargs.get("location_file")
+    if not location_file and not name:
+        raise ui.error(
+            "No location name provided. You must either provide a location file with the "
+            f"{ui.as_code('--location-file/--from')} flag or specify the location name as an argument."
+        )
+    elif location_file and name:
+        raise ui.error("Cannot specify locaiton name both in file and inline.")
+
+    if location_file:
+        if any(
+            kwargs.get(arg)
+            for arg in (
+                "module_name",
+                "package_name",
+                "working_directory",
+                "image",
+                "executable_path",
+                "attribute",
+                "commit_hash",
+                "git_url",
+            )
+        ):
+            raise ui.error("Cannot specify location config both from file and inline.")
+
+        with open(location_file) as f:
+            return yaml.safe_load(f.read())
+
+    else:
+        python_file = kwargs.get("python_file")
+        python_file_str = str(python_file) if python_file else None
+
+        return remove_none_recursively(
+            {
+                "location_name": name,
+                "code_source": {
+                    "python_file": python_file_str,
+                    "module_name": kwargs.get("module_name"),
+                    "package_name": kwargs.get("package_name"),
+                },
+                "working_directory": kwargs.get("working_directory"),
+                "image": kwargs.get("image"),
+                "executable_path": kwargs.get("executable_path"),
+                "attribute": kwargs.get("attribute"),
+                "git": {"commit_hash": kwargs.get("commit_hash"), "url": kwargs.get("git_url")},
+            }
+        )
 
 
 def _add_or_update_location(
@@ -166,11 +211,12 @@ def _add_or_update_location(
 @app.command(name="add-location", short_help="Add or update a repo location image.")
 @dagster_cloud_options(allow_empty=True, requires_url=True)
 @add_options(_DEPLOYMENT_METADATA_OPTIONS)
+@add_options(_LOCATION_FILE_OPTIONS)
 def add_command(
     api_token: str,
     url: str,
     agent_timeout: int,
-    location: str = Argument(..., help="Code location name."),
+    location: str = Argument(None, help="Code location name."),
     **kwargs,
 ):
     """Add or update the image for a repository location in the workspace."""
@@ -194,11 +240,12 @@ def list_locations(location_names: List[str]) -> str:
 @app.command(name="update-location", short_help="Update a repo location image.")
 @dagster_cloud_options(allow_empty=True, requires_url=True)
 @add_options(_DEPLOYMENT_METADATA_OPTIONS)
+@add_options(_LOCATION_FILE_OPTIONS)
 def update_command(
     api_token: str,
     url: str,
     agent_timeout: int,
-    location: str = Argument(..., help="Code location name."),
+    location: str = Argument(None, help="Code location name."),
     **kwargs,
 ):
     """Update the image for a repository location in the workspace."""

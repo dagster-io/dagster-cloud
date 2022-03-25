@@ -1,3 +1,5 @@
+import logging
+import time
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from typing import Any, Dict, Optional
 
@@ -12,11 +14,13 @@ from urllib3 import Retry
 
 from ..errors import DagsterCloudHTTPError
 from ..headers.impl import get_dagster_cloud_api_headers
-from ..storage.errors import GraphQLStorageError
+from ..storage.errors import DagsterCloudMaintenanceException, GraphQLStorageError
 
 DEFAULT_RETRIES = 6
 RETRY_BACKOFF_FACTOR = 0.5
 DEFAULT_TIMEOUT = 60
+
+logger = logging.getLogger("dagster_cloud")
 
 
 class GqlShimClient(AbstractContextManager):
@@ -52,6 +56,24 @@ class GqlShimClient(AbstractContextManager):
 
     def execute(self, query: str, variable_values: Dict[str, Any] = None):
 
+        start_time = time.time()
+
+        while True:
+            try:
+                return self._execute_retry(query, variable_values)
+            except DagsterCloudMaintenanceException as e:
+                if time.time() - start_time > e.timeout:
+                    raise
+
+                logger.warning(
+                    "Dagster Cloud is currently unavailable due to scheduled maintenance. Retrying in {retry_interval} seconds...".format(
+                        retry_interval=e.retry_interval
+                    )
+                )
+                time.sleep(e.retry_interval)
+
+    def _execute_retry(self, query: str, variable_values: Dict[str, Any] = None):
+
         post_args = {
             "headers": merge_dicts(self.headers, {"Content-type": "application/json"}),
             "cookies": self.cookies,
@@ -74,7 +96,7 @@ class GqlShimClient(AbstractContextManager):
             except ValueError:
                 result = {}
 
-            if "errors" not in result and "data" not in result:
+            if "errors" not in result and "data" not in result and "maintenance" not in result:
                 response.raise_for_status()
                 raise requests.HTTPError("Unexpected GraphQL response", response=response)
 
@@ -82,6 +104,14 @@ class GqlShimClient(AbstractContextManager):
             raise DagsterCloudHTTPError(http_error) from http_error
         except Exception as exc:
             raise GraphQLStorageError(exc.__str__()) from exc
+
+        if "maintenance" in result:
+            maintenance_info = result["maintenance"]
+            raise DagsterCloudMaintenanceException(
+                message=maintenance_info.get("message"),
+                timeout=maintenance_info.get("timeout"),
+                retry_interval=maintenance_info.get("retry_interval"),
+            )
 
         if "errors" in result:
             raise GraphQLStorageError(f"Error in GraphQL response: {str(result['errors'])}")

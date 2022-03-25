@@ -5,11 +5,13 @@ from typer import Argument, Typer
 
 from .. import gql, ui
 from ..config_utils import dagster_cloud_options
+from .alert_policies.commands import app as alert_policies_app
 
 app = Typer(help="Customize your Dagster Cloud deployment.")
 
 settings_app = Typer(help="Customize your deployment settings.")
 app.add_typer(settings_app, name="settings", no_args_is_help=True)
+app.add_typer(alert_policies_app, name="alert-policies", no_args_is_help=True)
 
 
 @settings_app.command(name="set-from-file")

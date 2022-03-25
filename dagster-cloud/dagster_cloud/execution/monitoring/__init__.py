@@ -1,4 +1,5 @@
 import logging
+import sys
 import threading
 from collections import namedtuple
 from typing import List, NamedTuple, Optional
@@ -8,6 +9,7 @@ from dagster.core.errors import DagsterInvariantViolationError
 from dagster.core.launcher import CheckRunHealthResult, WorkerStatus
 from dagster.core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, PipelineRunsFilter
 from dagster.serdes import whitelist_for_serdes
+from dagster.utils.error import serializable_error_info_from_exc_info
 from dagster_cloud.instance import DagsterCloudAgentInstance, InstanceRef
 
 
@@ -84,13 +86,26 @@ def run_worker_monitoring_thread(
     logger.debug("Run Monitor thread has started")
     with DagsterCloudAgentInstance.from_ref(instance_ref) as instance:
         while not shutdown_event.is_set():
-            statuses = get_cloud_run_worker_statuses(instance)
-            logger.debug("Thread got statuses: {}".format(statuses))
-            with statuses_lock:
-                statuses_list.clear()
-                statuses_list.extend(statuses)
+            run_worker_monitoring_thread_iteration(instance, statuses_list, statuses_lock, logger)
             shutdown_event.wait(instance.dagster_cloud_run_worker_monitoring_interval_seconds)
     logger.debug("Run monitor thread shutting down")
+
+
+def run_worker_monitoring_thread_iteration(
+    instance: DagsterCloudAgentInstance,
+    statuses_list: List[CloudRunWorkerStatus],
+    statuses_lock: threading.Lock,
+    logger: logging.Logger,
+):
+    try:
+        statuses = get_cloud_run_worker_statuses(instance)
+        logger.debug("Thread got statuses: {}".format(statuses))
+        with statuses_lock:
+            statuses_list.clear()
+            statuses_list.extend(statuses)
+    except Exception:
+        error_info = serializable_error_info_from_exc_info(sys.exc_info())
+        logger.error("Caught error in run monitoring thread:\n{}".format(error_info))
 
 
 def start_run_worker_monitoring_thread(

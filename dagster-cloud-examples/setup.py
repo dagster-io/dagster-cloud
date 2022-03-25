@@ -18,7 +18,7 @@ if __name__ == "__main__":
     setup(
         name="dagster_cloud_examples",
         version=ver,
-        packages=find_packages(exclude=["test"]),
+        packages=find_packages(exclude=["dagster_cloud_examples_tests*"]),
         install_requires=[f"dagster_cloud{pin}"],
         extras_require={"tests": ["mypy==0.812", "pylint", "pytest"]},
         author="Elementl",

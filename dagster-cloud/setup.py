@@ -26,7 +26,7 @@ if __name__ == "__main__":
         long_description_content_type="text/markdown",
         version=ver,
         author_email="hello@elementl.com",
-        packages=find_packages(exclude=["dagster_cloud_tests"]),
+        packages=find_packages(exclude=["dagster_cloud_tests*"]),
         include_package_data=True,
         install_requires=[f"dagster{pin}", "questionary", "requests", "typer[all]"],
         extras_require={

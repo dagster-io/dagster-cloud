@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from dagster_cloud.api.client import GqlShimClient, create_cloud_dagit_client
 
@@ -296,3 +296,74 @@ def get_deployment_settings(client: GqlShimClient) -> Dict[str, Any]:
         raise Exception(f"Unable to get deployment settings: {str(result)}")
 
     return result["data"]["deploymentSettings"]["settings"]
+
+
+ALERT_POLICIES_QUERY = """
+    query AlertPolicies {
+        alertPolicies {
+            name
+            tags {
+                key
+                value
+            }
+            eventTypes
+            notificationService {
+                ... on EmailAlertPolicyNotification {
+                    emailAddresses
+                }
+                ... on SlackAlertPolicyNotification {
+                    slackWorkspaceName
+                    slackChannelName
+                }
+            }
+            enabled
+        }
+    }
+"""
+
+
+def get_alert_policies(client: GqlShimClient) -> Dict[str, Any]:
+    result = client.execute(ALERT_POLICIES_QUERY)
+
+    if result.get("data", {}).get("alertPolicies", {}) == None:
+        raise Exception(f"Unable to get deployment settings: {str(result)}")
+
+    return result["data"]["alertPolicies"]
+
+
+RECONCILE_ALERT_POLICIES_MUTATION = """
+    mutation ReconcileAlertPoliciesMutation($alertPolicies: [GrapheneAlertPolicyInput!]!) {
+        reconcileAlertPolicies(alertPolicies: $alertPolicies) {
+            __typename
+            ... on ReconcileAlertPoliciesSuccess {
+                alertPolicies {
+                    name
+                }
+            }
+            ... on UnauthorizedError {
+                message
+            }
+            ... on PythonError {
+                message
+                stack
+            }
+        }
+    }
+"""
+
+
+def reconcile_alert_policies(
+    client: GqlShimClient, alert_policy_inputs: Sequence[dict]
+) -> Sequence[str]:
+    result = client.execute(
+        RECONCILE_ALERT_POLICIES_MUTATION,
+        variable_values={"alertPolicies": alert_policy_inputs},
+    )
+
+    if result["data"]["reconcileAlertPolicies"]["__typename"] != "ReconcileAlertPoliciesSuccess":
+        raise Exception(f"Unable to reconcile alert policies: {result}")
+
+    return sorted(
+        alert_policy["name"]
+        for alert_policy in result["data"]["reconcileAlertPolicies"]["alertPolicies"]
+    )
