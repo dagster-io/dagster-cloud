@@ -1,45 +1,57 @@
 # Dagster Cloud Changelog
 
+# 0.14.6
+
+### New
+
+- Added the ability to add or update single code locations with a YAML file in the dagster-cloud CLI. For more information, see the adding code to Dagster Cloud docs (https://docs.dagster.cloud/guides/adding-code#using-the-dagster-cloud-cli).
+- When Dagster Cloud is temporarily unavailable due to scheduled maintenance, jobs that are running when the maintenance starts will wait for the maintenance to conclude and then continue execution, instead of failing.
+- Alert policies are now supported in Dagster Cloud. Alert policies define which jobs will trigger an alert, the conditions under which an alert will be sent, and how the alert will be sent.
+
+  An alert policy includes a set of configured tags. Only jobs that contain all the tags for a given alert policy are eligible for that alert. Additionally, an alert policy includes a set of conditions under which an alert will be triggered. For example, the alert can be triggered to fire on job failure, job success, or both events. Finally, an alert policy specifies where the alert will be sent. Currently, we support Slack and email as targets for an alert.
+
+  See https://docs.dagster.cloud/guides/alerts for more details.
+
 # 0.14.4
 
 ### New
 
-* You can now [set secrets with the ECS Agent using the same syntax that you use to set secrets in the ECS API]((https://docs.dagster.io/0.14.4/deployment/guides/aws#secrets-management-in-ecs)).
-* The ECS Agent now raises the underlying ECS API failure if it cannot successfully start a task or service.
-* You can now delete a code location without running an agent.
+- You can now [set secrets with the ECS Agent using the same syntax that you use to set secrets in the ECS API](<(https://docs.dagster.io/0.14.4/deployment/guides/aws#secrets-management-in-ecs)>).
+- The ECS Agent now raises the underlying ECS API failure if it cannot successfully start a task or service.
+- You can now delete a code location without running an agent.
 
 Bugfixes
 
-* Fixed a Python packaging issue which caused the `dagster_cloud_examples` package to fail to load when used with the local agent.
+- Fixed a Python packaging issue which caused the `dagster_cloud_examples` package to fail to load when used with the local agent.
 
 Documentation
 
-* Document a strategy for developing your Dagster jobs locally using Dagster Cloud and the DockerUserCodeLauncher.
-* Document how to grant AWS IAM permissions to Dagster K8s pods using service accounts.
+- Document a strategy for developing your Dagster jobs locally using Dagster Cloud and the DockerUserCodeLauncher.
+- Document how to grant AWS IAM permissions to Dagster K8s pods using service accounts.
 
 # 0.14.3
 
 ### New
 
-* [K8s] The agent now monitors active runs. Failures in the underlying Kubernetes Job (e.g. an out of memory error) will now be reported in Dagit.
+- [K8s] The agent now monitors active runs. Failures in the underlying Kubernetes Job (e.g. an out of memory error) will now be reported in Dagit.
 
 ### Bugfixes
 
-* Fixed an issue where the favicon didn’t update to reflect success, pending, or failure status when looking at a job’s run page.
+- Fixed an issue where the favicon didn’t update to reflect success, pending, or failure status when looking at a job’s run page.
 
 # 0.14.2
 
 ### New
 
-* Individual `context.log` messages which appear in the Dagster event log will now be truncated after 50,000 characters. The full contents of these messages remain available in the compute logs tab. For large logs, we recommend logging straight to stdout or stderr rather than using `context.log`.
+- Individual `context.log` messages which appear in the Dagster event log will now be truncated after 50,000 characters. The full contents of these messages remain available in the compute logs tab. For large logs, we recommend logging straight to stdout or stderr rather than using `context.log`.
 
 ### Bugfixes
 
-* Added a missing IAM permission to the ECS Agent Cloudformation template that was preventing the ECS agent from being able to terminate runs.
+- Added a missing IAM permission to the ECS Agent Cloudformation template that was preventing the ECS agent from being able to terminate runs.
 
 ### Documentation
 
-* Added a new [guide](https://docs.dagster.cloud/guides/adding-code) to the Dagster Cloud docs covering how to add and update code.
+- Added a new [guide](https://docs.dagster.cloud/guides/adding-code) to the Dagster Cloud docs covering how to add and update code.
 
 # 0.14.1
 
