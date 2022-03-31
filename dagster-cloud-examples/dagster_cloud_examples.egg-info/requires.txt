@@ -1,6 +1,0 @@
-dagster_cloud==0.14.6
-
-[tests]
-mypy==0.812
-pylint
-pytest

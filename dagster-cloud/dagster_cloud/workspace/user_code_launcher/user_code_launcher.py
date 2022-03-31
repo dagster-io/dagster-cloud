@@ -57,8 +57,20 @@ class UserCodeLauncherEntry(
     pass
 
 
-class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakref):
+class DagsterCloudUserCodeLauncher(
+    AbstractContextManager, MayHaveInstanceWeakref, Generic[ServerHandle]
+):
     def __init__(self):
+        self._grpc_endpoints: Dict[str, Union[GrpcServerEndpoint, SerializableErrorInfo]] = {}
+        self._grpc_endpoints_lock = threading.Lock()
+
+        # periodically reconciles to make desired = actual
+        self._desired_entries: Optional[Dict[str, UserCodeLauncherEntry]] = None
+        self._actual_entries = {}
+        self._metadata_lock = threading.Lock()
+
+        self._upload_locations: Set[str] = set()
+
         self._logger = logging.getLogger("dagster_cloud")
         self._started: bool = False
         self._run_worker_monitoring_thread = None
@@ -66,7 +78,14 @@ class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakre
         self._run_worker_statuses_list = []
         self._run_worker_statuses_list_lock = threading.Lock()
 
-    def start(self):
+        self._reconcile_count = 0
+        self._reconcile_grpc_metadata_shutdown_event = threading.Event()
+        self._reconcile_grpc_metadata_thread = None
+
+        self._is_workspace_ready_lock = threading.Lock()
+        self._is_workspace_ready: bool = False
+
+    def start(self, run_reconcile_thread=True):
         check.invariant(
             not self._started,
             "Called start() on a DagsterCloudUserCodeLauncher that was already started",
@@ -86,6 +105,17 @@ class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakre
             self._logger.debug(
                 "Not starting run worker monitoring, because it's not supported on this agent."
             )
+
+        self._cleanup_servers()
+
+        if run_reconcile_thread:
+            self._reconcile_grpc_metadata_thread = threading.Thread(
+                target=self._reconcile_thread,
+                args=(self._reconcile_grpc_metadata_shutdown_event,),
+                name="grpc-reconcile-watch",
+            )
+            self._reconcile_grpc_metadata_thread.daemon = True
+            self._reconcile_grpc_metadata_thread.start()
 
     def is_run_worker_monitoring_thread_alive(self):
         return (
@@ -111,35 +141,12 @@ class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakre
             run_worker_monitoring_thread_alive=self.is_run_worker_monitoring_thread_alive(),
         )
 
-    @abstractmethod
-    def update_grpc_metadata(
-        self,
-        desired_metadata: Dict[str, UserCodeLauncherEntry],
-        upload_locations: Set[str],
-    ):
-        pass
-
     def supports_origin(self, repository_location_origin: RepositoryLocationOrigin) -> bool:
         return isinstance(repository_location_origin, RegisteredRepositoryLocationOrigin)
 
     @property
-    @abstractmethod
-    def is_workspace_ready(self) -> bool:
-        pass
-
-    @property
     def supports_reload(self) -> bool:
         return False
-
-    @abstractmethod
-    def get_grpc_endpoint(
-        self, repository_location_origin: RepositoryLocationOrigin
-    ) -> GrpcServerEndpoint:
-        pass
-
-    @abstractmethod
-    def _get_repository_location_origin(self, location_name: str) -> RepositoryLocationOrigin:
-        pass
 
     def _update_workspace_entry(self, workspace_entry: DagsterCloudUploadWorkspaceEntry):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -279,28 +286,6 @@ class DagsterCloudUserCodeLauncher(AbstractContextManager, MayHaveInstanceWeakre
                 )
             )
 
-
-class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHandle]):
-    def __init__(self):
-        self._grpc_endpoints: Dict[str, Union[GrpcServerEndpoint, SerializableErrorInfo]] = {}
-        self._grpc_endpoints_lock = threading.Lock()
-
-        # periodically reconciles to make desired = actual
-        self._desired_entries: Optional[Dict[str, UserCodeLauncherEntry]] = None
-        self._actual_entries = {}
-        self._metadata_lock = threading.Lock()
-
-        self._upload_locations: Set[str] = set()
-
-        super().__init__()
-
-        self._reconcile_count = 0
-        self._reconcile_grpc_metadata_shutdown_event = threading.Event()
-        self._reconcile_grpc_metadata_thread = None
-
-        self._is_workspace_ready_lock = threading.Lock()
-        self._is_workspace_ready: bool = False
-
     @property
     def is_workspace_ready(self) -> bool:
         with self._is_workspace_ready_lock:
@@ -342,19 +327,6 @@ class ReconcileUserCodeLauncher(DagsterCloudUserCodeLauncher, Generic[ServerHand
     @abstractmethod
     def run_launcher(self) -> RunLauncher:
         pass
-
-    def start(self):
-        super().start()
-
-        self._cleanup_servers()
-
-        self._reconcile_grpc_metadata_thread = threading.Thread(
-            target=self._reconcile_thread,
-            args=(self._reconcile_grpc_metadata_shutdown_event,),
-            name="grpc-reconcile-watch",
-        )
-        self._reconcile_grpc_metadata_thread.daemon = True
-        self._reconcile_grpc_metadata_thread.start()
 
     def __exit__(self, exception_type, exception_value, traceback):
         if self._reconcile_grpc_metadata_thread:

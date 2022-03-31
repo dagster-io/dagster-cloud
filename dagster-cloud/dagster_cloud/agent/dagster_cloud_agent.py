@@ -7,12 +7,10 @@ import time
 import zlib
 from collections import deque
 from contextlib import ExitStack
-from typing import Dict, Iterator, List, NamedTuple, Optional, Union, cast
+from typing import Dict, Iterator, NamedTuple, Optional, Union, cast
 
 import pendulum
 from dagster import check
-from dagster.core.events import DagsterEvent
-from dagster.core.events.log import EventLogEntry
 from dagster.core.host_representation import RepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.client import DagsterGrpcClient
@@ -33,7 +31,6 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadApiResponse,
     TimestampedError,
 )
-from dagster_cloud.executor.step_handler_context import DagsterCloudStepHandlerContext
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.storage.errors import GraphQLStorageError
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
@@ -276,28 +273,6 @@ class DagsterCloudAgent:
         endpoint = user_code_launcher.get_grpc_endpoint(repository_location_origin)
         return endpoint.create_client()
 
-    def _to_event_log_entries(
-        self, context: DagsterCloudStepHandlerContext, events: List[DagsterEvent]
-    ) -> List[EventLogEntry]:
-
-        args = context.execute_step_args
-        assert len(args.step_keys_to_execute) == 1
-        step_key = args.step_keys_to_execute[0]
-
-        return [
-            EventLogEntry(
-                user_message="",
-                level=logging.INFO,
-                pipeline_name=context.pipeline_run.pipeline_name,
-                run_id=context.pipeline_run.run_id,
-                error_info=None,
-                timestamp=time.time(),
-                step_key=step_key,
-                dagster_event=event,
-            )
-            for event in events
-        ]
-
     def _handle_api_request(
         self,
         request: DagsterCloudApiRequest,
@@ -447,54 +422,6 @@ class DagsterCloudAgent:
                 )
                 launcher = user_code_launcher.run_launcher()
                 launcher.terminate(run.run_id)
-            return DagsterCloudApiSuccess()
-        elif api_name == DagsterCloudApi.LAUNCH_STEP:
-            context = DagsterCloudStepHandlerContext.deserialize(
-                instance, request.request_args.persisted_step_handler_context
-            )
-            args = context.execute_step_args
-
-            instance.report_engine_event(
-                f"Received request from {instance.dagster_cloud_url} to launch steps: {', '.join(args.step_keys_to_execute)}",
-                context.pipeline_run,
-                cls=self.__class__,
-            )
-
-            execution_config = context.pipeline_run.run_config.get("execution")
-            step_handler = user_code_launcher.get_step_handler(execution_config)
-            events = step_handler.launch_step(context)
-            event_records = self._to_event_log_entries(context, events)
-            for event_record in event_records:
-                instance.handle_new_event(event_record)
-
-            return DagsterCloudApiSuccess()
-
-        elif api_name == DagsterCloudApi.TERMINATE_STEP:
-            context = DagsterCloudStepHandlerContext.deserialize(
-                instance, request.request_args.persisted_step_handler_context
-            )
-
-            execution_config = context.pipeline_run.run_config.get("execution")
-            step_handler = user_code_launcher.get_step_handler(execution_config)
-            events = step_handler.terminate_step(context)
-            event_records = self._to_event_log_entries(context, events)
-            for event_record in event_records:
-                instance.handle_new_event(event_record)
-
-            return DagsterCloudApiSuccess()
-
-        elif api_name == DagsterCloudApi.CHECK_STEP_HEALTH:
-            context = DagsterCloudStepHandlerContext.deserialize(
-                instance, request.request_args.persisted_step_handler_context
-            )
-
-            execution_config = context.pipeline_run.run_config.get("execution")
-            step_handler = user_code_launcher.get_step_handler(execution_config)
-            events = step_handler.check_step_health(context)
-            event_records = self._to_event_log_entries(context, events)
-            for event_record in event_records:
-                instance.handle_new_event(event_record)
-
             return DagsterCloudApiSuccess()
 
         else:

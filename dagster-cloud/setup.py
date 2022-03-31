@@ -28,7 +28,13 @@ if __name__ == "__main__":
         author_email="hello@elementl.com",
         packages=find_packages(exclude=["dagster_cloud_tests*"]),
         include_package_data=True,
-        install_requires=[f"dagster{pin}", "questionary", "requests", "typer[all]"],
+        install_requires=[
+            f"dagster{pin}",
+            "questionary",
+            "requests",
+            "typer[all]",
+            "click<8.1.0",  # can be removed when typer updates https://github.com/tiangolo/typer/issues/377
+        ],
         extras_require={
             "tests": [
                 "black",

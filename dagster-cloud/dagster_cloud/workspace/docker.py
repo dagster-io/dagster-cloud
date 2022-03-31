@@ -6,7 +6,6 @@ import uuid
 from typing import Any, Collection, Dict, List, Optional
 
 import docker
-
 from dagster import Array, Field, IntSource, Permissive, check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
@@ -16,14 +15,14 @@ from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from docker.models.containers import Container
 
-from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
+from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, DagsterCloudUserCodeLauncher
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
 
 IMAGE_PULL_LOG_INTERVAL = 15
 
 
-class DockerUserCodeLauncher(ReconcileUserCodeLauncher[Container], ConfigurableClass):
+class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], ConfigurableClass):
     def __init__(
         self,
         inst_data=None,

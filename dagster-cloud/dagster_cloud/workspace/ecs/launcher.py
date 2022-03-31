@@ -10,14 +10,17 @@ from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.secretsmanager import get_secrets_from_arns, get_tagged_secrets
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
-from ..user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
+from ..user_code_launcher import (
+    DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+    DagsterCloudUserCodeLauncher,
+)
 from .client import Client
 from .service import Service
 
 EcsServerHandleType = Service
 
 
-class EcsUserCodeLauncher(ReconcileUserCodeLauncher[EcsServerHandleType], ConfigurableClass):
+class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], ConfigurableClass):
     def __init__(
         self,
         cluster: str,

@@ -9,19 +9,15 @@ from dagster.config.field_utils import Shape
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
-from dagster.utils import ensure_single_item, merge_dicts
-from dagster_cloud.executor import (
-    DAGSTER_CLOUD_EXECUTOR_K8S_CONFIG_KEY,
-    DAGSTER_CLOUD_EXECUTOR_NAME,
-)
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_k8s import K8sRunLauncher
-from dagster_k8s.executor import K8sStepHandler
-from dagster_k8s.job import DagsterK8sJobConfig
 from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
 
-from ..user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
+from ..user_code_launcher import (
+    DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+    DagsterCloudUserCodeLauncher,
+)
 from .utils import (
     SERVICE_PORT,
     construct_repo_location_deployment,
@@ -35,7 +31,7 @@ DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT = 300
 DEFAULT_IMAGE_PULL_GRACE_PERIOD = 30
 
 
-class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
+class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
     def __init__(
         self,
         dagster_home,
@@ -338,47 +334,7 @@ class K8sUserCodeLauncher(ReconcileUserCodeLauncher[str], ConfigurableClass):
         self._launcher.dispose()
 
     def get_step_handler(self, execution_config: Optional[Dict]) -> StepHandler:
-        executor_name, exc_cfg = (
-            ensure_single_item(execution_config) if execution_config else (None, {})
-        )
-
-        k8s_cfg = {}
-
-        if executor_name == DAGSTER_CLOUD_EXECUTOR_NAME:
-            k8s_cfg = exc_cfg.get(DAGSTER_CLOUD_EXECUTOR_K8S_CONFIG_KEY, {})
-
-        return K8sStepHandler(
-            job_config=DagsterK8sJobConfig(
-                dagster_home=self._dagster_home,
-                instance_config_map=self._instance_config_map,
-                postgres_password_secret=None,
-                job_image=None,
-                image_pull_policy=(
-                    k8s_cfg.get("image_pull_policy")
-                    if k8s_cfg.get("image_pull_policy") != None
-                    else self._pull_policy
-                ),
-                image_pull_secrets=self._image_pull_secrets
-                + (k8s_cfg.get("image_pull_secrets") or []),
-                service_account_name=(
-                    k8s_cfg.get("service_account_name")
-                    if k8s_cfg.get("service_account_name") != None
-                    else self._service_account_name
-                ),
-                env_config_maps=self._env_config_maps + (k8s_cfg.get("env_config_maps") or []),
-                env_secrets=self._env_secrets + (k8s_cfg.get("env_secrets") or []),
-                volume_mounts=self._volume_mounts + (k8s_cfg.get("volume_mounts") or []),
-                volumes=self._volumes + (k8s_cfg.get("volumes") or []),
-                labels=merge_dicts(self._labels, exc_cfg.get("labels", {})),
-            ),
-            job_namespace=(
-                k8s_cfg.get("job_namespace")
-                if k8s_cfg.get("job_namespace") != None
-                else self._namespace
-            ),
-            load_incluster_config=True,
-            kubeconfig_file=None,
-        )
+        pass
 
     def run_launcher(self):
         return self._launcher

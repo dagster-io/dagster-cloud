@@ -11,7 +11,6 @@ from dagster.core.storage.pipeline_run import PipelineRun
 from dagster.serdes import whitelist_for_serdes
 from dagster.utils.error import SerializableErrorInfo
 from dagster_cloud.execution.monitoring import CloudRunWorkerStatuses
-from dagster_cloud.executor.step_handler_context import PersistedDagsterCloudStepHandlerContext
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
 DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
@@ -279,19 +278,6 @@ class TerminateRunArgs(namedtuple("_TerminateRunArgs", "pipeline_run")):
         return super(cls, TerminateRunArgs).__new__(
             cls,
             check.inst_param(pipeline_run, "pipeline_run", PipelineRun),
-        )
-
-
-@whitelist_for_serdes
-class StepHandlerArgs(namedtuple("_StepHandlerArgs", "persisted_step_handler_context")):
-    def __new__(cls, persisted_step_handler_context: PersistedDagsterCloudStepHandlerContext):
-        return super(cls, StepHandlerArgs).__new__(
-            cls,
-            check.inst_param(
-                persisted_step_handler_context,
-                "persisted_step_handler_context",
-                PersistedDagsterCloudStepHandlerContext,
-            ),
         )
 
 

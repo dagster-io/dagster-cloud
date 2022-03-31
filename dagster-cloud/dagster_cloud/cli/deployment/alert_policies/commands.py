@@ -82,13 +82,13 @@ def sync_command(
 
     with open(str(alert_policies_file), "r") as f:
         config = yaml.load(f.read(), Loader=yaml.SafeLoader)
-        process_alert_policies_config(config)
-
-    alert_policy_inputs = _config_to_alert_policy_inputs(config)
 
     try:
+        process_alert_policies_config(config)
+
+        alert_policy_inputs = _config_to_alert_policy_inputs(config)
         alert_policies = gql.reconcile_alert_policies(client, alert_policy_inputs)
 
         ui.print(f"Synced alert policies: {', '.join(alert_policies)}")
     except Exception as e:
-        ui.error(str(e))
+        raise ui.error(str(e))

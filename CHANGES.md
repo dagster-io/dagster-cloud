@@ -1,5 +1,21 @@
 # Dagster Cloud Changelog
 
+# 0.14.7
+
+### New
+
+- Email alerts now include the run’s start and end time.
+- Dagster Cloud now displays more verbose event logging when an alert succeeds or fails.
+- Added links to Dagster Cloud changelog and status page in the login page.
+
+### Bugfixes
+
+- Fixed an issue where alert policy names were required to be unique across deployments in an organization.
+
+### Documentation
+
+- Added instructions to display your alert policies using the Dagster Cloud CLI.
+
 # 0.14.6
 
 ### New

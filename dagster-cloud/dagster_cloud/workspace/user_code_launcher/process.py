@@ -14,7 +14,7 @@ from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLa
 from dagster_cloud.execution.step_handler.process_step_handler import ProcessStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
-from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, ReconcileUserCodeLauncher
+from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, DagsterCloudUserCodeLauncher
 
 CLEANUP_ZOMBIE_PROCESSES_INTERVAL = 5
 
@@ -46,7 +46,7 @@ class ProcessUserCodeEntry(
         )
 
 
-class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
+class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     def __init__(
         self,
         server_process_startup_timeout=None,
@@ -86,8 +86,8 @@ class ProcessUserCodeLauncher(ReconcileUserCodeLauncher, ConfigurableClass):
     def requires_images(self) -> bool:
         return False
 
-    def start(self):
-        super().start()
+    def start(self, run_reconcile_thread=True):
+        super().start(run_reconcile_thread=run_reconcile_thread)
         # TODO Identify if zombie processes are an issue on Windows and what
         # the proper way to clean them up is
         if sys.platform != "win32":
