@@ -367,3 +367,50 @@ def reconcile_alert_policies(
         alert_policy["name"]
         for alert_policy in result["data"]["reconcileAlertPolicies"]["alertPolicies"]
     )
+
+
+SET_ORGANIZATION_SETTINGS_MUTATION = """
+    mutation SetOrganizationSettings($organizationSettings: OrganizationSettingsInput!) {
+        setOrganizationSettings(organizationSettings: $organizationSettings) {
+            __typename
+            ... on OrganizationSettings {
+                settings
+            }
+            ...on UnauthorizedError {
+                message
+            }
+            ... on PythonError {
+                message
+                stack
+            }
+        }
+    }
+"""
+
+
+def set_organization_settings(client: GqlShimClient, organization_settings: Dict[str, Any]) -> None:
+    result = client.execute(
+        SET_ORGANIZATION_SETTINGS_MUTATION,
+        variable_values={"organizationSettings": organization_settings},
+    )
+
+    if result["data"]["setOrganizationSettings"]["__typename"] != "OrganizationSettings":
+        raise Exception(f"Unable to set organization settings: {str(result)}")
+
+
+ORGANIZATION_SETTINGS_QUERY = """
+    query OrganizationSettings {
+        organizationSettings {
+            settings
+        }
+    }
+"""
+
+
+def get_organization_settings(client: GqlShimClient) -> Dict[str, Any]:
+    result = client.execute(ORGANIZATION_SETTINGS_QUERY)
+
+    if result.get("data", {}).get("organizationSettings", {}).get("settings") == None:
+        raise Exception(f"Unable to get organization settings: {str(result)}")
+
+    return result["data"]["organizationSettings"]["settings"]

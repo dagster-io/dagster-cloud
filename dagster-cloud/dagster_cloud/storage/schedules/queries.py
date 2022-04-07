@@ -1,7 +1,7 @@
 ALL_STORED_JOB_STATE_QUERY = """
-    query jobStates($repositoryOriginId: String, $jobType: InstigationType) {
+    query jobStates($repositoryOriginId: String, $repositorySelectorId: String, $jobType: InstigationType) {
         schedules {
-            jobStates(repositoryOriginId: $repositoryOriginId, jobType: $jobType)
+            jobStates(repositoryOriginId: $repositoryOriginId, repositorySelectorId: $repositorySelectorId, jobType: $jobType)
         }
     }
 """
@@ -37,33 +37,19 @@ UPDATE_JOB_TICK_MUTATION = """
     }
 """
 
-GET_JOB_TICK_STATS_QUERY = """
-    query jobTickStats($jobOriginId: String!) {
-        schedules {
-            jobTickStats(jobOriginId: $jobOriginId) {
-                ticksStarted
-                ticksSucceeded
-                ticksSkipped
-                ticksFailed
-            }
-        }
-    }
-
-"""
-
 
 GET_JOB_STATE_QUERY = """
-    query jobState($jobOriginId: String!) {
+    query jobState($jobOriginId: String!, $selectorId: String) {
         schedules {
-            jobState(jobOriginId: $jobOriginId)
+            jobState(jobOriginId: $jobOriginId, selectorId: $selectorId)
         }
     }
 """
 
 GET_JOB_TICKS_QUERY = """
-    query jobTicks($jobOriginId: String!, $before: Float, $after: Float, $limit: Int, $statuses: [InstigationTickStatus!]) {
+    query jobTicks($jobOriginId: String!, $selectorId: String, $before: Float, $after: Float, $limit: Int, $statuses: [InstigationTickStatus!]) {
         schedules {
-            jobTicks(jobOriginId: $jobOriginId, before: $before, after: $after, limit: $limit, statuses: $statuses)
+            jobTicks(jobOriginId: $jobOriginId, selectorId: $selectorId, before: $before, after: $after, limit: $limit, statuses: $statuses)
         }
     }
 """
@@ -79,9 +65,9 @@ UPDATE_JOB_STATE_MUTATION = """
 """
 
 PURGE_JOB_TICKS_MUTATION = """
-    mutation purgeJobTicksMutation($jobOriginId: String!, $tickStatus: InstigationTickStatus, $before: Float) {
+    mutation purgeJobTicksMutation($jobOriginId: String!, $selectorId: String, $tickStatus: InstigationTickStatus, $before: Float) {
         schedules {
-            purgeJobTicks(jobOriginId: $jobOriginId, tickStatus: $tickStatus, before: $before) {
+            purgeJobTicks(jobOriginId: $jobOriginId, selectorId: $selectorId, tickStatus: $tickStatus, before: $before) {
                 ok
             }
         }

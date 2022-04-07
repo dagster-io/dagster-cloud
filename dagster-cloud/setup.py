@@ -33,7 +33,6 @@ if __name__ == "__main__":
             "questionary",
             "requests",
             "typer[all]",
-            "click<8.1.0",  # can be removed when typer updates https://github.com/tiangolo/typer/issues/377
         ],
         extras_require={
             "tests": [

@@ -1,5 +1,15 @@
 # Dagster Cloud Changelog
 
+# 0.14.8
+
+### New
+
+- Dagster Cloud Slack notifications now display message previews.
+
+### Bugfixes
+
+- Fixed an issue where event logs displayed that a Slack notification had failed when they actually succeeded.
+
 # 0.14.7
 
 ### New

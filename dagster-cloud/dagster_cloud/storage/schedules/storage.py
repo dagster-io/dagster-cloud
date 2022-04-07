@@ -2,13 +2,7 @@ from typing import Iterable, List, Optional
 
 from dagster import check
 from dagster.core.definitions.run_request import InstigatorType
-from dagster.core.scheduler.instigation import (
-    InstigatorState,
-    InstigatorTick,
-    TickData,
-    TickStatsSnapshot,
-    TickStatus,
-)
+from dagster.core.scheduler.instigation import InstigatorState, InstigatorTick, TickData, TickStatus
 from dagster.core.storage.schedules.base import ScheduleStorage
 from dagster.serdes import (
     ConfigurableClass,
@@ -24,7 +18,6 @@ from .queries import (
     CREATE_JOB_TICK_MUTATION,
     GET_JOB_STATE_QUERY,
     GET_JOB_TICKS_QUERY,
-    GET_JOB_TICK_STATS_QUERY,
     PURGE_JOB_TICKS_MUTATION,
     UPDATE_JOB_STATE_MUTATION,
     UPDATE_JOB_TICK_MUTATION,
@@ -68,12 +61,16 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         raise Exception("Not allowed to wipe from user cloud")
 
     def all_instigator_state(
-        self, repository_origin_id: str = None, instigator_type: InstigatorType = None
+        self,
+        repository_origin_id: str = None,
+        repository_selector_id: str = None,
+        instigator_type: InstigatorType = None,
     ) -> Iterable[InstigatorState]:
         res = self._execute_query(
             ALL_STORED_JOB_STATE_QUERY,
             variables={
                 "repositoryOriginId": repository_origin_id,
+                "repositorySelectorId": repository_selector_id,
                 "jobType": instigator_type.value if instigator_type else None,
             },
         )
@@ -83,11 +80,12 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
             for state in res["data"]["schedules"]["jobStates"]
         ]
 
-    def get_instigator_state(self, origin_id: str) -> InstigatorState:
+    def get_instigator_state(self, origin_id: str, selector_id: str) -> InstigatorState:
         res = self._execute_query(
             GET_JOB_STATE_QUERY,
             variables={
                 "jobOriginId": origin_id,
+                "selectorId": selector_id,
             },
         )
 
@@ -117,12 +115,13 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
             },
         )
 
-    def delete_instigator_state(self, origin_id: str):
+    def delete_instigator_state(self, origin_id: str, selector_id: str):
         raise NotImplementedError("Not callable from user cloud")
 
     def get_ticks(
         self,
         origin_id: str,
+        selector_id: str,
         before: float = None,
         after: float = None,
         limit: int = None,
@@ -133,6 +132,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
             GET_JOB_TICKS_QUERY,
             variables={
                 "jobOriginId": origin_id,
+                "selectorId": selector_id,
                 "before": before,
                 "after": after,
                 "limit": limit,
@@ -169,30 +169,15 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         )
         return tick
 
-    def purge_ticks(self, origin_id: str, tick_status: TickStatus, before: float):
+    def purge_ticks(self, origin_id: str, selector_id: str, tick_status: TickStatus, before: float):
         self._execute_query(
             PURGE_JOB_TICKS_MUTATION,
             variables={
                 "jobOriginId": origin_id,
+                "selectorId": selector_id,
                 "tickStatus": tick_status.value if tick_status else None,
                 "before": before,
             },
-        )
-
-    def get_tick_stats(self, origin_id: str):
-        res = self._execute_query(
-            GET_JOB_TICK_STATS_QUERY,
-            variables={
-                "jobOriginId": origin_id,
-            },
-        )
-
-        stats = res["data"]["schedules"]["jobTickStats"]
-        return TickStatsSnapshot(
-            ticks_started=stats["ticksStarted"],
-            ticks_succeeded=stats["ticksSucceeded"],
-            ticks_skipped=stats["ticksSkipped"],
-            ticks_failed=stats["ticksFailed"],
         )
 
     def upgrade(self):
