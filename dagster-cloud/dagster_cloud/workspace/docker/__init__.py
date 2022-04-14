@@ -13,9 +13,15 @@ from dagster.utils import find_free_port, merge_dicts
 from dagster_cloud.execution.step_handler.docker_step_handler import DockerStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
+from dagster_docker.container_context import DockerContainerContext
+from dagster_docker.utils import parse_env_var
 from docker.models.containers import Container
 
-from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, DagsterCloudUserCodeLauncher
+from ..config_schema.docker import SHARED_DOCKER_CONFIG
+from ..user_code_launcher import (
+    DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+    DagsterCloudUserCodeLauncher,
+)
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
 
@@ -66,47 +72,39 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
     @classmethod
     def config_type(cls):
-        return {
-            "networks": Field(Array(str), is_required=False),
-            "env_vars": Field(
-                [str],
-                is_required=False,
-                description="The list of environment variables names to forward to the docker container",
-            ),
-            "container_kwargs": Field(
-                Permissive(),
-                is_required=False,
-                description="key-value pairs that can be passed into containers.create. See "
-                "https://docker-py.readthedocs.io/en/stable/containers.html for the full list "
-                "of available options.",
-            ),
-            "server_process_startup_timeout": Field(
-                IntSource,
-                is_required=False,
-                default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                description="Timeout when waiting for a code server to be ready after it is created",
-            ),
-        }
+        return merge_dicts(
+            SHARED_DOCKER_CONFIG,
+            {
+                "server_process_startup_timeout": Field(
+                    IntSource,
+                    is_required=False,
+                    default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+                    description="Timeout when waiting for a code server to be ready after it is created",
+                ),
+            },
+        )
 
     @staticmethod
     def from_config_value(inst_data, config_value):
         return DockerUserCodeLauncher(inst_data=inst_data, **config_value)
 
-    def _create_container(self, client, location_name, metadata, container_name, hostname, port):
+    def _create_container(
+        self, client, location_name, metadata, container_name, hostname, port, container_context
+    ):
         return client.containers.create(
             metadata.image,
             detach=True,
             hostname=hostname,
             name=container_name,
-            network=self._networks[0] if len(self._networks) else None,
+            network=container_context.networks[0] if len(container_context.networks) else None,
             environment=merge_dicts(
-                ({env_name: os.getenv(env_name) for env_name in self.env_vars}),
+                (dict([parse_env_var(env_var) for env_var in container_context.env_vars])),
                 metadata.get_grpc_server_env(port),
             ),
             labels=[GRPC_SERVER_LABEL, self._get_label_for_location(location_name)],
             command=metadata.get_grpc_server_command(),
             ports={port: port} if hostname == "localhost" else None,
-            **self._container_kwargs,
+            **container_context.container_kwargs,
         )
 
     def _get_server_handles_for_location(self, location_name: str) -> Collection[Container]:
@@ -119,6 +117,13 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         self, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
         client = docker.client.from_env()
+
+        container_context = DockerContainerContext(
+            registry=None,
+            env_vars=self.env_vars,
+            networks=self._networks,
+            container_kwargs=self._container_kwargs,
+        ).merge(DockerContainerContext.create_from_config(metadata.container_context))
 
         container_name = f"{location_name}_{str(uuid.uuid4().hex)[0:6]}"
 
@@ -138,7 +143,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
         try:
             container = self._create_container(
-                client, location_name, metadata, container_name, hostname, port
+                client, location_name, metadata, container_name, hostname, port, container_context
             )
         except docker.errors.ImageNotFound:
             last_log_time = time.time()
@@ -149,11 +154,11 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
                     last_log_time = time.time()
 
             container = self._create_container(
-                client, location_name, metadata, container_name, hostname, port
+                client, location_name, metadata, container_name, hostname, port, container_context
             )
 
-        if len(self._networks) > 1:
-            for network_name in self._networks[1:]:
+        if len(container_context.networks) > 1:
+            for network_name in container_context.networks[1:]:
                 network = client.networks.get(network_name)
                 network.connect(container)
 

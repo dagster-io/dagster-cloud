@@ -1,5 +1,27 @@
 # Dagster Cloud Changelog
 
+# 0.14.9
+
+### New
+
+- You can now set a `container_context` key in your code locations in the Workspace tab, which lets you set configuration for a specific execution environment (K8s, Docker, or ECS) for that code location. Previously, this configuration could only be set in the `dagster.yaml` file for your agent, which required you to share it across code locations, and restart your agent whenever it changed. For example, you can specify that a code location should include a secret called `my_secret` and run in a K8s namespace called `my_namespace` whenever the Kubernetes agent creates a pod for that location:
+
+```
+location_name: test-location
+image: dagster/dagster-cloud-template:latest
+code_source:
+  package_name: dagster_cloud_template
+container_context:
+  k8s:
+    namespace: my_namespace
+    env_secrets:
+      - my_secret
+```
+
+For more information, see https://docs.dagster.cloud/guides/adding-code#environment-specific-config.
+
+- [Alert policies](https://docs.dagster.cloud/guides/alerts) can now be viewed in Dagit. You can see the list of alert policies in a tab under Cloud Settings.
+
 # 0.14.8
 
 ### New

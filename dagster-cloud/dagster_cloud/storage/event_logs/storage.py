@@ -14,11 +14,14 @@ from typing import (
 )
 
 from dagster import check
+from dagster.core.assets import AssetDetails
 from dagster.core.definitions.events import AssetKey
 from dagster.core.events import DagsterEvent, DagsterEventType
 from dagster.core.events.log import EventLogEntry
 from dagster.core.execution.stats import RunStepKeyStatsSnapshot, StepEventStatus
 from dagster.core.storage.event_log.base import (
+    AssetEntry,
+    AssetRecord,
     EventLogRecord,
     EventLogStorage,
     EventRecordsFilter,
@@ -42,6 +45,7 @@ from .queries import (
     ENABLE_SECONDARY_INDEX_MUTATION,
     END_WATCH_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
+    GET_ASSET_RECORDS_QUERY,
     GET_ASSET_RUN_IDS_QUERY,
     GET_EVENT_RECORDS_QUERY,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
@@ -169,6 +173,34 @@ def _event_record_from_graphql(graphene_event_record: Dict) -> EventLogRecord:
     return EventLogRecord(
         storage_id=check.int_elem(graphene_event_record, "storageId"),
         event_log_entry=_event_log_entry_from_graphql(graphene_event_record["eventLogEntry"]),
+    )
+
+
+def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
+    check.dict_param(graphene_asset_entry, "graphene_asset_entry")
+
+    return AssetEntry(
+        asset_key=AssetKey(graphene_asset_entry["assetKey"]["path"]),
+        last_materialization=_event_log_entry_from_graphql(
+            graphene_asset_entry["lastMaterialization"]
+        )
+        if graphene_asset_entry["lastMaterialization"]
+        else None,
+        last_run_id=graphene_asset_entry["lastRunId"],
+        asset_details=AssetDetails(
+            last_wipe_timestamp=graphene_asset_entry["assetDetails"]["lastWipeTimestamp"]
+        )
+        if graphene_asset_entry["assetDetails"]
+        else None,
+    )
+
+
+def _asset_record_from_graphql(graphene_asset_record: Dict) -> AssetRecord:
+    check.dict_param(graphene_asset_record, "graphene_asset_record")
+
+    return AssetRecord(
+        storage_id=graphene_asset_record["storageId"],
+        asset_entry=_asset_entry_from_graphql(graphene_asset_record["assetEntry"]),
     )
 
 
@@ -409,6 +441,23 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return [
             _event_record_from_graphql(result)
             for result in res["data"]["eventLogs"]["getEventRecords"]
+        ]
+
+    def get_asset_records(
+        self, asset_keys: Optional[Sequence[AssetKey]] = None
+    ) -> Iterable[AssetRecord]:
+        res = self._execute_query(
+            GET_ASSET_RECORDS_QUERY,
+            variables={
+                "assetKeys": [asset_key.to_string() for asset_key in asset_keys]
+                if asset_keys
+                else []
+            },
+        )
+
+        return [
+            _asset_record_from_graphql(result)
+            for result in res["data"]["eventLogs"]["getAssetRecords"]
         ]
 
     def has_asset_key(self, asset_key: AssetKey):

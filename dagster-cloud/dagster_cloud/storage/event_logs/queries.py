@@ -72,6 +72,36 @@ EVENT_RECORD_FRAGMENT = (
     """
 )
 
+ASSET_ENTRY_FRAGMENT = (
+    EVENT_LOG_ENTRY_FRAGMENT
+    + """
+    fragment AssetEntryFragment on AssetEntry {
+        assetKey {
+            path
+        }
+        lastMaterialization {
+            ...EventLogEntryFragment
+        }
+        lastRunId
+        assetDetails {
+            lastWipeTimestamp
+        }
+    }
+    """
+)
+
+ASSET_RECORD_FRAGMENT = (
+    ASSET_ENTRY_FRAGMENT
+    + """
+    fragment AssetRecordFragment on AssetRecord {
+        storageId
+        assetEntry {
+            ...AssetEntryFragment
+        }
+    }
+    """
+)
+
 GET_LOGS_FOR_RUN_QUERY = (
     EVENT_LOG_ENTRY_FRAGMENT
     + """
@@ -169,6 +199,19 @@ GET_LATEST_MATERIALIZATION_EVENTS_QUERY = (
         eventLogs {
             getLatestMaterializationEvents(assetKeys: $assetKeys) {
                 ...EventLogEntryFragment
+            }
+        }
+    }
+    """
+)
+
+GET_ASSET_RECORDS_QUERY = (
+    ASSET_RECORD_FRAGMENT
+    + """
+    query getAssetRecords($assetKeys: [String!]) {
+        eventLogs {
+            getAssetRecords(assetKeys: $assetKeys) {
+                ...AssetRecordFragment
             }
         }
     }

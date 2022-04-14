@@ -4,13 +4,14 @@ from typing import Collection, Dict, Optional
 
 import kubernetes
 import kubernetes.client as client
-from dagster import Array, BoolSource, Field, IntSource, Noneable, Permissive, StringSource, check
-from dagster.config.field_utils import Shape
+from dagster import Field, IntSource, Noneable, StringSource, check
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
+from dagster.utils import merge_dicts
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_k8s import K8sRunLauncher
+from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
 
@@ -29,6 +30,8 @@ from .utils import (
 
 DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT = 300
 DEFAULT_IMAGE_PULL_GRACE_PERIOD = 30
+
+from ..config_schema.kubernetes import SHARED_K8S_CONFIG
 
 
 class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
@@ -56,6 +59,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         self._dagster_home = check.str_param(dagster_home, "dagster_home")
         self._instance_config_map = check.str_param(instance_config_map, "instance_config_map")
         self._namespace = namespace
+
         self._pull_policy = pull_policy
         self._env_config_maps = check.opt_list_param(
             env_config_maps, "env_config_maps", of_type=str
@@ -127,92 +131,42 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
 
     @classmethod
     def config_type(cls):
-        return {
-            "dagster_home": Field(StringSource, is_required=True),
-            "instance_config_map": Field(StringSource, is_required=True),
-            "namespace": Field(StringSource, is_required=False, default_value="default"),
-            "kubeconfig_file": Field(StringSource, is_required=False),
-            "pull_policy": Field(StringSource, is_required=False, default_value="Always"),
-            "env_config_maps": Field(
-                Noneable(Array(StringSource)),
-                is_required=False,
-                description="A list of custom ConfigMapEnvSource names from which to draw "
-                "environment variables (using ``envFrom``) for the Job. Default: ``[]``. See:"
-                "https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/#define-an-environment-variable-for-a-container",
-            ),
-            "env_secrets": Field(
-                Noneable(Array(StringSource)),
-                is_required=False,
-                description="A list of custom Secret names from which to draw environment "
-                "variables (using ``envFrom``) for the Job. Default: ``[]``. See:"
-                "https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#configure-all-key-value-pairs-in-a-secret-as-container-environment-variables",
-            ),
-            "service_account_name": Field(
-                Noneable(StringSource),
-                is_required=True,
-                description="The name of the Kubernetes service account under which to run.",
-            ),
-            "volume_mounts": Field(
-                Array(
-                    Shape(
-                        {
-                            "name": StringSource,
-                            "mountPath": StringSource,
-                            "mountPropagation": Field(StringSource, is_required=False),
-                            "readOnly": Field(BoolSource, is_required=False),
-                            "subPath": Field(StringSource, is_required=False),
-                            "subPathExpr": Field(StringSource, is_required=False),
-                        }
-                    )
+
+        container_context_config = SHARED_K8S_CONFIG.copy()
+        del container_context_config["image_pull_policy"]  # uses 'pull_policy'
+        del container_context_config["namespace"]  # default is different
+
+        return merge_dicts(
+            container_context_config,
+            {
+                "dagster_home": Field(StringSource, is_required=True),
+                "instance_config_map": Field(StringSource, is_required=True),
+                "kubeconfig_file": Field(StringSource, is_required=False),
+                "deployment_startup_timeout": Field(
+                    IntSource,
+                    is_required=False,
+                    default_value=DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT,
+                    description="Timeout when creating a new Kubernetes deployment for a code server",
                 ),
-                is_required=False,
-                default_value=[],
-                description="A list of volume mounts to include in the job's container. Default: ``[]``. See: "
-                "https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#volumemount-v1-core",
-            ),
-            "volumes": Field(
-                Array(
-                    Permissive(
-                        {
-                            "name": str,
-                        }
-                    )
+                "server_process_startup_timeout": Field(
+                    IntSource,
+                    is_required=False,
+                    default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+                    description="Timeout when waiting for a code server to be ready after it is created",
                 ),
-                is_required=False,
-                default_value=[],
-                description="A list of volumes to include in the Job's Pod. Default: ``[]``. For the many "
-                "possible volume source types that can be included, see: "
-                "https://v1-18.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#volume-v1-core",
-            ),
-            "image_pull_secrets": Field(
-                Noneable(Array(Shape({"name": StringSource}))),
-                is_required=False,
-                description="Specifies that Kubernetes should get the credentials from "
-                "the Secrets named in this list.",
-            ),
-            "labels": Field(
-                dict,
-                is_required=False,
-                description="Labels to apply to the pods created by the agent.",
-            ),
-            "deployment_startup_timeout": Field(
-                IntSource,
-                is_required=False,
-                default_value=DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT,
-                description="Timeout when creating a new Kubernetes deployment for a code server",
-            ),
-            "server_process_startup_timeout": Field(
-                IntSource,
-                is_required=False,
-                default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                description="Timeout when waiting for a code server to be ready after it is created",
-            ),
-            "image_pull_grace_period": Field(
-                IntSource,
-                is_required=False,
-                default_value=DEFAULT_IMAGE_PULL_GRACE_PERIOD,
-            ),
-        }
+                "image_pull_grace_period": Field(
+                    IntSource,
+                    is_required=False,
+                    default_value=DEFAULT_IMAGE_PULL_GRACE_PERIOD,
+                ),
+                "pull_policy": Field(
+                    Noneable(StringSource),
+                    is_required=False,
+                    description="Image pull policy to set on launched Pods.",
+                ),
+                "namespace": Field(StringSource, is_required=False, default_value="default"),
+            },
+        )
 
     @staticmethod
     def from_config_value(inst_data, config_value):
@@ -245,22 +199,35 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
     ) -> GrpcServerEndpoint:
         resource_name = unique_resource_name(location_name)
 
+        container_context = K8sContainerContext(
+            image_pull_policy=self._pull_policy,
+            image_pull_secrets=self._image_pull_secrets,
+            service_account_name=self._service_account_name,
+            env_config_maps=self._env_config_maps,
+            env_secrets=self._env_secrets,
+            env_vars=[],
+            volume_mounts=self._volume_mounts,
+            volumes=self._volumes,
+            labels=self._labels,
+            namespace=self._namespace,
+        ).merge(K8sContainerContext.create_from_config(metadata.container_context))
+
         try:
             with self._get_api_instance() as api_instance:
                 api_response = api_instance.create_namespaced_deployment(
-                    self._namespace,
+                    container_context.namespace,
                     construct_repo_location_deployment(
                         location_name,
                         resource_name,
                         metadata,
-                        self._pull_policy,
-                        self._env_config_maps,
-                        self._env_secrets,
-                        self._service_account_name,
-                        self._image_pull_secrets,
-                        self._volume_mounts,
-                        self._volumes,
-                        self._labels,
+                        container_context.image_pull_policy,
+                        container_context.env_config_maps,
+                        container_context.env_secrets,
+                        container_context.service_account_name,
+                        container_context.image_pull_secrets,
+                        container_context.volume_mounts,
+                        container_context.volumes,
+                        container_context.labels,
                     ),
                 )
             self._logger.info("Created deployment: {}".format(api_response.metadata.name))

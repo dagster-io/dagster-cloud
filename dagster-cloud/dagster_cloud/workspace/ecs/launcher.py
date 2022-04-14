@@ -5,9 +5,9 @@ from dagster import Array, Field, IntSource, Noneable, ScalarUnion, StringSource
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.launcher import RunLauncher
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
-from dagster.utils import merge_dicts
 from dagster_aws.ecs import EcsRunLauncher
-from dagster_aws.secretsmanager import get_secrets_from_arns, get_tagged_secrets
+from dagster_aws.ecs.container_context import EcsContainerContext
+from dagster_aws.secretsmanager import get_secrets_from_arns
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
 from ..user_code_launcher import (
@@ -48,7 +48,16 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self.task_role_arn = task_role_arn
         self.log_group = log_group
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
-        self.secrets = secrets or []
+        self.secrets = check.opt_list_param(secrets, "secrets")
+
+        if all(isinstance(secret, str) for secret in self.secrets):
+            self.secrets = [
+                {"name": name, "valueFrom": value_from}
+                for name, value_from in get_secrets_from_arns(
+                    self.secrets_manager, self.secrets
+                ).items()
+            ]
+
         self.secrets_tag = secrets_tag
 
         self._server_process_startup_timeout = check.opt_int_param(
@@ -124,10 +133,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     ) -> GrpcServerEndpoint:
         port = 4000
 
-        if all(isinstance(secret, str) for secret in self.secrets):
-            secrets = get_secrets_from_arns(self.secrets_manager, self.secrets)
-        else:
-            secrets = {secret["name"]: secret["valueFrom"] for secret in self.secrets}
+        container_context = EcsContainerContext(
+            secrets=self.secrets, secrets_tags=[self.secrets_tag] if self.secrets_tag else []
+        ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         service = self.client.create_service(
             name=location_name,
@@ -136,14 +144,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             env=metadata.get_grpc_server_env(port),
             tags={"dagster/location_name": location_name},
             task_role_arn=self.task_role_arn,
-            secrets=merge_dicts(
-                (
-                    get_tagged_secrets(self.secrets_manager, self.secrets_tag)
-                    if self.secrets_tag
-                    else {}
-                ),
-                secrets,
-            ),
+            secrets=container_context.get_secrets_dict(self.secrets_manager),
         )
         self._logger.info(
             "Created a new service at hostname {} for location {}, waiting for it to be ready...".format(

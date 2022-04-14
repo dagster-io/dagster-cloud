@@ -1,4 +1,4 @@
-from typing import Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional
 
 from dagster import check
 from dagster.serdes import whitelist_for_serdes
@@ -33,6 +33,7 @@ class CodeDeploymentMetadata(
             ("executable_path", Optional[str]),
             ("attribute", Optional[str]),
             ("git_metadata", Optional[GitMetadata]),
+            ("container_context", Optional[Dict[str, Any]]),
         ],
     )
 ):
@@ -46,6 +47,7 @@ class CodeDeploymentMetadata(
         executable_path=None,
         attribute=None,
         git_metadata=None,
+        container_context=None,
     ):
         check.invariant(
             len([val for val in [python_file, package_name, module_name] if val]) == 1,
@@ -62,6 +64,7 @@ class CodeDeploymentMetadata(
             check.opt_str_param(executable_path, "executable_path"),
             check.opt_str_param(attribute, "attribute"),
             check.opt_inst_param(git_metadata, "git_metadata", GitMetadata),
+            check.opt_dict_param(container_context, "container_context", key_type=str),
         )
 
     def get_grpc_server_command(self) -> List[str]:

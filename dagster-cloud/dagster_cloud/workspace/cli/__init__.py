@@ -10,7 +10,8 @@ from typing import Any, Dict, List
 import requests
 import yaml
 from dagster import check
-from dagster.core.host_representation import ManagedGrpcPythonEnvRepositoryLocationOrigin
+from dagster.core.host_representation import InProcessRepositoryLocation
+from dagster.core.host_representation.origin import InProcessRepositoryLocationOrigin
 from dagster.core.test_utils import remove_none_recursively
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.serdes import serialize_dagster_namedtuple
@@ -506,12 +507,9 @@ def get_location_or_load_error(location_data: gql.CliInputCodeLocation):
         working_directory=location_data.working_directory,
         attribute=location_data.attribute,
     )
-    origin = ManagedGrpcPythonEnvRepositoryLocationOrigin(
-        loadable_target_origin, location_data.name
-    )
-
+    origin = InProcessRepositoryLocationOrigin(loadable_target_origin)
     try:
-        with origin.create_single_location() as location:
+        with InProcessRepositoryLocation(origin) as location:
             yield (location, None)
     except Exception:
         load_error = serializable_error_info_from_exc_info(sys.exc_info())

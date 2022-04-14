@@ -41,6 +41,7 @@ if __name__ == "__main__":
                 "httpretty",
                 "isort",
                 "kubernetes",
+                "moto",
                 "mypy==0.812",
                 "pylint",
                 "pytest",

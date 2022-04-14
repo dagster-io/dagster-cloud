@@ -248,9 +248,14 @@ class DagsterCloudRepositoryData(
 
 @whitelist_for_serdes
 class LoadRepositoriesResponse(
-    namedtuple("_LoadRepositoriesResponse", "repository_datas container_image executable_path")
+    namedtuple(
+        "_LoadRepositoriesResponse",
+        "repository_datas container_image executable_path code_deployment_metadata",
+    )
 ):
-    def __new__(cls, repository_datas, container_image, executable_path):
+    def __new__(
+        cls, repository_datas, container_image, executable_path, code_deployment_metadata=None
+    ):
         return super(cls, LoadRepositoriesResponse).__new__(
             cls,
             check.list_param(
@@ -260,6 +265,9 @@ class LoadRepositoriesResponse(
             ),
             check.opt_str_param(container_image, "container_image"),
             check.opt_str_param(executable_path, "executable_path"),
+            check.opt_inst_param(
+                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+            ),
         )
 
 

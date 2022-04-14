@@ -1,10 +1,14 @@
 from typing import Any, Dict, List, Optional
 
-from dagster import check
+from dagster import Noneable, check
 from dagster.config import Field, Map, Selector, Shape
 from dagster.config.source import StringSource
 from dagster.config.validate import validate_config
 from dagster.utils import frozendict
+
+from .docker import SHARED_DOCKER_CONFIG
+from .ecs import SHARED_ECS_CONFIG
+from .kubernetes import SHARED_K8S_CONFIG
 
 
 def validate_workspace_location(workspace_location) -> Optional[List[str]]:
@@ -84,7 +88,7 @@ CONFIG_SCHEMA_FIELDS = {
     # Only used by the new workspace.yaml format, legacy format has the name as a key
     "location_name": Field(config=str, is_required=True, description="Location name"),
     "image": Field(
-        config=str,
+        config=Noneable(str),
         is_required=False,
         description="Docker image, for use with containerized agents.",
     ),
@@ -139,7 +143,19 @@ CONFIG_SCHEMA_FIELDS = {
         ),
         is_required=False,
     ),
+    "container_context": Field(
+        Shape(
+            fields={
+                "k8s": Field(Shape(SHARED_K8S_CONFIG), is_required=False),
+                "docker": Field(Shape(SHARED_DOCKER_CONFIG), is_required=False),
+                "ecs": Field(Shape(SHARED_ECS_CONFIG), is_required=False),
+            },
+        ),
+        description="Metadata for specific compute environments",
+        is_required=False,
+    ),
 }
+
 
 # The legacy format is structured as
 # locations:
