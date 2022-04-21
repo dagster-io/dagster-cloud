@@ -39,7 +39,7 @@ def _config_to_alert_policy_inputs(alert_policies_config) -> Sequence[dict]:
         alert_policy_input = {
             "name": alert_policy_config["name"],
             "description": alert_policy_config["description"],
-            "tags": alert_policy_config["tags"],
+            "tags": alert_policy_config.get("tags"),
             "eventTypes": alert_policy_config["event_types"],
             "enabled": alert_policy_config.get("enabled", True),
             **notification_service,

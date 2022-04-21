@@ -1,15 +1,27 @@
 from dagster import check
 from dagster.config import Enum, EnumValue, Field, Selector, Shape
 from dagster.config.config_type import Array
-from dagster.config.validate import process_config
+from dagster.config.validate import validate_config
+
+
+def validate_alert_policy_config(alert_policy_config):
+    validation = validate_config(ALERT_POLICY_SCHEMA, alert_policy_config)
+    return [error.message for error in validation.errors]
 
 
 def process_alert_policies_config(alert_policies_config):
-    validation = process_config(ALERT_POLICIES_SCHEMA, alert_policies_config)
+    validation = validate_config(ALERT_POLICIES_SCHEMA, alert_policies_config)
 
     check.invariant(
         validation.success,
         ", ".join([error.message for error in validation.errors]),
+    )
+    check.invariant(
+        alert_policies_config.get("tags") != [],
+        (
+            "When applying an alert policy to code artifacts with tags, "
+            "a non-empty list must be used."
+        ),
     )
 
 
@@ -43,13 +55,20 @@ ALERT_POLICY_SCHEMA = Shape(
                     description="A tag key-value pair.",
                 )
             ),
-            description="The alert policy will apply to code artifacts that have all the specified tags.",
+            description=(
+                "The alert policy will apply to code artifacts that have all the specified tags. "
+                "When tags are explicitly omitted, this alert policy will apply to all code artifacts."
+            ),
+            is_required=False,
         ),
         "event_types": Field(
             config=Array(
                 Enum(
                     name="AlertPolicyEventType",
-                    enum_values=[EnumValue("JOB_FAILURE"), EnumValue("JOB_SUCCESS")],
+                    enum_values=[
+                        EnumValue("JOB_FAILURE", description="Alert on job failure."),
+                        EnumValue("JOB_SUCCESS", description="Alert on job success."),
+                    ],
                 )
             ),
             description="The selected system event types that will trigger the alert policy.",

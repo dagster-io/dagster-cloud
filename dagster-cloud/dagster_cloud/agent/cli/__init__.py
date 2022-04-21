@@ -88,7 +88,7 @@ def run_local_agent_in_temp_environment(
         config_entry = ""
         if user_code_launcher_config:
             try:
-                unindented_config_entry = yaml.dump(
+                unindented_config_entry: str = yaml.dump(
                     {"config": json.loads(user_code_launcher_config)}
                 )
                 config_entry = unindented_config_entry.replace("\n", "\n  ")

@@ -6,6 +6,7 @@ import zlib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List
+from dagster.utils import frozendict
 
 import requests
 import yaml
@@ -24,10 +25,6 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadWorkspaceEntry,
 )
 from dagster_cloud.storage.client import GqlShimClient
-from dagster_cloud.workspace.config_schema import (
-    process_workspace_config,
-    validate_workspace_location,
-)
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from typer import Argument, Option, Typer
 
@@ -223,9 +220,6 @@ def add_command(
     """Add or update the image for a repository location in the workspace."""
     client = gql.graphql_client_from_url(url, api_token)
     location_document = _get_location_document(location, kwargs)
-    errors = validate_workspace_location(location_document)
-    if errors:
-        raise ui.error("Error in location config:\n" + "\n".join(errors))
     _add_or_update_location(client, location_document, agent_timeout)
 
 
@@ -252,9 +246,6 @@ def update_command(
     """Update the image for a repository location in the workspace."""
     client = gql.graphql_client_from_url(url, api_token)
     location_document = _get_location_document(location, kwargs)
-    errors = validate_workspace_location(location_document)
-    if errors:
-        raise ui.error("Error in location config:\n" + "\n".join(errors))
     _add_or_update_location(client, location_document, agent_timeout)
 
 
@@ -370,6 +361,18 @@ def execute_list_command(client):
         ui.print("\t".join(location_desc))
 
 
+@app.command(name="pull")
+@dagster_cloud_options(allow_empty=True, requires_url=True)
+def pull_command(
+    url: str,
+    api_token: str,
+):
+    """Retrieve code location definitions as a workspace.yaml file."""
+    client = gql.graphql_client_from_url(url, api_token)
+    document = gql.fetch_locations_as_document(client)
+    ui.print_yaml(document or {})
+
+
 @app.command(name="sync", short_help="Sync workspace with a workspace.yaml file.")
 @dagster_cloud_options(allow_empty=True, requires_url=True)
 def sync_command(
@@ -384,15 +387,45 @@ def sync_command(
         help="Path to workspace file.",
     ),
 ):
-    """ "Sync the workspace with the contents of a workspace.yaml file."""
+    """Sync the workspace with the contents of a workspace.yaml file."""
     client = gql.graphql_client_from_url(url, api_token)
     execute_sync_command(client, workspace, agent_timeout)
+
+
+def format_workspace_config(workspace_config) -> Dict[str, Any]:
+    """Ensures the input workspace config is in the modern format, migrating an input
+    in the old format if need be."""
+    check.dict_param(workspace_config, "workspace_config")
+
+    if isinstance(workspace_config.get("locations"), (dict, frozendict)):
+        # Convert legacy formatted locations to modern format
+        updated_locations = []
+        for name, location in workspace_config["locations"].items():
+            new_location = {
+                k: v
+                for k, v in location.items()
+                if k not in ("python_file", "package_name", "module_name")
+            }
+            new_location["code_source"] = {}
+            if "python_file" in location:
+                new_location["code_source"]["python_file"] = location["python_file"]
+            if "package_name" in location:
+                new_location["code_source"]["package_name"] = location["package_name"]
+            if "module_name" in location:
+                new_location["code_source"]["module_name"] = location["module_name"]
+
+            new_location["location_name"] = name
+            updated_locations.append(new_location)
+        return {"locations": updated_locations}
+    else:
+        check.is_list(workspace_config.get("locations"))
+        return workspace_config
 
 
 def execute_sync_command(client, workspace, agent_timeout):
     with open(str(workspace), "r") as f:
         config = yaml.load(f.read(), Loader=yaml.SafeLoader)
-        processed_config = process_workspace_config(config)
+        processed_config = format_workspace_config(config)
 
     try:
         locations = gql.reconcile_code_locations(client, processed_config)

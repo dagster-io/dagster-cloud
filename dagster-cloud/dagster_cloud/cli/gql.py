@@ -172,6 +172,9 @@ mutation ($document: GenericScalar!) {
             message
             stack
         }
+        ... on InvalidLocationError {
+            errors
+        }
     }
 }
 """
@@ -182,7 +185,9 @@ def add_or_update_code_location(client: GqlShimClient, location_document: Dict[s
         ADD_OR_UPDATE_LOCATION_FROM_DOCUMENT_MUTATION,
         variable_values={"document": location_document},
     )["data"]["addOrUpdateLocationFromDocument"]
-    if result["__typename"] != "WorkspaceEntry":
+    if result["__typename"] == "InvalidLocationError":
+        raise Exception("Error in location config:\n" + "\n".join(result["errors"]))
+    elif result["__typename"] != "WorkspaceEntry":
         raise Exception("Unable to add/update code location: ", result["message"])
 
 
@@ -224,6 +229,9 @@ mutation ($document: GenericScalar!) {
             message
             stack
         }
+        ... on InvalidLocationError {
+            errors
+        }
     }
 }
 """
@@ -247,8 +255,26 @@ def reconcile_code_locations(
                 for location in result["data"]["reconcileLocationsFromDocument"]["locations"]
             ]
         )
+    elif result["data"]["reconcileLocationsFromDocument"] == "InvalidLocationError":
+        raise Exception("Error in workspace config:\n" + "\n".join(result["errors"]))
     else:
         raise Exception(f"Unable to sync locations: {str(result)}")
+
+
+GET_LOCATIONS_AS_DOCUMENT_QUERY = """
+query LocationsAsDocument {
+    locationsAsDocument {
+        __typename
+        document
+    }
+}
+"""
+
+
+def fetch_locations_as_document(client: GqlShimClient) -> Dict[str, Any]:
+    result = client.execute(GET_LOCATIONS_AS_DOCUMENT_QUERY)
+
+    return result["data"]["locationsAsDocument"]["document"]
 
 
 SET_DEPLOYMENT_SETTINGS_MUTATION = """
@@ -302,6 +328,7 @@ ALERT_POLICIES_QUERY = """
     query AlertPolicies {
         alertPolicies {
             name
+            description
             tags {
                 key
                 value

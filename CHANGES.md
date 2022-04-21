@@ -1,5 +1,17 @@
 # Dagster Cloud Changelog
 
+# 0.14.10
+
+### New
+
+- Configuring tags for an alert policy is now optional. When omitted, the alert policy will apply to all runs in the deployment that have matching events.
+- Added the ability to fetch workspace configuration using the `dagster-cloud` CLI using `dagster-cloud workspace pull`.
+
+### Bugfixes
+
+- [dagit] Fixed an issue where if you used the same repo name/job name in two different deployments their launchpad configs would be shared. Now they’re separate.
+- [dagit] Fixed an issue where attempting to add a code location with a name that already exists would result in an error. Validation now occurs to prevent the user from doing this.
+
 # 0.14.9
 
 ### New
