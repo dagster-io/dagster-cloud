@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 0.14.12
+
+### Bugfixes
+
+- Fixed an issue where the Launchpad in Dagit sometimes incorrectly launched in an empty state.
+
 # 0.14.11
 
 ### Bugfixes
