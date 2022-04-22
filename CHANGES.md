@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 0.14.11
+
+### Bugfixes
+
+- Fixed an issue where Dagit sometimes showed a generic "Internal Server Error" message when launching a run, instead of a more detailed error message.
+
 # 0.14.10
 
 ### New
