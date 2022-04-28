@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Sequence
 
 import yaml
 from typer import Option, Typer
@@ -11,43 +10,6 @@ from .config_schema import process_alert_policies_config
 DEFAULT_ALERT_POLICIES_YAML_FILENAME = "alert_policies.yaml"
 
 app = Typer(help="Interact with your alert policies.")
-
-
-def _config_to_alert_policy_inputs(alert_policies_config) -> Sequence[dict]:
-    alert_policy_inputs = []
-    for alert_policy_config in alert_policies_config["alert_policies"]:
-        if alert_policy_config["notification_service"].get("email"):
-            notification_service = {
-                "email": {
-                    "emailAddresses": alert_policy_config["notification_service"]["email"][
-                        "email_addresses"
-                    ],
-                }
-            }
-        elif alert_policy_config["notification_service"].get("slack"):
-            notification_service = {
-                "slack": {
-                    "slackWorkspaceName": alert_policy_config["notification_service"]["slack"][
-                        "slack_workspace_name"
-                    ],
-                    "slackChannelName": alert_policy_config["notification_service"]["slack"][
-                        "slack_channel_name"
-                    ],
-                },
-            }
-
-        alert_policy_input = {
-            "name": alert_policy_config["name"],
-            "description": alert_policy_config["description"],
-            "tags": alert_policy_config.get("tags"),
-            "eventTypes": alert_policy_config["event_types"],
-            "enabled": alert_policy_config.get("enabled", True),
-            **notification_service,
-        }
-
-        alert_policy_inputs.append(alert_policy_input)
-
-    return alert_policy_inputs
 
 
 @app.command(name="list")
@@ -80,14 +42,13 @@ def sync_command(
     """Sync your YAML configured alert policies to Dagster Cloud."""
     client = gql.graphql_client_from_url(url, api_token)
 
-    with open(str(alert_policies_file), "r") as f:
+    with open(str(alert_policies_file), "r", encoding="utf8") as f:
         config = yaml.load(f.read(), Loader=yaml.SafeLoader)
 
     try:
         process_alert_policies_config(config)
 
-        alert_policy_inputs = _config_to_alert_policy_inputs(config)
-        alert_policies = gql.reconcile_alert_policies(client, alert_policy_inputs)
+        alert_policies = gql.reconcile_alert_policies(client, config)
 
         ui.print(f"Synced alert policies: {', '.join(alert_policies)}")
     except Exception as e:

@@ -78,4 +78,15 @@ SHARED_K8S_CONFIG = {
         description="Labels to apply to all created pods. See: "
         "https://kubernetes.io/docs/concepts/overview/working-with-objects/labels",
     ),
+    "resources": Field(
+        Noneable(
+            {
+                "limits": Field(dict, is_required=False),
+                "requests": Field(dict, is_required=False),
+            }
+        ),
+        is_required=False,
+        description="Compute resource requirements for the container. See: "
+        "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+    ),
 }

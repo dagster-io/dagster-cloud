@@ -9,6 +9,11 @@ def validate_alert_policy_config(alert_policy_config):
     return [error.message for error in validation.errors]
 
 
+def validate_alert_policies_config(alert_policies_config):
+    validation = validate_config(ALERT_POLICIES_SCHEMA, alert_policies_config)
+    return [error.message for error in validation.errors]
+
+
 def process_alert_policies_config(alert_policies_config):
     validation = validate_config(ALERT_POLICIES_SCHEMA, alert_policies_config)
 

@@ -84,6 +84,7 @@ class DagsterCloudUserCodeLauncher(
 
         self._is_workspace_ready_lock = threading.Lock()
         self._is_workspace_ready: bool = False
+        super().__init__()
 
     def start(self, run_reconcile_thread=True):
         check.invariant(

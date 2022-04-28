@@ -38,7 +38,7 @@ def set_from_filecommand(
     if not url:
         url = gql.url_from_config(organization=organization)
 
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf8") as f:
         settings = {"settings": yaml.safe_load(f) or {}}
     client = gql.graphql_client_from_url(url, api_token)
     gql.set_organization_settings(client, settings)

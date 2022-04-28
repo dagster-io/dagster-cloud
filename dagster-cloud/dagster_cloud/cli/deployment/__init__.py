@@ -24,7 +24,7 @@ def set_from_filecommand(
     """
     Set the Dagster Cloud deployment settings from a YAML file.
     """
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf8") as f:
         settings = {"settings": yaml.safe_load(f) or {}}
     client = gql.graphql_client_from_url(url, api_token)
     gql.set_deployment_settings(client, settings)

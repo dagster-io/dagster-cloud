@@ -62,7 +62,7 @@ def write_config(config: DagsterCloudCliConfig):
     """
     config_path = get_config_path()
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf8") as f:
         config_dict = {k: v for k, v in config._asdict().items() if v is not None}
         f.write(yaml.dump(config_dict))
 
@@ -75,7 +75,7 @@ def read_config() -> DagsterCloudCliConfig:
     if not os.path.isfile(config_path):
         return DagsterCloudCliConfig()
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf8") as f:
         raw_in = yaml.load(f.read(), Loader=yaml.SafeLoader)
         return DagsterCloudCliConfig(**raw_in)
 

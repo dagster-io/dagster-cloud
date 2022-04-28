@@ -6,7 +6,6 @@ import zlib
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List
-from dagster.utils import frozendict
 
 import requests
 import yaml
@@ -17,8 +16,9 @@ from dagster.core.test_utils import remove_none_recursively
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.serdes import serialize_dagster_namedtuple
 from dagster.serdes.serdes import deserialize_json_to_dagster_namedtuple
-from dagster.utils import DEFAULT_WORKSPACE_YAML_FILENAME
+from dagster.utils import DEFAULT_WORKSPACE_YAML_FILENAME, frozendict
 from dagster.utils.error import serializable_error_info_from_exc_info
+from dagster.utils.merger import deep_merge_dicts
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,
@@ -154,44 +154,31 @@ def _get_location_document(name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     elif location_file and name:
         raise ui.error("Cannot specify locaiton name both in file and inline.")
 
+    python_file = kwargs.get("python_file")
+    python_file_str = str(python_file) if python_file else None
+
+    location_doc_from_file = {}
+
     if location_file:
-        if any(
-            kwargs.get(arg)
-            for arg in (
-                "module_name",
-                "package_name",
-                "working_directory",
-                "image",
-                "executable_path",
-                "attribute",
-                "commit_hash",
-                "git_url",
-            )
-        ):
-            raise ui.error("Cannot specify location config both from file and inline.")
+        with open(location_file, encoding="utf8") as f:
+            location_doc_from_file = yaml.safe_load(f.read())
 
-        with open(location_file) as f:
-            return yaml.safe_load(f.read())
-
-    else:
-        python_file = kwargs.get("python_file")
-        python_file_str = str(python_file) if python_file else None
-
-        return remove_none_recursively(
-            {
-                "location_name": name,
-                "code_source": {
-                    "python_file": python_file_str,
-                    "module_name": kwargs.get("module_name"),
-                    "package_name": kwargs.get("package_name"),
-                },
-                "working_directory": kwargs.get("working_directory"),
-                "image": kwargs.get("image"),
-                "executable_path": kwargs.get("executable_path"),
-                "attribute": kwargs.get("attribute"),
-                "git": {"commit_hash": kwargs.get("commit_hash"), "url": kwargs.get("git_url")},
-            }
-        )
+    location_doc_from_kwargs = remove_none_recursively(
+        {
+            "location_name": name,
+            "code_source": {
+                "python_file": python_file_str,
+                "module_name": kwargs.get("module_name"),
+                "package_name": kwargs.get("package_name"),
+            },
+            "working_directory": kwargs.get("working_directory"),
+            "image": kwargs.get("image"),
+            "executable_path": kwargs.get("executable_path"),
+            "attribute": kwargs.get("attribute"),
+            "git": {"commit_hash": kwargs.get("commit_hash"), "url": kwargs.get("git_url")},
+        }
+    )
+    return deep_merge_dicts(location_doc_from_file, location_doc_from_kwargs)
 
 
 def _add_or_update_location(
@@ -252,7 +239,7 @@ def update_command(
 def wait_for_load(client, locations, timeout=DEFAULT_AGENT_TIMEOUT):
     try:
         agents = gql.fetch_agent_status(client)
-    except Exception as e:
+    except Exception:
         raise ui.error("Unable to query agent status")
     if len(list(filter(lambda a: a["status"] == "RUNNING", agents))) == 0:
         ui.warn(
@@ -423,7 +410,7 @@ def format_workspace_config(workspace_config) -> Dict[str, Any]:
 
 
 def execute_sync_command(client, workspace, agent_timeout):
-    with open(str(workspace), "r") as f:
+    with open(str(workspace), "r", encoding="utf8") as f:
         config = yaml.load(f.read(), Loader=yaml.SafeLoader)
         processed_config = format_workspace_config(config)
 
@@ -537,7 +524,7 @@ def get_location_or_load_error(location_data: gql.CliInputCodeLocation):
         python_file=location_data.python_file,
         package_name=location_data.package_name,
         module_name=location_data.module_name,
-        working_directory=location_data.working_directory,
+        working_directory=location_data.working_directory or os.getcwd(),
         attribute=location_data.attribute,
     )
     origin = InProcessRepositoryLocationOrigin(loadable_target_origin)

@@ -1,5 +1,48 @@
 # Dagster Cloud Changelog
 
+#  0.14.13
+
+### New
+
+- When using the Kubernetes agent, you can now supply a `resources` key under `workspace` that will apply resource requirements to any pods launched by the agent. For example:
+
+```yaml
+workspace:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+```
+
+You can also vary the resource requirements for pods from different code locations by setting config in the Workspace tab. For example:
+
+```yaml
+location_name: test-location
+image: dagster/dagster-cloud-template:latest
+code_source:
+  package_name: dagster_cloud_template
+container_context:
+  k8s:
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+```
+
+- When upgrading the Kubernetes agent using the Helm chart, the previous agent pod will now fully terminate before the new agent spins up.
+- Descriptions can now be added to distinguish your user and agent tokens on the Cloud Settings page.
+- Using the `dagster-cloud` CLI to add or update a code location, CLI options can now override location config from a specified file. For example, `dagster-cloud workspace add-location --from-file location.yaml --image dagster/dagster-cloud-examples:64c9c2`.
+
+### Bugfixes
+
+- Fixed an issue where [code previews](https://docs.dagster.cloud/guides/code-previews) would sometimes fail to load if a working directory was not explicitly set.
+
 # 0.14.12
 
 ### Bugfixes

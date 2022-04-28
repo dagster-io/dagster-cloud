@@ -358,9 +358,9 @@ def get_alert_policies(client: GqlShimClient) -> Dict[str, Any]:
     return result["data"]["alertPolicies"]
 
 
-RECONCILE_ALERT_POLICIES_MUTATION = """
-    mutation ReconcileAlertPoliciesMutation($alertPolicies: [GrapheneAlertPolicyInput!]!) {
-        reconcileAlertPolicies(alertPolicies: $alertPolicies) {
+RECONCILE_ALERT_POLICIES_FROM_DOCUMENT_MUTATION = """
+    mutation ReconcileAlertPoliciesFromDocumentMutation($document: GenericScalar!) {
+        reconcileAlertPoliciesFromDocument(document: $document) {
             __typename
             ... on ReconcileAlertPoliciesSuccess {
                 alertPolicies {
@@ -383,16 +383,19 @@ def reconcile_alert_policies(
     client: GqlShimClient, alert_policy_inputs: Sequence[dict]
 ) -> Sequence[str]:
     result = client.execute(
-        RECONCILE_ALERT_POLICIES_MUTATION,
-        variable_values={"alertPolicies": alert_policy_inputs},
+        RECONCILE_ALERT_POLICIES_FROM_DOCUMENT_MUTATION,
+        variable_values={"document": alert_policy_inputs},
     )
 
-    if result["data"]["reconcileAlertPolicies"]["__typename"] != "ReconcileAlertPoliciesSuccess":
+    if (
+        result["data"]["reconcileAlertPoliciesFromDocument"]["__typename"]
+        != "ReconcileAlertPoliciesSuccess"
+    ):
         raise Exception(f"Unable to reconcile alert policies: {result}")
 
     return sorted(
         alert_policy["name"]
-        for alert_policy in result["data"]["reconcileAlertPolicies"]["alertPolicies"]
+        for alert_policy in result["data"]["reconcileAlertPoliciesFromDocument"]["alertPolicies"]
     )
 
 

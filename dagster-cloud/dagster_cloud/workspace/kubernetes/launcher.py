@@ -53,6 +53,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         server_process_startup_timeout=None,
         image_pull_grace_period=None,
         labels=None,
+        resources=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("K8sUserCodeLauncher")
@@ -93,6 +94,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             DEFAULT_IMAGE_PULL_GRACE_PERIOD,
         )
         self._labels = check.opt_dict_param(labels, "labels", key_type=str, value_type=str)
+        self._resources = check.opt_dict_param(resources, "resources", key_type=str)
 
         if kubeconfig_file:
             kubernetes.config.load_kube_config(kubeconfig_file)
@@ -115,6 +117,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
             labels=self._labels,
+            resources=self._resources,
         )
 
     @property
@@ -187,6 +190,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             server_process_startup_timeout=config_value.get("server_process_startup_timeout"),
             image_pull_grace_period=config_value.get("image_pull_grace_period"),
             labels=config_value.get("labels"),
+            resources=config_value.get("resources"),
         )
 
     @contextmanager
@@ -210,6 +214,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             volumes=self._volumes,
             labels=self._labels,
             namespace=self._namespace,
+            resources=self._resources,
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
 
         try:
@@ -228,6 +233,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
                         container_context.volume_mounts,
                         container_context.volumes,
                         container_context.labels,
+                        container_context.resources,
                     ),
                 )
             self._logger.info("Created deployment: {}".format(api_response.metadata.name))

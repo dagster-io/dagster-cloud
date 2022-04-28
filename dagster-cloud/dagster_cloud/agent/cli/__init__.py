@@ -49,6 +49,7 @@ def run_local_agent():
 
 def run_local_agent_in_environment(dagster_home: Optional[Path]):
     with capture_interrupts():
+        old_env = None
         try:
             old_env = dict(os.environ)
             if dagster_home:
@@ -56,7 +57,8 @@ def run_local_agent_in_environment(dagster_home: Optional[Path]):
             run_local_agent()
         finally:
             os.environ.clear()
-            os.environ.update(old_env)
+            if old_env is not None:
+                os.environ.update(old_env)
 
 
 DAGSTER_YAML_TEMPLATE = """
@@ -95,7 +97,7 @@ def run_local_agent_in_temp_environment(
             except json.JSONDecodeError as e:
                 raise ui.error(f"Invalid User Code Launcher config JSON:\n{e}")
 
-        with open(os.path.join(d, "dagster.yaml"), "w") as f:
+        with open(os.path.join(d, "dagster.yaml"), "w", encoding="utf8") as f:
             f.write(
                 DAGSTER_YAML_TEMPLATE.format(
                     token=agent_token,

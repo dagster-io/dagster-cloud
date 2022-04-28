@@ -83,6 +83,7 @@ def construct_repo_location_deployment(
     volume_mounts,
     volumes,
     labels,
+    resources,
 ):
     # TODO: enable liveness probes
     return client.V1Deployment(
@@ -133,6 +134,13 @@ def construct_repo_location_deployment(
                                 )
                                 for volume_mount in volume_mounts
                             ],
+                            resources=(
+                                k8s_model_from_dict(
+                                    kubernetes.client.models.V1ResourceRequirements, resources
+                                )
+                                if resources
+                                else None
+                            ),
                         )
                     ],
                     volumes=[
