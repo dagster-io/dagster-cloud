@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 0.14.14
+
+### New
+
+* Alert Policies can now be edited in Dagit. To view and configure the alert policies for your deployment, click on the profile picture in the upper-right corner of Dagit, navigate to the Cloud Settings page, and click on the Alerts tab. https://docs.dagster.cloud/guides/alerts
+
 #  0.14.13
 
 ### New
