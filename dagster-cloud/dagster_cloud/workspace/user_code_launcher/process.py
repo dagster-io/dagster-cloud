@@ -50,7 +50,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     def __init__(
         self,
         server_process_startup_timeout=None,
-        inst_data: ConfigurableClassData = None,
+        inst_data: Optional[ConfigurableClassData] = None,
         wait_for_processes: bool = False,
     ):
         self._inst_data = inst_data
@@ -119,7 +119,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                     break
 
     @property
-    def inst_data(self) -> ConfigurableClassData:
+    def inst_data(self) -> Optional[ConfigurableClassData]:
         return self._inst_data
 
     @classmethod

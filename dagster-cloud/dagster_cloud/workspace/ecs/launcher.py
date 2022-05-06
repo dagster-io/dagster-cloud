@@ -125,7 +125,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property
-    def inst_data(self) -> ConfigurableClassData:
+    def inst_data(self) -> Optional[ConfigurableClassData]:
         return self._inst_data
 
     def _create_new_server_endpoint(

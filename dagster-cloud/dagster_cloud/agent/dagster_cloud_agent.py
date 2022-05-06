@@ -14,7 +14,11 @@ from dagster import check
 from dagster.core.host_representation import RepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.client import DagsterGrpcClient
-from dagster.serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
+from dagster.serdes import (
+    deserialize_as,
+    deserialize_json_to_dagster_namedtuple,
+    serialize_dagster_namedtuple,
+)
 from dagster.utils import merge_dicts
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster.utils.interrupts import raise_interrupts_as
@@ -252,9 +256,8 @@ class DagsterCloudAgent:
         upload_locations = set()
         for entry in entries:
             location_name = entry["locationName"]
-            deployment_metadata = check.inst(
-                deserialize_json_to_dagster_namedtuple(entry["serializedDeploymentMetadata"]),
-                CodeDeploymentMetadata,
+            deployment_metadata = deserialize_as(
+                entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
             )
             deployment_map[location_name] = UserCodeLauncherEntry(
                 deployment_metadata,

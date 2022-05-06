@@ -2,6 +2,7 @@ import threading
 from collections import defaultdict
 from typing import Dict, List
 
+import dagster.check as check
 from dagster import MetadataEntry
 from dagster.core.events import DagsterEvent, DagsterEventType, EngineEventData
 from dagster.core.execution.plan.objects import StepFailureData
@@ -22,10 +23,11 @@ class ProcessStepHandler(StepHandler):
         return "ProcessStepHandler"
 
     def launch_step(self, step_handler_context: StepHandlerContext) -> List[DagsterEvent]:
-        assert (
-            len(step_handler_context.execute_step_args.step_keys_to_execute) == 1
-        ), "Launching multiple steps is not currently supported"
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_keys_to_execute = check.not_none(
+            step_handler_context.execute_step_args.step_keys_to_execute
+        )
+        assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
+        step_key = step_keys_to_execute[0]
 
         args = step_handler_context.execute_step_args.get_command_args()
         pid = launch_process(args)
@@ -35,7 +37,10 @@ class ProcessStepHandler(StepHandler):
         return []
 
     def check_step_health(self, step_handler_context: StepHandlerContext) -> List[DagsterEvent]:
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_keys_to_execute = check.not_none(
+            step_handler_context.execute_step_args.step_keys_to_execute
+        )
+        step_key = step_keys_to_execute[0]
 
         with self._step_pids_lock:
             pid = self._step_pids[step_handler_context.execute_step_args.pipeline_run_id][step_key]
@@ -58,10 +63,11 @@ class ProcessStepHandler(StepHandler):
             return []
 
     def terminate_step(self, step_handler_context: StepHandlerContext) -> List[DagsterEvent]:
-        assert (
-            len(step_handler_context.execute_step_args.step_keys_to_execute) == 1
-        ), "Launching multiple steps is not currently supported"
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_keys_to_execute = check.not_none(
+            step_handler_context.execute_step_args.step_keys_to_execute
+        )
+        assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
+        step_key = step_keys_to_execute[0]
 
         with self._step_pids_lock:
             pid = self._step_pids[step_handler_context.execute_step_args.pipeline_run_id][step_key]

@@ -36,6 +36,7 @@ from dagster_cloud.execution.monitoring import (
     CloudRunWorkerStatuses,
     start_run_worker_monitoring_thread,
 )
+from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.util import diff_serializable_namedtuple_map
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
@@ -58,7 +59,7 @@ class UserCodeLauncherEntry(
 
 
 class DagsterCloudUserCodeLauncher(
-    AbstractContextManager, MayHaveInstanceWeakref, Generic[ServerHandle]
+    AbstractContextManager, MayHaveInstanceWeakref[DagsterCloudAgentInstance], Generic[ServerHandle]
 ):
     def __init__(self):
         self._grpc_endpoints: Dict[str, Union[GrpcServerEndpoint, SerializableErrorInfo]] = {}

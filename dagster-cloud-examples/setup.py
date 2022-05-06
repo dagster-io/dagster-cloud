@@ -20,7 +20,7 @@ if __name__ == "__main__":
         version=ver,
         packages=find_packages(exclude=["dagster_cloud_examples_tests*"]),
         install_requires=[f"dagster_cloud{pin}"],
-        extras_require={"tests": ["mypy==0.812", "pylint", "pytest"]},
+        extras_require={"tests": ["mypy", "pylint", "pytest"]},
         author="Elementl",
         author_email="hello@elementl.com",
         license="Apache-2.0",

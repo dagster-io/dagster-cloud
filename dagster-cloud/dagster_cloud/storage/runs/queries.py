@@ -254,3 +254,11 @@ UPDATE_BACKFILL_MUTATION = """
         }
     }
 """
+
+GET_RUN_PARTITION_DATA_QUERY = """
+    query getRunPartitionData($partitionSetName: String!, $jobName: String!, $repositoryLabel: String!) {
+        runs {
+            getRunPartitionData(partitionSetName: $partitionSetName, jobName: $jobName, repositoryLabel: $repositoryLabel)
+        }
+    }
+"""

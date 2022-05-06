@@ -47,7 +47,7 @@ class CloudRunWorkerStatuses(
 ):
     def __new__(
         cls,
-        statuses: List[CloudRunWorkerStatus],
+        statuses: Optional[List[CloudRunWorkerStatus]],
         run_worker_monitoring_supported: bool,
         run_worker_monitoring_thread_alive: Optional[bool],
     ):

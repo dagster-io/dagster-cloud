@@ -1,7 +1,8 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from dagster import Noneable, check
 from dagster.config import Field, Map, Selector, Shape
+from dagster.config.errors import EvaluationError
 from dagster.config.source import StringSource
 from dagster.config.validate import validate_config
 from dagster.utils import frozendict
@@ -15,14 +16,14 @@ def validate_workspace_location(workspace_location) -> Optional[List[str]]:
     """Processes a single workspace location config. Returns a list of error
     messages if any."""
     validation = validate_config(LOCATION_CONFIG_SCHEMA, workspace_location)
-    return [error.message for error in validation.errors]
+    return [error.message for error in validation.errors or []]
 
 
 def validate_workspace_config(workspace_config) -> Optional[List[str]]:
     """Processes an entire workspace location config. Returns a list of
     error messages, if any."""
     validation = validate_config(WORKSPACE_CONFIG_SCHEMA, workspace_config)
-    return [error.message for error in validation.errors]
+    return [error.message for error in validation.errors or []]
 
 
 def process_workspace_config(workspace_config) -> Dict[str, Any]:
@@ -38,7 +39,7 @@ def process_workspace_config(workspace_config) -> Dict[str, Any]:
         validation = validate_config(LEGACY_WORKSPACE_CONFIG_SCHEMA, workspace_config)
         check.invariant(
             validation.success,
-            ", ".join([error.message for error in validation.errors]),
+            ", ".join([error.message for error in validation.errors or []]),
         )
 
         locations = workspace_config["locations"].values()
@@ -79,7 +80,7 @@ def process_workspace_config(workspace_config) -> Dict[str, Any]:
         validation = validate_config(WORKSPACE_CONFIG_SCHEMA, workspace_config)
         check.invariant(
             validation.success,
-            ", ".join([error.message for error in validation.errors]),
+            ", ".join([error.message for error in cast(List[EvaluationError], validation.errors)]),
         )
         return workspace_config
 

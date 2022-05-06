@@ -399,7 +399,7 @@ class AgentHeartbeat(
             agent_label=check.opt_str_param(agent_label, "agent_label"),
             agent_type=check.opt_str_param(agent_type, "agent_type"),
             errors=check.opt_list_param(errors, "errors", of_type=TimestampedError),
-            metadata=check.opt_dict_param(metadata, str, str),
+            metadata=check.opt_dict_param(metadata, "metadata", str),
             run_worker_statuses=check.opt_inst_param(
                 run_worker_statuses, "run_worker_statuses", CloudRunWorkerStatuses
             ),

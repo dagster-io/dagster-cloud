@@ -80,10 +80,11 @@ class DockerStepHandler(StepHandler):
                 network = client.networks.get(network_name)
                 network.connect(step_container)
 
-        assert (
-            len(step_handler_context.execute_step_args.step_keys_to_execute) == 1
-        ), "Launching multiple steps is not currently supported"
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_keys_to_execute = check.is_list(
+            step_handler_context.execute_step_args.step_keys_to_execute
+        )
+        assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
+        step_key = step_keys_to_execute[0]
 
         events = [
             DagsterEvent(
@@ -105,7 +106,10 @@ class DockerStepHandler(StepHandler):
         return events
 
     def check_step_health(self, step_handler_context: StepHandlerContext) -> List[DagsterEvent]:
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_keys_to_execute = check.is_list(
+            step_handler_context.execute_step_args.step_keys_to_execute
+        )
+        step_key = step_keys_to_execute[0]
 
         client = docker.client.from_env()
 
@@ -133,10 +137,11 @@ class DockerStepHandler(StepHandler):
 
     def terminate_step(self, step_handler_context: StepHandlerContext) -> List[DagsterEvent]:
 
-        assert (
-            len(step_handler_context.execute_step_args.step_keys_to_execute) == 1
-        ), "Launching multiple steps is not currently supported"
-        step_key = step_handler_context.execute_step_args.step_keys_to_execute[0]
+        step_keys_to_execute = check.is_list(
+            step_handler_context.execute_step_args.step_keys_to_execute
+        )
+        assert len(step_keys_to_execute) == 1, "Launching multiple steps is not currently supported"
+        step_key = step_keys_to_execute[0]
 
         events = [
             DagsterEvent(
@@ -154,7 +159,7 @@ class DockerStepHandler(StepHandler):
             container = client.containers.get(
                 self._get_container_name(
                     step_handler_context.execute_step_args.pipeline_run_id,
-                    step_handler_context.execute_step_args.step_keys_to_execute[0],
+                    step_key,
                 )
             )
             container.stop()

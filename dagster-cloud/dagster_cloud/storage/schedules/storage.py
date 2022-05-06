@@ -62,9 +62,9 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
 
     def all_instigator_state(
         self,
-        repository_origin_id: str = None,
-        repository_selector_id: str = None,
-        instigator_type: InstigatorType = None,
+        repository_origin_id: Optional[str] = None,
+        repository_selector_id: Optional[str] = None,
+        instigator_type: Optional[InstigatorType] = None,
     ) -> Iterable[InstigatorState]:
         res = self._execute_query(
             ALL_STORED_JOB_STATE_QUERY,
@@ -80,7 +80,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
             for state in res["data"]["schedules"]["jobStates"]
         ]
 
-    def get_instigator_state(self, origin_id: str, selector_id: str) -> InstigatorState:
+    def get_instigator_state(self, origin_id: str, selector_id: str) -> Optional[InstigatorState]:
         res = self._execute_query(
             GET_JOB_STATE_QUERY,
             variables={
@@ -122,9 +122,9 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         self,
         origin_id: str,
         selector_id: str,
-        before: float = None,
-        after: float = None,
-        limit: int = None,
+        before: Optional[float] = None,
+        after: Optional[float] = None,
+        limit: Optional[int] = None,
         statuses: Optional[List[TickStatus]] = None,
     ) -> Iterable[InstigatorTick]:
         statuses = [status.value for status in statuses] if statuses else None

@@ -42,7 +42,7 @@ if __name__ == "__main__":
                 "isort",
                 "kubernetes",
                 "moto",
-                "mypy==0.812",
+                "mypy",
                 "pylint",
                 "pytest",
                 "types-PyYAML",

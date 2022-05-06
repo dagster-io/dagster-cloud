@@ -1,3 +1,4 @@
+import dagster.check as check
 from dagster.core.launcher import RunLauncher
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.types import ExecuteRunArgs
@@ -10,7 +11,7 @@ PID_TAG = "process/pid"
 class CloudProcessRunLauncher(RunLauncher):
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.pipeline_run
-        pipeline_code_origin = context.pipeline_code_origin
+        pipeline_code_origin = check.not_none(context.pipeline_code_origin)
 
         run_args = ExecuteRunArgs(
             pipeline_origin=pipeline_code_origin,

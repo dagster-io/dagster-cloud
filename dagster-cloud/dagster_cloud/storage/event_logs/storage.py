@@ -9,16 +9,17 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Tuple,
     Union,
     cast,
 )
 
 from dagster import check
 from dagster.core.assets import AssetDetails
-from dagster.core.definitions.events import AssetKey
+from dagster.core.definitions.events import AssetKey, ExpectationResult
 from dagster.core.events import DagsterEvent, DagsterEventType
 from dagster.core.events.log import EventLogEntry
-from dagster.core.execution.stats import RunStepKeyStatsSnapshot, StepEventStatus
+from dagster.core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
 from dagster.core.storage.event_log.base import (
     AssetEntry,
     AssetRecord,
@@ -35,6 +36,7 @@ from dagster.serdes import (
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
+from dagster.serdes.serdes import deserialize_as
 from dagster.utils import datetime_as_float
 from dagster.utils.error import SerializableErrorInfo
 from dagster_cloud.storage.event_logs.utils import truncate_event
@@ -72,7 +74,7 @@ def _input_for_serializable_error_info(serializable_error_info: Optional[Seriali
         return None
 
     return {
-        "message": serializable_error_info.mesage,
+        "message": serializable_error_info.message,
         "stack": serializable_error_info.stack,
         "clsName": serializable_error_info.cls_name,
         "cause": _input_for_serializable_error_info(serializable_error_info.cause),
@@ -263,7 +265,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     else None
                 ),
                 "ofTypes": (
-                    [dagster_type.value for dagster_type in of_type]
+                    [dagster_type.value for dagster_type in cast(set, of_type)]
                     if of_type and is_of_type_set
                     else None
                 ),
@@ -308,31 +310,31 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 run_id=check.str_elem(stats, "runId"),
                 step_key=check.str_elem(stats, "stepKey"),
                 status=(
-                    getattr(StepEventStatus, check.opt_str_elem(stats, "status"))
+                    getattr(StepEventStatus, check.str_elem(stats, "status"))
                     if stats.get("status") is not None
                     else None
                 ),
                 start_time=check.opt_float_elem(stats, "startTime"),
                 end_time=check.opt_float_elem(stats, "endTime"),
                 materialization_events=[
-                    deserialize_json_to_dagster_namedtuple(materialization_event)
+                    deserialize_as(materialization_event, EventLogEntry)
                     for materialization_event in check.opt_list_elem(
                         stats, "materializationEvents", of_type=str
                     )
                 ],
                 expectation_results=[
-                    deserialize_json_to_dagster_namedtuple(expectation_result)
+                    deserialize_as(expectation_result, ExpectationResult)
                     for expectation_result in check.opt_list_elem(
                         stats, "expectationResults", of_type=str
                     )
                 ],
                 attempts=check.opt_int_elem(stats, "attempts"),
                 attempts_list=[
-                    deserialize_json_to_dagster_namedtuple(marker)
+                    deserialize_as(marker, RunStepMarker)
                     for marker in check.opt_list_elem(stats, "attemptsList", of_type=str)
                 ],
                 markers=[
-                    deserialize_json_to_dagster_namedtuple(marker)
+                    deserialize_as(marker, RunStepMarker)
                     for marker in check.opt_list_elem(stats, "markers", of_type=str)
                 ],
             )
@@ -471,7 +473,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def all_asset_keys(self) -> Iterable[AssetKey]:
         res = self._execute_query(GET_ALL_ASSET_KEYS_QUERY)
         return [
-            AssetKey.from_db_string(asset_key_string)
+            check.not_none(AssetKey.from_db_string(asset_key_string))
             for asset_key_string in res["data"]["eventLogs"]["getAllAssetKeys"]
         ]
 
@@ -496,15 +498,15 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def get_asset_events(
         self,
         asset_key: AssetKey,
-        partitions: List[str] = None,
-        before_cursor: int = None,
-        after_cursor: int = None,
-        limit: int = None,
+        partitions: Optional[List[str]] = None,
+        before_cursor: Optional[int] = None,
+        after_cursor: Optional[int] = None,
+        limit: Optional[int] = None,
         ascending: bool = False,
         include_cursor: bool = False,
-        before_timestamp: float = None,
-        cursor: int = None,
-    ) -> Iterable[EventLogEntry]:
+        before_timestamp: Optional[float] = None,
+        cursor: Optional[int] = None,
+    ) -> Union[List[EventLogEntry], List[Tuple[int, EventLogEntry]]]:
         check.inst_param(asset_key, "asset_key", AssetKey)
         before_cursor = check.opt_int_param(before_cursor, "before_cursor")
         after_cursor = check.opt_int_param(after_cursor, "after_cursor")
@@ -528,7 +530,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
 
         if include_cursor:
-            return [tuple([record.storage_id, record.event_log_entry]) for record in event_records]
+            return [(record.storage_id, record.event_log_entry) for record in event_records]
         else:
             return [record.event_log_entry for record in event_records]
 
@@ -556,7 +558,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             asset_key: {} for asset_key in asset_keys
         }
         for asset_count in materialization_count_result:
-            asset_key = AssetKey.from_db_string(asset_count["assetKey"])
+            asset_key = check.not_none(AssetKey.from_db_string(asset_count["assetKey"]))
             for graphene_partition_count in asset_count["materializationCountByPartition"]:
                 materialization_count_by_partition[asset_key][
                     graphene_partition_count["partition"]
