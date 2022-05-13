@@ -3,7 +3,9 @@ import tempfile
 import zlib
 from contextlib import contextmanager
 
-from dagster import Field, StringSource, check, seven
+import dagster.seven as seven
+from dagster import Field, StringSource
+from dagster import _check as check
 from dagster.core.storage.compute_log_manager import (
     MAX_BYTES_FILE_READ,
     ComputeIOType,

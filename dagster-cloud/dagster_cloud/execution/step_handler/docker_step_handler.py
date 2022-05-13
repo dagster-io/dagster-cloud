@@ -2,7 +2,8 @@ import os
 from typing import List
 
 import docker
-from dagster import MetadataEntry, check
+from dagster import MetadataEntry
+from dagster import _check as check
 from dagster.core.events import DagsterEvent, DagsterEventType, EngineEventData
 from dagster.core.execution.plan.objects import StepFailureData
 from dagster.core.executor.step_delegating.step_handler.base import StepHandler, StepHandlerContext

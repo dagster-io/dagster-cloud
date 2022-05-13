@@ -3,7 +3,8 @@ from contextlib import ExitStack
 from typing import Any, Dict, List, Optional
 
 import yaml
-from dagster import Field, check
+from dagster import Field
+from dagster import _check as check
 from dagster.builtins import Bool
 from dagster.config.validate import process_config, resolve_to_config_type
 from dagster.core.errors import DagsterInvalidConfigError, DagsterInvariantViolationError

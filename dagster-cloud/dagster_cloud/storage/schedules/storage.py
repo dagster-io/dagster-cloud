@@ -1,6 +1,6 @@
 from typing import Iterable, List, Optional
 
-from dagster import check
+import dagster._check as check
 from dagster.core.definitions.run_request import InstigatorType
 from dagster.core.scheduler.instigation import InstigatorState, InstigatorTick, TickData, TickStatus
 from dagster.core.storage.schedules.base import ScheduleStorage

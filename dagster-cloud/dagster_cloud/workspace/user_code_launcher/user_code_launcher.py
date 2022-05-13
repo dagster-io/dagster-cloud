@@ -9,7 +9,7 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from typing import Collection, Dict, Generic, List, NamedTuple, Optional, Set, TypeVar, Union
 
-from dagster import check
+import dagster._check as check
 from dagster.api.get_server_id import sync_get_server_id
 from dagster.api.list_repositories import sync_list_repositories_grpc
 from dagster.core.errors import DagsterUserCodeUnreachableError
@@ -27,6 +27,7 @@ from dagster.grpc.types import GetCurrentImageResult
 from dagster.serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud.api.dagster_cloud_api import (
+    DagsterCloudSandboxConnectionInfo,
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
@@ -47,15 +48,45 @@ USER_CODE_LAUNCHER_RECONCILE_INTERVAL = 1
 
 ServerHandle = TypeVar("ServerHandle")
 
+SANDBOX_QUERY = """
+    query DeploymentInfo {
+         deploymentInfo {
+             deploymentType
+         }
+     }
+"""
+
+AUTHORIZED_KEY_QUERY = """
+    query DeploymentInfo {
+         deploymentInfo {
+             sshKeys {
+                publicKey
+            }
+         }
+     }
+"""
+
 
 @whitelist_for_serdes
 class UserCodeLauncherEntry(
     NamedTuple(
         "_UserCodeLauncherEntry",
-        [("code_deployment_metadata", CodeDeploymentMetadata), ("update_timestamp", float)],
+        [
+            ("code_deployment_metadata", CodeDeploymentMetadata),
+            ("update_timestamp", float),
+            ("sandbox_saved_timestamp", Optional[float]),
+        ],
     )
 ):
-    pass
+    def __new__(cls, code_deployment_metadata, update_timestamp, sandbox_saved_timestamp=None):
+        return super(UserCodeLauncherEntry, cls).__new__(
+            cls,
+            check.inst_param(
+                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+            ),
+            check.float_param(update_timestamp, "update_timestamp"),
+            check.opt_float_param(sandbox_saved_timestamp, "sandbox_saved_timestamp"),
+        )
 
 
 class DagsterCloudUserCodeLauncher(
@@ -85,9 +116,35 @@ class DagsterCloudUserCodeLauncher(
 
         self._is_workspace_ready_lock = threading.Lock()
         self._is_workspace_ready: bool = False
+
+        self._is_dev_sandbox = None
         super().__init__()
 
+    @property
+    def supports_dev_sandbox(self) -> bool:
+        return False
+
+    def is_dev_sandbox(self):
+        if self._is_dev_sandbox == None and self.supports_dev_sandbox:
+            client = self._instance.graphql_client
+            result = client.execute(SANDBOX_QUERY)
+            self._is_dev_sandbox = result["data"]["deploymentInfo"]["deploymentType"] == "DEV"
+        return self._is_dev_sandbox
+
+    def _authorized_key(self) -> Optional[str]:
+        if self.is_dev_sandbox():
+            client = self._instance.graphql_client
+            result = client.execute(AUTHORIZED_KEY_QUERY)
+            keys = [key["publicKey"] for key in result["data"]["deploymentInfo"]["sshKeys"]]
+            if keys:
+                # TODO: Support multiple keys
+                return keys[0]
+        return None
+
     def start(self, run_reconcile_thread=True):
+        # Initialize
+        self.is_dev_sandbox()
+
         check.invariant(
             not self._started,
             "Called start() on a DagsterCloudUserCodeLauncher that was already started",
@@ -165,9 +222,19 @@ class DagsterCloudUserCodeLauncher(
                     )
                 )
 
+                connection_info = None
+                if self.is_dev_sandbox():
+                    connection_info = self.get_sandbox_connection_info(
+                        workspace_entry.location_name,
+                    )
                 resp = self._instance.requests_session.post(
                     self._instance.dagster_cloud_upload_workspace_entry_url,
                     headers=self._instance.dagster_cloud_api_headers,
+                    data={
+                        "sandbox_connection_info": serialize_dagster_namedtuple(connection_info)
+                        if connection_info
+                        else None
+                    },
                     files={"workspace_entry.tmp": f},
                     timeout=self._instance.dagster_cloud_api_timeout,
                 )
@@ -314,6 +381,21 @@ class DagsterCloudUserCodeLauncher(
         the server. Should result in an additional handle being returned from _get_server_handles_for_location."""
 
     @abstractmethod
+    def _create_dev_sandbox_endpoint(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        authorized_key: str,
+    ) -> GrpcServerEndpoint:
+        """Create a new dev sandbox for the given location using the given metadata as configuration
+        and return a GrpcServerEndpoint indicating a hostname/port that can be used to access
+        the server. Should result in an additional handle being returned from _get_server_handles_for_location."""
+
+    @abstractmethod
+    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
+        pass
+
+    @abstractmethod
     def _remove_server_handle(self, server_handle: ServerHandle) -> None:
         """Shut down any resources associated with the given handle. Called both during updates
         to spin down the old server once a new server has been spun up, and during removal."""
@@ -437,9 +519,23 @@ class DagsterCloudUserCodeLauncher(
 
                 self._check_for_image(code_deployment_metadata)
 
-                new_updated_endpoint = self._create_new_server_endpoint(
-                    to_update_key, code_deployment_metadata
-                )
+                if self.is_dev_sandbox():
+                    if self._should_soft_reload(
+                        location_name=to_update_key,
+                        entry=desired_entries[to_update_key],
+                    ):
+                        new_updated_endpoint = self._soft_reload(to_update_key)
+                    else:
+                        new_updated_endpoint = self._create_dev_sandbox_endpoint(
+                            to_update_key,
+                            code_deployment_metadata,
+                            authorized_key=self._authorized_key(),
+                        )
+                else:
+                    new_updated_endpoint = self._create_new_server_endpoint(
+                        to_update_key,
+                        code_deployment_metadata,
+                    )
 
                 self._logger.info(
                     "Created a new server for location {location_name}".format(
@@ -468,33 +564,40 @@ class DagsterCloudUserCodeLauncher(
                 )
 
         for to_update_key in to_update_keys:
-            server_handles = existing_server_handles.get(to_update_key, [])
+            # If a hard reload, clean up the server handles
+            # If a soft reload, don't because we changed them in place
+            if not self._should_soft_reload(
+                location_name=to_update_key,
+                entry=desired_entries[to_update_key],
+            ):
+                server_handles = existing_server_handles.get(to_update_key, [])
 
-            if server_handles:
-                self._logger.info(
-                    "Removing {num_servers} existing servers for location {location_name}".format(
-                        num_servers=len(server_handles), location_name=to_update_key
-                    )
-                )
-
-            for server_handle in server_handles:
-                try:
-                    self._remove_server_handle(server_handle)
-                except Exception:
-                    self._logger.error(
-                        "Error while cleaning up after updating server for {to_update_key}: {error_info}".format(
-                            to_update_key=to_update_key,
-                            error_info=serializable_error_info_from_exc_info(sys.exc_info()),
+                if server_handles:
+                    self._logger.info(
+                        "Removing {num_servers} existing servers for location {location_name}".format(
+                            num_servers=len(server_handles), location_name=to_update_key
                         )
                     )
 
-            if server_handles:
-                self._logger.info(
-                    "Removed all previous servers for {location_name}".format(
-                        location_name=to_update_key
-                    )
-                )
+                for server_handle in server_handles:
+                    try:
+                        self._remove_server_handle(server_handle)
+                    except Exception:
+                        self._logger.error(
+                            "Error while cleaning up after updating server for {to_update_key}: {error_info}".format(
+                                to_update_key=to_update_key,
+                                error_info=serializable_error_info_from_exc_info(sys.exc_info()),
+                            )
+                        )
 
+                if server_handles:
+                    self._logger.info(
+                        "Removed all previous servers for {location_name}".format(
+                            location_name=to_update_key
+                        )
+                    )
+
+            # Always update our actual entries
             self._actual_entries[to_update_key] = desired_entries[to_update_key]
 
         for to_remove_key in diff.to_remove:
@@ -580,3 +683,56 @@ class DagsterCloudUserCodeLauncher(
 
             time.sleep(1)
         return server_id
+
+    def _should_soft_reload(self, location_name: str, entry: UserCodeLauncherEntry) -> bool:
+        if not self.is_dev_sandbox():
+            return False
+
+        existing_entry = self._actual_entries.get(location_name)
+        if not existing_entry:
+            return False
+
+        # A hard reload has been triggered
+        if entry.update_timestamp > existing_entry.update_timestamp:
+            return False
+
+        if not existing_entry.sandbox_saved_timestamp:
+            return True
+
+        if entry.sandbox_saved_timestamp > existing_entry.sandbox_saved_timestamp:
+            return True
+
+        # Getting here shouldn't be possible
+        return False
+
+    def _soft_reload(self, to_update_key):
+        existing_dev_sandbox_endpoint = self.get_grpc_endpoints().get(to_update_key)
+        if existing_dev_sandbox_endpoint:
+            server_id = existing_dev_sandbox_endpoint.server_id
+            host = existing_dev_sandbox_endpoint.host
+            port = existing_dev_sandbox_endpoint.port
+
+            client = existing_dev_sandbox_endpoint.create_client()
+            client.shutdown_server()
+
+            start_time = time.time()
+            last_error = f"Server {server_id} is still running."
+            while True:
+                try:
+                    # Wait for the server ID to change; this means we've reloaded the gRPC server.
+                    if server_id != sync_get_server_id(client):
+                        break
+                except Exception:
+                    last_error = serializable_error_info_from_exc_info(sys.exc_info())
+                if time.time() - start_time > 15:
+                    raise Exception(
+                        f"Timed out waiting for server {host}:{port} to reload. Most recent error: {str(last_error)}"
+                    )
+                time.sleep(1)
+            new_updated_endpoint = GrpcServerEndpoint(
+                server_id=sync_get_server_id(client),
+                host=host,
+                port=port,
+                socket=None,
+            )
+            return new_updated_endpoint

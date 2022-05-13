@@ -9,8 +9,10 @@ from collections import deque
 from contextlib import ExitStack
 from typing import Dict, Iterator, NamedTuple, Optional, Union, cast
 
+import dagster._check as check
 import pendulum
-from dagster import check
+from dagster import DefaultRunLauncher
+from dagster.core.errors import DagsterUserCodeUnreachableError
 from dagster.core.host_representation import RepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.client import DagsterGrpcClient
@@ -19,7 +21,7 @@ from dagster.serdes import (
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster.utils import merge_dicts
+from dagster.utils import backoff, merge_dicts
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster.utils.interrupts import raise_interrupts_as
 from dagster_cloud.api.dagster_cloud_api import (
@@ -262,6 +264,9 @@ class DagsterCloudAgent:
             deployment_map[location_name] = UserCodeLauncherEntry(
                 deployment_metadata,
                 float(entry["metadataTimestamp"]),
+                float(entry["sandboxSavedTimestamp"])
+                if entry.get("sandboxSavedTimestamp")
+                else None,
             )
             if upload_results and entry["hasOutdatedData"]:
                 upload_locations.add(location_name)
@@ -274,7 +279,17 @@ class DagsterCloudAgent:
         repository_location_origin: RepositoryLocationOrigin,
     ) -> DagsterGrpcClient:
         endpoint = user_code_launcher.get_grpc_endpoint(repository_location_origin)
-        return endpoint.create_client()
+        if user_code_launcher.is_dev_sandbox():
+            # Retry client construction on sandboxes because their gRPC servers
+            # have brief downtimes while soft reloading.
+            client = backoff.backoff(
+                fn=endpoint.create_client,
+                retry_on=(DagsterUserCodeUnreachableError,),
+                max_retries=5,
+            )
+        else:
+            client = endpoint.create_client()
+        return client
 
     def _handle_api_request(
         self,
@@ -401,8 +416,23 @@ class DagsterCloudAgent:
                 ),
             )
 
-            launcher = user_code_launcher.run_launcher()
-            launcher.launch_run(LaunchRunContext(pipeline_run=run, workspace=None))
+            if user_code_launcher.is_dev_sandbox():
+                repository_location_origin = (
+                    run.external_pipeline_origin.external_repository_origin.repository_location_origin
+                )
+
+                client = self._get_grpc_client(
+                    user_code_launcher,
+                    repository_location_origin,
+                )
+                DefaultRunLauncher.launch_run_from_grpc_client(
+                    instance=instance,
+                    run=run,
+                    grpc_client=client,
+                )
+            else:
+                launcher = user_code_launcher.run_launcher()
+                launcher.launch_run(LaunchRunContext(pipeline_run=run, workspace=None))
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.TERMINATE_RUN:
             # With agent replicas enabled:
@@ -423,7 +453,11 @@ class DagsterCloudAgent:
                     run,
                     cls=self.__class__,
                 )
-                launcher = user_code_launcher.run_launcher()
+                if user_code_launcher.is_dev_sandbox():
+                    launcher = DefaultRunLauncher()
+                    launcher.register_instance(instance)
+                else:
+                    launcher = user_code_launcher.run_launcher()
                 launcher.terminate(run.run_id)
             return DagsterCloudApiSuccess()
 

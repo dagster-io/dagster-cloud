@@ -4,12 +4,14 @@ import sys
 import threading
 from typing import Collection, Dict, NamedTuple, Optional, Set
 
-from dagster import BoolSource, Field, IntSource, check
+from dagster import BoolSource, Field, IntSource
+from dagster import _check as check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster.grpc.server import GrpcServerProcess
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
+from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.execution.step_handler.process_step_handler import ProcessStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
@@ -145,6 +147,17 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         inst_data: ConfigurableClassData, config_value: Dict
     ) -> "ProcessUserCodeLauncher":
         return ProcessUserCodeLauncher(inst_data=inst_data, **config_value)
+
+    def _create_dev_sandbox_endpoint(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        authorized_key: str,
+    ) -> GrpcServerEndpoint:
+        raise NotImplementedError
+
+    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
+        raise NotImplementedError
 
     def _create_new_server_endpoint(
         self, location_name: str, metadata: CodeDeploymentMetadata

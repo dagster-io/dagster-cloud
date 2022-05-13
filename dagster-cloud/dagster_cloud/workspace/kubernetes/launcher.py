@@ -4,11 +4,13 @@ from typing import Collection, Dict, Optional
 
 import kubernetes
 import kubernetes.client as client
-from dagster import Field, IntSource, Noneable, StringSource, check
+from dagster import Field, IntSource, Noneable, StringSource
+from dagster import _check as check
 from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import merge_dicts
+from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_k8s import K8sRunLauncher
 from dagster_k8s.container_context import K8sContainerContext
@@ -277,6 +279,17 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         )
 
         return endpoint
+
+    def _create_dev_sandbox_endpoint(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        authorized_key: str,
+    ) -> GrpcServerEndpoint:
+        raise NotImplementedError
+
+    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
+        raise NotImplementedError
 
     def _get_server_handles_for_location(self, location_name: str) -> Collection[str]:
         with self._get_api_instance() as api_instance:

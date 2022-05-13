@@ -6,10 +6,12 @@ import uuid
 from typing import Any, Collection, Dict, List, Optional
 
 import docker
-from dagster import Array, Field, IntSource, Permissive, check
+from dagster import Array, Field, IntSource, Permissive
+from dagster import _check as check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
+from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
 from dagster_cloud.execution.step_handler.docker_step_handler import DockerStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
@@ -89,7 +91,16 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         return DockerUserCodeLauncher(inst_data=inst_data, **config_value)
 
     def _create_container(
-        self, client, location_name, metadata, container_name, hostname, port, container_context
+        self,
+        client,
+        location_name,
+        metadata,
+        container_name,
+        hostname,
+        environment,
+        ports,
+        container_context,
+        command,
     ):
         return client.containers.create(
             metadata.image,
@@ -97,13 +108,10 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             hostname=hostname,
             name=container_name,
             network=container_context.networks[0] if len(container_context.networks) else None,
-            environment=merge_dicts(
-                (dict([parse_env_var(env_var) for env_var in container_context.env_vars])),
-                metadata.get_grpc_server_env(port),
-            ),
+            environment=environment,
             labels=[GRPC_SERVER_LABEL, self._get_label_for_location(location_name)],
-            command=metadata.get_grpc_server_command(),
-            ports={port: port} if hostname == "localhost" else None,
+            command=command,
+            ports=ports,
             **container_context.container_kwargs,
         )
 
@@ -113,8 +121,73 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             all=True, filters={"label": self._get_label_for_location(location_name)}
         )
 
+    @property
+    def supports_dev_sandbox(self) -> bool:
+        return True
+
+    def _create_dev_sandbox_endpoint(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        authorized_key: str,
+    ) -> GrpcServerEndpoint:
+
+        additional_ports = None if len(self._networks) else {22: find_free_port()}
+
+        return self._launch(
+            location_name=location_name,
+            metadata=metadata,
+            command=["supervisord"],
+            additional_environment={"DAGSTER_DEV_SANDBOX_AUTHORIZED_KEY": authorized_key},
+            additional_ports=additional_ports,
+        )
+
+    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
+        containers = list(self._get_server_handles_for_location(location_name))
+
+        if len(containers) > 1:
+            raise Exception(f"{location_name} has more than one running container.")
+        try:
+            container = containers[0]
+        except IndexError:
+            raise Exception(f"{location_name} has no running containers.")
+
+        if len(self._networks):
+            hostname = container.name
+            port = 22
+        else:
+            hostname = "localhost"
+            try:
+                port = container.ports["22/tcp"][0]["HostPort"]
+            except (KeyError, IndexError):
+                raise Exception(
+                    f"Container {container.name} doesn't have SSH listening on any ports."
+                )
+
+        username = "root"  # Hardcoded for now
+
+        return DagsterCloudSandboxConnectionInfo(
+            username=username,
+            hostname=hostname,
+            port=int(port),
+        )
+
     def _create_new_server_endpoint(
         self, location_name: str, metadata: CodeDeploymentMetadata
+    ) -> GrpcServerEndpoint:
+        return self._launch(
+            location_name=location_name,
+            metadata=metadata,
+            command=metadata.get_grpc_server_command(),
+        )
+
+    def _launch(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        command: List[str],
+        additional_environment: Optional[Dict[str, str]] = None,
+        additional_ports: Optional[Dict[int, int]] = None,
     ) -> GrpcServerEndpoint:
         client = docker.client.from_env()
 
@@ -133,17 +206,34 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             )
         )
 
+        ports = additional_ports or {}
+
         has_network = len(self._networks) > 0
         if has_network:
-            port = 4000
+            grpc_port = 4000
             hostname = container_name
         else:
-            port = find_free_port()
+            grpc_port = find_free_port()
+            ports[grpc_port] = grpc_port
             hostname = "localhost"
+
+        environment = merge_dicts(
+            (dict([parse_env_var(env_var) for env_var in container_context.env_vars])),
+            metadata.get_grpc_server_env(grpc_port),
+            additional_environment or {},
+        )
 
         try:
             container = self._create_container(
-                client, location_name, metadata, container_name, hostname, port, container_context
+                client,
+                location_name,
+                metadata,
+                container_name,
+                hostname,
+                environment,
+                ports,
+                container_context,
+                command,
             )
         except docker.errors.ImageNotFound:
             last_log_time = time.time()
@@ -154,7 +244,15 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
                     last_log_time = time.time()
 
             container = self._create_container(
-                client, location_name, metadata, container_name, hostname, port, container_context
+                client,
+                location_name,
+                metadata,
+                container_name,
+                hostname,
+                environment,
+                ports,
+                container_context,
+                command,
             )
 
         if len(container_context.networks) > 1:
@@ -167,13 +265,13 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         self._logger.info("Started container {container_id}".format(container_id=container.id))
 
         server_id = self._wait_for_server(
-            host=hostname, port=port, timeout=self._server_process_startup_timeout
+            host=hostname, port=grpc_port, timeout=self._server_process_startup_timeout
         )
 
         endpoint = GrpcServerEndpoint(
             server_id=server_id,
             host=hostname,
-            port=port,
+            port=grpc_port,
             socket=None,
         )
 

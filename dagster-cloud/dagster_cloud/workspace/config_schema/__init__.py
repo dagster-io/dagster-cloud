@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, cast
 
-from dagster import Noneable, check
+from dagster import Noneable
+from dagster import _check as check
 from dagster.config import Field, Map, Selector, Shape
 from dagster.config.errors import EvaluationError
 from dagster.config.source import StringSource

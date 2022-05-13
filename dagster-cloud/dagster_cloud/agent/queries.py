@@ -18,6 +18,7 @@ WORKSPACE_ENTRIES_QUERY = """
                 serializedDeploymentMetadata
                 hasOutdatedData
                 metadataTimestamp
+                sandboxSavedTimestamp
             }
         }
     }

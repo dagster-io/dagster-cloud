@@ -1,5 +1,16 @@
 # Dagster Cloud Changelog
 
+# 0.14.15
+
+### New
+
+* You can now set up automatic retries for Jobs. Set a default for all Jobs in your deployment using `run_retries.max_retries` in [Deployment Settings](https://docs.dagster.cloud/guides/managing-deployments#configuring-the-settings), or set it per run using the `dagster/max_retries` tag. When configured, failed runs will be reexecuted from failure up to the maximum number of times.
+* When a Slack alert is sent for a run triggered by a sensor or schedule, the alert now contains a URL link to the sensor or schedule.
+
+### Bugfixes
+
+* Fixed github login setting misleading user display names when using multiple emails.
+
 # 0.14.14
 
 ### New

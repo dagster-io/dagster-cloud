@@ -3,8 +3,8 @@ from datetime import timedelta
 from enum import Enum
 from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, Union
 
+import dagster._check as check
 import pendulum
-from dagster import check
 from dagster.core.code_pointer import CodePointer
 from dagster.core.host_representation import ExternalRepositoryData, RepositoryLocationOrigin
 from dagster.core.storage.pipeline_run import PipelineRun
@@ -403,4 +403,24 @@ class AgentHeartbeat(
             run_worker_statuses=check.opt_inst_param(
                 run_worker_statuses, "run_worker_statuses", CloudRunWorkerStatuses
             ),
+        )
+
+
+@whitelist_for_serdes
+class DagsterCloudSandboxConnectionInfo(
+    NamedTuple(
+        "_DagsterCloudSandboxConnectionInfo",
+        [
+            ("username", str),
+            ("hostname", str),
+            ("port", int),
+        ],
+    )
+):
+    def __new__(cls, username: str, hostname: str, port: int):
+        return super(DagsterCloudSandboxConnectionInfo, cls).__new__(
+            cls,
+            check.str_param(username, "username"),
+            check.str_param(hostname, "hostname"),
+            check.int_param(port, "port"),
         )

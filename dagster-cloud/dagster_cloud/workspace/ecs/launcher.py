@@ -1,13 +1,16 @@
 from typing import Any, Collection, Dict, List, Optional
 
 import boto3
-from dagster import Array, Field, IntSource, Noneable, ScalarUnion, StringSource, check
+from dagster import Array, Field, IntSource, Noneable, ScalarUnion, StringSource
+from dagster import _check as check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.launcher import RunLauncher
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
+from dagster.utils import merge_dicts
 from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
+from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
 from ..user_code_launcher import (
@@ -77,6 +80,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         super(EcsUserCodeLauncher, self).__init__()
 
     @property
+    def supports_dev_sandbox(self) -> bool:
+        return True
+
+    @property
     def requires_images(self):
         return True
 
@@ -131,17 +138,66 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _create_new_server_endpoint(
         self, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
+        return self._launch(
+            location_name,
+            metadata,
+            command=metadata.get_grpc_server_command(),
+        )
+
+    def _create_dev_sandbox_endpoint(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        authorized_key: str,
+    ) -> GrpcServerEndpoint:
+        return self._launch(
+            location_name,
+            metadata,
+            command=["supervisord"],
+            additional_environment={"DAGSTER_DEV_SANDBOX_AUTHORIZED_KEY": authorized_key},
+        )
+
+    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
+        services = list(self._get_server_handles_for_location(location_name))
+
+        if len(services) > 1:
+            raise Exception(f"{location_name} has more than one running task.")
+
+        try:
+            hostname = services[0].public_ip
+        except (KeyError):
+            raise Exception(f"{location_name} has no running tasks.")
+
+        if not hostname:
+            raise Exception(f"{location_name} does not have a public IP address.")
+
+        port = 22  # Hardcoded for now
+        username = "root"  # Hardcoded for now
+
+        return DagsterCloudSandboxConnectionInfo(username=username, hostname=hostname, port=port)
+
+    def _launch(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        command: List[str],
+        additional_environment: Dict[str, Any] = None,
+    ) -> GrpcServerEndpoint:
         port = 4000
 
         container_context = EcsContainerContext(
             secrets=self.secrets, secrets_tags=[self.secrets_tag] if self.secrets_tag else []
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
+        environment = merge_dicts(
+            (additional_environment or {}), metadata.get_grpc_server_env(port)
+        )
+
         service = self.client.create_service(
             name=location_name,
             image=metadata.image,
-            command=metadata.get_grpc_server_command(),
-            env=metadata.get_grpc_server_env(port),
+            command=command,
+            env=environment,
             tags={"dagster/location_name": location_name},
             task_role_arn=self.task_role_arn,
             secrets=container_context.get_secrets_dict(self.secrets_manager),

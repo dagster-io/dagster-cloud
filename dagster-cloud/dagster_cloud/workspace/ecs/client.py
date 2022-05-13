@@ -4,7 +4,7 @@ import uuid
 from typing import List, Optional
 
 import boto3
-from dagster import check
+import dagster._check as check
 from dagster.utils import merge_dicts
 
 from .service import Service

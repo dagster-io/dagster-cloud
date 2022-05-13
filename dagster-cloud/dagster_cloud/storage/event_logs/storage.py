@@ -14,7 +14,7 @@ from typing import (
     cast,
 )
 
-from dagster import check
+import dagster._check as check
 from dagster.core.assets import AssetDetails
 from dagster.core.definitions.events import AssetKey, ExpectationResult
 from dagster.core.events import DagsterEvent, DagsterEventType

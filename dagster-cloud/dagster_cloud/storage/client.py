@@ -5,7 +5,8 @@ from typing import Any, Dict, Optional
 
 import requests
 import urllib3
-from dagster import Field, IntSource, Noneable, Permissive, StringSource, check
+from dagster import Field, IntSource, Noneable, Permissive, StringSource
+from dagster import _check as check
 from dagster.utils import merge_dicts
 from packaging.version import Version, parse
 from requests.adapters import HTTPAdapter

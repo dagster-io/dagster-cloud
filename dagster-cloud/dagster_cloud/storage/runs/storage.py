@@ -1,7 +1,7 @@
 import json
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from dagster import check
+import dagster._check as check
 from dagster.core.errors import (
     DagsterInvariantViolationError,
     DagsterRunAlreadyExists,

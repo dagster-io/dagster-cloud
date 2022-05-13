@@ -1,7 +1,8 @@
 from collections import namedtuple
 from typing import Any, Dict, List
 
-from dagster import Field, check
+from dagster import Field
+from dagster import _check as check
 from dagster.config.source import BoolSourceType, IntSourceType, StringSourceType
 from dagster.serdes.utils import create_snapshot_id
 

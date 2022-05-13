@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, NamedTuple, Optional
 
-from dagster import check
+import dagster._check as check
 from dagster.serdes import whitelist_for_serdes
 from dagster.utils import merge_dicts
 

@@ -7,9 +7,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List
 
+import dagster._check as check
 import requests
 import yaml
-from dagster import check
 from dagster.core.host_representation import InProcessRepositoryLocation
 from dagster.core.host_representation.origin import InProcessRepositoryLocationOrigin
 from dagster.core.test_utils import remove_none_recursively

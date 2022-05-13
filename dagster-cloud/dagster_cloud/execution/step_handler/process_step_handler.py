@@ -2,7 +2,7 @@ import threading
 from collections import defaultdict
 from typing import Dict, List
 
-import dagster.check as check
+import dagster._check as check
 from dagster import MetadataEntry
 from dagster.core.events import DagsterEvent, DagsterEventType, EngineEventData
 from dagster.core.execution.plan.objects import StepFailureData

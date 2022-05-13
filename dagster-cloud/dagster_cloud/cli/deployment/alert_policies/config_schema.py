@@ -1,4 +1,4 @@
-from dagster import check
+import dagster._check as check
 from dagster.config import Enum, EnumValue, Field, Selector, Shape
 from dagster.config.config_type import Array
 from dagster.config.validate import validate_config

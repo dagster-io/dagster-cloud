@@ -4,7 +4,7 @@ import threading
 from collections import namedtuple
 from typing import List, NamedTuple, Optional
 
-from dagster import check
+import dagster._check as check
 from dagster.core.errors import DagsterInvariantViolationError
 from dagster.core.launcher import CheckRunHealthResult, WorkerStatus
 from dagster.core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, PipelineRunsFilter

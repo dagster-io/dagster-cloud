@@ -1,4 +1,4 @@
-import dagster.check as check
+import dagster._check as check
 from dagster.core.launcher import RunLauncher
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.types import ExecuteRunArgs

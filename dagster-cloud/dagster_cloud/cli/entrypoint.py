@@ -8,6 +8,7 @@ from .commands.config import app_configure as configure_app
 from .deployment import app as deployment_app
 from .organization import app as organization_app
 from .organization import legacy_settings_app
+from .sandbox import app as sandbox_app
 
 
 def _import_commands(parent: typer.Typer, child: typer.Typer) -> None:
@@ -54,6 +55,7 @@ app.add_typer(config_app, name="config", no_args_is_help=True)
 app.add_typer(deployment_app, name="deployment", no_args_is_help=True)
 app.add_typer(organization_app, name="organization", no_args_is_help=True)
 app.add_typer(workspace_app, name="workspace", no_args_is_help=True)
+app.add_typer(sandbox_app, name="sandbox", no_args_is_help=True, hidden=True)
 
 # Deprecated in favor of organization
 app.add_typer(legacy_settings_app, name="settings", hidden=True)

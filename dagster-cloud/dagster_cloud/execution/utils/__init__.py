@@ -1,6 +1,6 @@
 from enum import Enum
 
-from dagster.check import not_implemented
+from dagster._check import not_implemented
 
 
 class TaskStatus(Enum):

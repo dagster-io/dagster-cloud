@@ -98,11 +98,11 @@ def print_yaml(data: Any):
     return typer.echo(yaml.dump(data))
 
 
-def erase_previous_line():
+def erase_previous_line(number_of_lines: int = 1) -> None:
     """
     Erases the previous line of output, which can then be printed over.
     """
-    return typer.echo("\033[F\033[K\033[F")
+    return typer.echo("\033[F\033[K" * number_of_lines + "\033[F")
 
 
 def confirm(prompt: str, default: bool = True) -> bool:

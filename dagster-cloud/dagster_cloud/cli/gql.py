@@ -34,6 +34,53 @@ def fetch_deployments(client: GqlShimClient) -> List[Any]:
     return client.execute(DEPLOYMENTS_QUERY)["data"]["deployments"]
 
 
+DEPLOYMENTS_QUERY = """
+{
+    identity {
+        viewer {
+            userId
+        }
+        currentDeployment {
+            deploymentName
+        }
+    }
+    deployments {
+        deploymentName
+        deploymentId
+        devDeploymentInfo {
+            owner {
+                userId
+            }
+        }
+    }
+}
+"""
+
+
+def get_dev_deployment_name(client: GqlShimClient) -> Any:
+    """
+    Returns the name of the dev deployment for the current user.
+    Returns None if the current deployment is the dev deployment,
+    and raises an exception if none can be found."""
+    data = client.execute(DEPLOYMENTS_QUERY)["data"]
+    user_id = data["identity"]["viewer"]["userId"]
+
+    deployment_name = next(
+        (
+            deployment["deploymentName"]
+            for deployment in data["deployments"]
+            if deployment["devDeploymentInfo"]
+            and deployment["devDeploymentInfo"]["owner"]["userId"] == user_id
+        ),
+        None,
+    )
+    if not deployment_name:
+        raise Exception("Unable to find dev deployment for user")
+    if deployment_name == data["identity"]["currentDeployment"]["deploymentName"]:
+        return None
+    return deployment_name
+
+
 class CliInputCodeLocation:
     def __init__(
         self,
@@ -114,6 +161,11 @@ query WorkspaceEntries {
         workspaceEntries {
             locationName
             serializedDeploymentMetadata
+            connectionInfo {
+                username
+                hostname
+                port
+            }
         }
     }
 }
@@ -444,3 +496,17 @@ def get_organization_settings(client: GqlShimClient) -> Dict[str, Any]:
         raise Exception(f"Unable to get organization settings: {str(result)}")
 
     return result["data"]["organizationSettings"]["settings"]
+
+
+SAVE_SANDBOX_LOCATION_MUTATION = """
+mutation ($location: String!)
+{
+    saveSandboxLocation(location: $location) {
+        __typename
+    }
+}
+"""
+
+
+def reload_repo_location(client: GqlShimClient, location_name: str) -> None:
+    client.execute(SAVE_SANDBOX_LOCATION_MUTATION, variable_values={"location": location_name})
