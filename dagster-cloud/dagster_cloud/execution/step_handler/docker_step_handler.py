@@ -2,7 +2,7 @@ import os
 from typing import List
 
 import docker
-from dagster import MetadataEntry
+from dagster import MetadataEntry, MetadataValue
 from dagster import _check as check
 from dagster.core.events import DagsterEvent, DagsterEventType, EngineEventData
 from dagster.core.execution.plan.objects import StepFailureData
@@ -95,8 +95,10 @@ class DockerStepHandler(StepHandler):
                 message="Launching step in Docker container",
                 event_specific_data=EngineEventData(
                     [
-                        MetadataEntry.text(step_key, "Step key"),
-                        MetadataEntry.text(step_container.id, "Docker container id"),
+                        MetadataEntry("Step key", value=MetadataValue.text(step_key)),
+                        MetadataEntry(
+                            "Docker container id", value=MetadataValue.text(step_container.id)
+                        ),
                     ],
                 ),
             )

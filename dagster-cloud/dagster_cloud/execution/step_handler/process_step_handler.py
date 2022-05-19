@@ -3,7 +3,7 @@ from collections import defaultdict
 from typing import Dict, List
 
 import dagster._check as check
-from dagster import MetadataEntry
+from dagster import MetadataEntry, MetadataValue
 from dagster.core.events import DagsterEvent, DagsterEventType, EngineEventData
 from dagster.core.execution.plan.objects import StepFailureData
 from dagster.core.executor.step_delegating import StepHandler
@@ -80,8 +80,8 @@ class ProcessStepHandler(StepHandler):
                 message="Stopping process for step",
                 event_specific_data=EngineEventData(
                     [
-                        MetadataEntry.text(step_key, "Step key"),
-                        MetadataEntry.int(pid, "Process id"),
+                        MetadataEntry("Step key", value=MetadataValue.text(step_key)),
+                        MetadataEntry("Process id", value=MetadataValue.int(pid)),
                     ],
                 ),
             )

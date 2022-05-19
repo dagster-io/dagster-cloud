@@ -6,6 +6,7 @@ from threading import Thread
 from typing import Dict, Iterable, NamedTuple, Tuple
 
 from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
+from dagster_cloud.cli.sandbox.utils import get_current_display_timestamp
 
 from .. import ui
 
@@ -26,7 +27,7 @@ class SyncState(Enum):
 
 class SyncMethod:
     @abstractmethod
-    def preflight(self) -> None:
+    def preflight(self, verbosity_level: int) -> None:
         """
         Validates that this sync method is available.
         """
@@ -67,8 +68,9 @@ class MutagenSyncMethod(SyncMethod):
     def __init__(self):
         self.targets: Dict[str, SyncedDirectory] = {}
         self.monitor_threads: Dict[str, Thread] = {}
+        self.verbosity_level: int = 0
 
-    def preflight(self) -> None:
+    def preflight(self, verbosity_level: int) -> None:
         try:
             subprocess.check_output(["mutagen", "version"])
         except subprocess.CalledProcessError:
@@ -77,6 +79,7 @@ class MutagenSyncMethod(SyncMethod):
                 f"in order to use code syncing functionality.\n\nRun {ui.as_code('brew install mutagen-io/mutagen/mutagen')} "
                 f"or see {ui.as_code('https://mutagen.io/documentation/introduction/installation')}."
             )
+        self.verbosity_level = verbosity_level
 
     def create_directory_sync(
         self,
@@ -95,6 +98,7 @@ class MutagenSyncMethod(SyncMethod):
                 f"--name={information.identifier}",
                 "--sync-mode",
                 "one-way-replica",
+                "--watch-mode-beta=no-watch",
                 # Start sessions paused so we get all lifecycle events
                 # unpause during sync loop
                 "--paused",
@@ -127,6 +131,9 @@ class MutagenSyncMethod(SyncMethod):
             subprocess.check_output(["mutagen", "sync", "resume", identifier])
         while True:
             identifier, stdout_line = console_out_queue.get()
+
+            if self.verbosity_level >= 2:
+                print(f"[{get_current_display_timestamp()}] [mutagen] {stdout_line.strip()}")
 
             # List of states:
             # https://github.com/mutagen-io/mutagen/blob/master/pkg/synchronization/state.proto

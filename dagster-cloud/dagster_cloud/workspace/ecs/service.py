@@ -53,6 +53,21 @@ class Service:
                 if eni.association_attribute:
                     return eni.association_attribute.get("PublicIp")
 
+    @property
+    def created_at(self):
+        task_arns = self.client.ecs.list_tasks(
+            cluster=self.client.cluster_name,
+            serviceName=self.name,
+        ).get("taskArns")
+
+        # Assume there's only one task per service
+        task = self.client.ecs.describe_tasks(
+            cluster=self.client.cluster_name,
+            tasks=task_arns,
+        ).get("tasks")[0]
+
+        return task.get("createdAt")
+
     def _long_arn(self, arn):
         # https://docs.aws.amazon.com/AmazonECS/latest/userguide/ecs-account-settings.html#ecs-resource-ids
         arn_parts = arn.split("/")

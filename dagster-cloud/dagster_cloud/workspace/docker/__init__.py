@@ -143,12 +143,16 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         )
 
     def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
-        containers = list(self._get_server_handles_for_location(location_name))
+        # If there are multiple handles for a location,
+        # get the most recently created one. We assume this
+        # is the "new" one in our blue/green deployment.
+        containers = sorted(
+            list(self._get_server_handles_for_location(location_name)),
+            key=lambda handle: handle.attrs["Created"],
+        )
 
-        if len(containers) > 1:
-            raise Exception(f"{location_name} has more than one running container.")
         try:
-            container = containers[0]
+            container = containers[-1]
         except IndexError:
             raise Exception(f"{location_name} has no running containers.")
 

@@ -158,14 +158,17 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
     def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
-        services = list(self._get_server_handles_for_location(location_name))
-
-        if len(services) > 1:
-            raise Exception(f"{location_name} has more than one running task.")
+        # If there are multiple handles for a location,
+        # get the most recently created one. We assume this
+        # is the "new" one in our blue/green deployment.
+        services = sorted(
+            list(self._get_server_handles_for_location(location_name)),
+            key=lambda handle: handle.created_at,
+        )
 
         try:
-            hostname = services[0].public_ip
-        except (KeyError):
+            hostname = services[-1].public_ip
+        except IndexError:
             raise Exception(f"{location_name} has no running tasks.")
 
         if not hostname:

@@ -1,11 +1,11 @@
 # pylint: disable=unused-argument
 
-from collections import Counter, defaultdict
+from collections import Counter
 import os
 import subprocess
-import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Dict, List, Optional
+from dagster_cloud.cli.sandbox.utils import get_current_display_timestamp
 
 import typer
 import yaml
@@ -20,10 +20,6 @@ from .sync_method import MutagenSyncMethod, SyncMethod, SyncState, SyncedDirecto
 CONNECTION_INFO_GIVE_UP_TIME = timedelta(seconds=120)
 
 app = Typer(help="Interface with your dev sandbox.")
-
-
-def get_current_display_timestamp():
-    return datetime.now().strftime("%H:%M:%S")
 
 
 def get_all_connection_info(client: GqlShimClient) -> Dict[str, DagsterCloudSandboxConnectionInfo]:
@@ -190,11 +186,14 @@ def validate_host_connection(connection_info: DagsterCloudSandboxConnectionInfo)
     )
 
 
-def print_sync_state(state_map: Dict[str, SyncState]):
+def print_sync_state(state_map: Dict[str, SyncState], remove_previous: bool = True):
     """
     Given a mapping from directory identifiers to sync states, prints a summary of
     all sync states.
     """
+    if remove_previous:
+        ui.erase_previous_line(2)
+
     c = Counter(state_map.values())
     n_unavailable = c.get(SyncState.UNAVAILABLE, 0)
     n_syncing = c.get(SyncState.SYNCING, 0)
@@ -212,20 +211,33 @@ def print_sync_state(state_map: Dict[str, SyncState]):
 
     if n_unavailable > 0:
         ui.print(ui.red(f"           {n_unavailable} directories unable to sync"))
-    else:
+    elif remove_previous:
         ui.print()
 
 
 @app.command(name="sync")
 @dagster_cloud_options(requires_url=True)
-def code_sync(organization: str, deployment: str, api_token: str, url: str):
+def code_sync(
+    organization: str,
+    deployment: str,
+    api_token: str,
+    url: str,
+    verbose: bool = typer.Option(False, "--verbose", "-v", is_flag=True),
+    very_verbose: bool = typer.Option(False, "--very-verbose", "-vv", is_flag=True),
+):
     """
     Starts to synchronize code in the local environment with code in your cloud sandbox.
     """
+    if verbose and very_verbose:
+        raise ui.error(
+            f"Cannot specify both {ui.as_code('--verbose')} and {ui.as_code('--very-verbose')} options"
+        )
+    verbosity_level = 2 if very_verbose else 1 if verbose else 0
+
     client = dev_deployment_client_or_error(url, organization, api_token)
 
     sync_method = get_default_sync_method()
-    sync_method.preflight()
+    sync_method.preflight(verbosity_level)
 
     # Populate list of locations to sync
     all_connection_info = get_all_connection_info(client)
@@ -248,8 +260,8 @@ def code_sync(organization: str, deployment: str, api_token: str, url: str):
     try:
         states_map = {dir.identifier: SyncState.SYNCING for dir in directories_to_sync}
 
-        ui.erase_previous_line()
-        print_sync_state(states_map)
+        print()
+        print_sync_state(states_map, remove_previous=True)
 
         for identifier, new_state in sync_method.sync_loop():
             last_state = states_map[identifier]
@@ -263,8 +275,7 @@ def code_sync(organization: str, deployment: str, api_token: str, url: str):
                 or new_state == SyncState.UNAVAILABLE
                 or last_state != new_state
             ):
-                ui.erase_previous_line(2)
-                print_sync_state(states_map)
+                print_sync_state(states_map, remove_previous=verbosity_level == 0)
 
     except KeyboardInterrupt:
         pass

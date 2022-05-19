@@ -1,5 +1,12 @@
 # Dagster Cloud Changelog
 
+# 0.14.16
+
+### Bugfixes
+
+* Fixed an issue where the backfills page would fail to load when a deployment contained backfills from a code location that was no longer in the workspace.
+* Fixed an issue where certain types of failures caused alerts to not fire.
+
 # 0.14.15
 
 ### New

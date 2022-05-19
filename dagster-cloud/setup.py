@@ -48,7 +48,6 @@ if __name__ == "__main__":
                 "pytest",
                 "types-PyYAML",
                 "types-requests",
-                "ursula",
                 f"dagster_k8s{pin}",
             ],
             "docker": ["docker", f"dagster_docker{pin}"],
