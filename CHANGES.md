@@ -1,5 +1,17 @@
 # Dagster Cloud Changelog
 
+# 0.14.17
+
+### New
+
+* The Backfill page in Dagit now loads much faster when there are backfills with large numbers of runs.
+
+### Bugfixes
+
+* Added a pin to version 3 of the `protobuf` library in Dagster Cloud, due to a breaking change in version 4 that was causing an error on startup.
+* Fixed an issue where configuration errors while launching a run sometimes didn’t display a useful explanation for why the configuration was invalid.
+* Fixed an issue where Dagster Cloud would sometimes fail to fire failure alerts due to external rate limits.
+
 # 0.14.16
 
 ### Bugfixes

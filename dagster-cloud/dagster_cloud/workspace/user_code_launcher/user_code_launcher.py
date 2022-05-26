@@ -28,6 +28,7 @@ from dagster.serdes import deserialize_as, serialize_dagster_namedtuple, whiteli
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudSandboxConnectionInfo,
+    DagsterCloudSandboxProxyInfo,
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
@@ -75,10 +76,17 @@ class UserCodeLauncherEntry(
             ("code_deployment_metadata", CodeDeploymentMetadata),
             ("update_timestamp", float),
             ("sandbox_saved_timestamp", Optional[float]),
+            ("sandbox_proxy_info", Optional[DagsterCloudSandboxProxyInfo]),
         ],
     )
 ):
-    def __new__(cls, code_deployment_metadata, update_timestamp, sandbox_saved_timestamp=None):
+    def __new__(
+        cls,
+        code_deployment_metadata,
+        update_timestamp,
+        sandbox_saved_timestamp=None,
+        sandbox_proxy_info=None,
+    ):
         return super(UserCodeLauncherEntry, cls).__new__(
             cls,
             check.inst_param(
@@ -86,6 +94,9 @@ class UserCodeLauncherEntry(
             ),
             check.float_param(update_timestamp, "update_timestamp"),
             check.opt_float_param(sandbox_saved_timestamp, "sandbox_saved_timestamp"),
+            check.opt_inst_param(
+                sandbox_proxy_info, "sandbox_proxy_info", DagsterCloudSandboxProxyInfo
+            ),
         )
 
 
@@ -386,6 +397,7 @@ class DagsterCloudUserCodeLauncher(
         location_name: str,
         metadata: CodeDeploymentMetadata,
         authorized_key: str,
+        proxy_info: DagsterCloudSandboxProxyInfo,
     ) -> GrpcServerEndpoint:
         """Create a new dev sandbox for the given location using the given metadata as configuration
         and return a GrpcServerEndpoint indicating a hostname/port that can be used to access
@@ -530,6 +542,7 @@ class DagsterCloudUserCodeLauncher(
                             to_update_key,
                             code_deployment_metadata,
                             authorized_key=self._authorized_key(),
+                            proxy_info=desired_entries[to_update_key].sandbox_proxy_info,
                         )
                 else:
                     new_updated_endpoint = self._create_new_server_endpoint(

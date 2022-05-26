@@ -23,6 +23,7 @@ from dagster.core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker,
 from dagster.core.storage.event_log.base import (
     AssetEntry,
     AssetRecord,
+    EventLogConnection,
     EventLogRecord,
     EventLogStorage,
     EventRecordsFilter,
@@ -45,14 +46,13 @@ from ..errors import GraphQLStorageError
 from .queries import (
     DELETE_EVENTS_MUTATION,
     ENABLE_SECONDARY_INDEX_MUTATION,
-    END_WATCH_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
     GET_ASSET_RECORDS_QUERY,
     GET_ASSET_RUN_IDS_QUERY,
     GET_EVENT_RECORDS_QUERY,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
-    GET_LOGS_FOR_RUN_QUERY,
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
+    GET_RECORDS_FOR_RUN_QUERY,
     GET_STATS_FOR_RUN_QUERY,
     GET_STEP_STATS_FOR_RUN_QUERY,
     HAS_ASSET_KEY_QUERY,
@@ -61,7 +61,6 @@ from .queries import (
     REINDEX_MUTATION,
     STORE_EVENT_MUTATION,
     UPGRADE_EVENT_LOG_STORAGE_MUTATION,
-    WATCH_MUTATION,
     WIPE_ASSET_MUTATION,
     WIPE_EVENT_LOG_STORAGE_MUTATION,
 )
@@ -239,13 +238,13 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             raise GraphQLStorageError(res)
         return res
 
-    def get_logs_for_run(
+    def get_records_for_run(
         self,
         run_id: str,
-        cursor: Optional[int] = -1,
+        cursor: Optional[str] = None,
         of_type: Optional[Union[DagsterEventType, Set[DagsterEventType]]] = None,
         limit: Optional[int] = None,
-    ) -> Iterable[EventLogEntry]:
+    ) -> EventLogConnection:
         check.invariant(
             not of_type
             or isinstance(of_type, DagsterEventType)
@@ -255,10 +254,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         is_of_type_set = isinstance(of_type, (set, frozenset))
 
         res = self._execute_query(
-            GET_LOGS_FOR_RUN_QUERY,
+            GET_RECORDS_FOR_RUN_QUERY,
             variables={
                 "runId": check.str_param(run_id, "run_id"),
-                "cursor": check.int_param(cursor, "cursor"),
+                "cursor": check.opt_str_param(cursor, "cursor"),
                 "ofType": (
                     cast(DagsterEventType, of_type).value
                     if of_type and not is_of_type_set
@@ -272,10 +271,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 "limit": limit,
             },
         )
-        return [
-            _event_log_entry_from_graphql(event)
-            for event in res["data"]["eventLogs"]["getLogsForRun"]
-        ]
+        connection_data = res["data"]["eventLogs"]["getRecordsForRun"]
+        return EventLogConnection(
+            records=[_event_record_from_graphql(record) for record in connection_data["records"]],
+            cursor=connection_data["cursor"],
+            has_more=connection_data["hasMore"],
+        )
 
     def get_stats_for_run(self, run_id: str) -> PipelineRunStatsSnapshot:
         res = self._execute_query(
@@ -384,24 +385,11 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def wipe(self):
         return self._execute_query(WIPE_EVENT_LOG_STORAGE_MUTATION)
 
-    def watch(self, run_id: str, start_cursor: int, callback: Callable):
-        # If we wanted to implement this for real we would have to figure out how to pass the
-        # callback as a serialized ConfigurableClass or equiv. May be better just to raise the
-        # NotImplementedError in this class and remove the GQL endpoint completely
-        return self._execute_query(
-            WATCH_MUTATION,
-            variables={
-                "runId": check.str_param(run_id, "run_id"),
-                "startCursor": check.int_param(start_cursor, "start_cursor"),
-                "callback": r"{}",
-            },
-        )
+    def watch(self, run_id: str, cursor: str, callback: Callable):
+        raise NotImplementedError("Not callable from user cloud")
 
     def end_watch(self, run_id: str, handler: Callable):
-        return self._execute_query(
-            END_WATCH_MUTATION,
-            variables={"runId": check.str_param(run_id, "run_id"), "handler": r"{}"},
-        )
+        raise NotImplementedError("Not callable from user cloud")
 
     def enable_secondary_index(self, name: str, run_id: str = None):
         return self._execute_query(

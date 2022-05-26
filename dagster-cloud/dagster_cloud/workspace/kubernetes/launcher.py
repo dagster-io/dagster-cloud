@@ -1,6 +1,6 @@
 import logging
 from contextlib import contextmanager
-from typing import Collection, Dict, Optional
+from typing import Collection, Dict, List, Optional
 
 import kubernetes
 import kubernetes.client as client
@@ -10,7 +10,10 @@ from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import merge_dicts
-from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
+from dagster_cloud.api.dagster_cloud_api import (
+    DagsterCloudSandboxConnectionInfo,
+    DagsterCloudSandboxProxyInfo,
+)
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
@@ -18,8 +21,11 @@ from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
 
 from ..user_code_launcher import (
+    DAGSTER_PROXY_HOSTNAME_ENV,
+    DAGSTER_SANDBOX_PORT_ENV,
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     DagsterCloudUserCodeLauncher,
+    find_unallocated_sandbox_port,
 )
 from .utils import (
     SERVICE_PORT,
@@ -203,6 +209,44 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
     def _create_new_server_endpoint(
         self, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
+        return self._launch(
+            location_name,
+            metadata,
+            command=metadata.get_grpc_server_command(),
+        )
+
+    def _create_dev_sandbox_endpoint(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        authorized_key: str,
+        proxy_info: DagsterCloudSandboxProxyInfo,
+    ) -> GrpcServerEndpoint:
+        port = find_unallocated_sandbox_port(
+            allocated_ports=[],
+            proxy_info=proxy_info,
+        )
+
+        return self._launch(
+            location_name,
+            metadata,
+            command=["supervisord"],
+            additional_environment={  # TODO: Abstract into SandboxContainerEnvironment
+                "DAGSTER_SANDBOX_AUTHORIZED_KEY": authorized_key,
+                DAGSTER_PROXY_HOSTNAME_ENV: proxy_info.hostname,
+                "DAGSTER_PROXY_PORT": str(proxy_info.port),
+                "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
+                DAGSTER_SANDBOX_PORT_ENV: port,
+            },
+        )
+
+    def _launch(
+        self,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        command: List[str],
+        additional_environment: Optional[Dict[str, str]] = None,
+    ) -> GrpcServerEndpoint:
         resource_name = unique_resource_name(location_name)
 
         container_context = K8sContainerContext(
@@ -236,6 +280,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
                         container_context.volumes,
                         container_context.labels,
                         container_context.resources,
+                        command=command,
+                        env=additional_environment,
                     ),
                 )
             self._logger.info("Created deployment: {}".format(api_response.metadata.name))
@@ -280,16 +326,45 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
 
         return endpoint
 
-    def _create_dev_sandbox_endpoint(
-        self,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        authorized_key: str,
-    ) -> GrpcServerEndpoint:
-        raise NotImplementedError
-
     def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
-        raise NotImplementedError
+        # TODO: Re-implement this in the base class. We'll need to extend handles to include
+        # info like the environment and created timestamp or add abstract methods to look
+        # this information up.
+
+        with self._get_api_instance() as api_instance:
+            deployments = api_instance.list_namespaced_deployment(
+                self._namespace,
+                label_selector=f"location_hash={get_unique_label_for_location(location_name)}",
+            ).items
+
+        # If there are multiple handles for a location,
+        # get the most recently created one. We assume this
+        # is the "new" one in our blue/green deployment.
+        sorted_deployments = sorted(
+            list(deployments),
+            key=lambda deployment: deployment.metadata.creation_timestamp,
+        )
+
+        try:
+            deployment = sorted_deployments[-1]
+        except IndexError:
+            raise Exception(f"{location_name} has no running deployments.")
+
+        containers = deployment.spec.template.spec.containers
+        for container in containers:
+            env = dict((env.name, env.value) for env in container.env)
+            port = env.get(DAGSTER_SANDBOX_PORT_ENV)
+            hostname = env.get(DAGSTER_PROXY_HOSTNAME_ENV)
+
+        if not hostname or not port:
+            raise Exception(f"{location_name} is not accessible via SSH")
+        username = "root"  # Hardcoded for now
+
+        return DagsterCloudSandboxConnectionInfo(
+            username=username,
+            hostname=hostname,
+            port=int(port),
+        )
 
     def _get_server_handles_for_location(self, location_name: str) -> Collection[str]:
         with self._get_api_instance() as api_instance:
@@ -324,3 +399,25 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
 
     def run_launcher(self):
         return self._launcher
+
+    def find_allocated_sandbox_ports(self):
+        allocated_ports = []
+
+        with self._get_api_instance() as api_instance:
+            deployments = api_instance.list_namespaced_deployment(
+                self._namespace,
+                label_selector="managed_by=K8sUserCodeLauncher",
+            ).items
+            for deployment in deployments:
+                containers = deployment.spec.template.spec.containers
+                for container in containers:
+                    env = dict((env.name, env.value) for env in container.env)
+                    port = env.get(DAGSTER_SANDBOX_PORT_ENV)
+                    if port:
+                        allocated_ports.append(int(port))
+
+        return sorted(allocated_ports)
+
+    @property
+    def supports_dev_sandbox(self) -> bool:
+        return True

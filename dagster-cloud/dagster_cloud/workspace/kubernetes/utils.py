@@ -4,6 +4,7 @@ import time
 import uuid
 
 import kubernetes
+from dagster.utils import merge_dicts
 from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
 
@@ -84,7 +85,14 @@ def construct_repo_location_deployment(
     volumes,
     labels,
     resources,
+    command=None,
+    env=None,
 ):
+    env = merge_dicts(
+        metadata.get_grpc_server_env(SERVICE_PORT),
+        env or {},
+        {"DAGSTER_SERVER_NAME": deployment_name},
+    )
     # TODO: enable liveness probes
     return client.V1Deployment(
         metadata=client.V1ObjectMeta(
@@ -107,12 +115,11 @@ def construct_repo_location_deployment(
                     containers=[
                         client.V1Container(
                             name="dagster",
-                            args=metadata.get_grpc_server_command(),
+                            args=command,
                             image=metadata.image,
                             image_pull_policy=pull_policy,
                             env=[
-                                client.V1EnvVar(name=key, value=value)
-                                for key, value in metadata.get_grpc_server_env(SERVICE_PORT).items()
+                                client.V1EnvVar(name=key, value=value) for key, value in env.items()
                             ],
                             env_from=[
                                 kubernetes.client.V1EnvFromSource(

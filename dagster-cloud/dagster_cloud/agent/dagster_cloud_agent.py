@@ -34,6 +34,7 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudApiSuccess,
     DagsterCloudApiThreadTelemetry,
     DagsterCloudApiUnknownCommandResponse,
+    DagsterCloudSandboxProxyInfo,
     DagsterCloudUploadApiResponse,
     TimestampedError,
 )
@@ -261,12 +262,25 @@ class DagsterCloudAgent:
             deployment_metadata = deserialize_as(
                 entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
             )
-            deployment_map[location_name] = UserCodeLauncherEntry(
-                deployment_metadata,
-                float(entry["metadataTimestamp"]),
+            sandbox_saved_timestamp = (
                 float(entry["sandboxSavedTimestamp"])
                 if entry.get("sandboxSavedTimestamp")
-                else None,
+                else None
+            )
+            sandbox_proxy_info = entry["sandboxProxyInfo"]
+            if sandbox_proxy_info:
+                sandbox_proxy_info = DagsterCloudSandboxProxyInfo(
+                    hostname=sandbox_proxy_info.get("hostname"),
+                    port=sandbox_proxy_info.get("port"),
+                    auth_token=sandbox_proxy_info.get("authToken"),
+                    min_port=sandbox_proxy_info.get("minPort"),
+                    max_port=sandbox_proxy_info.get("maxPort"),
+                )
+            deployment_map[location_name] = UserCodeLauncherEntry(
+                code_deployment_metadata=deployment_metadata,
+                update_timestamp=float(entry["metadataTimestamp"]),
+                sandbox_saved_timestamp=sandbox_saved_timestamp,
+                sandbox_proxy_info=sandbox_proxy_info,
             )
             if upload_results and entry["hasOutdatedData"]:
                 upload_locations.add(location_name)

@@ -11,7 +11,10 @@ from dagster import _check as check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
-from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
+from dagster_cloud.api.dagster_cloud_api import (
+    DagsterCloudSandboxConnectionInfo,
+    DagsterCloudSandboxProxyInfo,
+)
 from dagster_cloud.execution.step_handler.docker_step_handler import DockerStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
@@ -21,8 +24,10 @@ from docker.models.containers import Container
 
 from ..config_schema.docker import SHARED_DOCKER_CONFIG
 from ..user_code_launcher import (
+    DAGSTER_SANDBOX_PORT_ENV,
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     DagsterCloudUserCodeLauncher,
+    find_unallocated_sandbox_port,
 )
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
@@ -130,19 +135,31 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         location_name: str,
         metadata: CodeDeploymentMetadata,
         authorized_key: str,
+        proxy_info: DagsterCloudSandboxProxyInfo,
     ) -> GrpcServerEndpoint:
-
-        additional_ports = None if len(self._networks) else {22: find_free_port()}
+        port = find_unallocated_sandbox_port(
+            allocated_ports=list_allocated_sandbox_ports(),
+            proxy_info=proxy_info,
+        )
 
         return self._launch(
             location_name=location_name,
             metadata=metadata,
             command=["supervisord"],
-            additional_environment={"DAGSTER_DEV_SANDBOX_AUTHORIZED_KEY": authorized_key},
-            additional_ports=additional_ports,
+            additional_environment={  # TODO: Abstract into SandboxContainerEnvironment
+                "DAGSTER_SANDBOX_AUTHORIZED_KEY": authorized_key,
+                "DAGSTER_PROXY_HOSTNAME": proxy_info.hostname,
+                "DAGSTER_PROXY_PORT": str(proxy_info.port),
+                "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
+                DAGSTER_SANDBOX_PORT_ENV: port,
+            },
         )
 
     def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
+        # TODO: Re-implement this in the base class. We'll need to extend handles to include
+        # info like the environment and created timestamp or add abstract methods to look
+        # this information up.
+
         # If there are multiple handles for a location,
         # get the most recently created one. We assume this
         # is the "new" one in our blue/green deployment.
@@ -156,17 +173,15 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         except IndexError:
             raise Exception(f"{location_name} has no running containers.")
 
-        if len(self._networks):
-            hostname = container.name
-            port = 22
-        else:
-            hostname = "localhost"
-            try:
-                port = container.ports["22/tcp"][0]["HostPort"]
-            except (KeyError, IndexError):
-                raise Exception(
-                    f"Container {container.name} doesn't have SSH listening on any ports."
-                )
+        port_env = next(
+            (env for env in container.attrs["Config"]["Env"] if "DAGSTER_SANDBOX_PORT" in env)
+        )
+        port = port_env.split("=")[1]
+
+        hostname_env = next(
+            (env for env in container.attrs["Config"]["Env"] if "DAGSTER_PROXY_HOSTNAME" in env)
+        )
+        hostname = hostname_env.split("=")[1]
 
         username = "root"  # Hardcoded for now
 
@@ -191,7 +206,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         metadata: CodeDeploymentMetadata,
         command: List[str],
         additional_environment: Optional[Dict[str, str]] = None,
-        additional_ports: Optional[Dict[int, int]] = None,
     ) -> GrpcServerEndpoint:
         client = docker.client.from_env()
 
@@ -210,7 +224,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             )
         )
 
-        ports = additional_ports or {}
+        ports = {}
 
         has_network = len(self._networks) > 0
         if has_network:
@@ -225,6 +239,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             (dict([parse_env_var(env_var) for env_var in container_context.env_vars])),
             metadata.get_grpc_server_env(grpc_port),
             additional_environment or {},
+            {"DAGSTER_SERVER_NAME": container_name},
         )
 
         try:
@@ -318,3 +333,22 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         launcher.register_instance(self._instance)
 
         return launcher
+
+
+def list_allocated_sandbox_ports() -> List[int]:
+    client = docker.client.from_env()
+    containers = client.containers.list(
+        filters={
+            "label": GRPC_SERVER_LABEL,
+        },
+    )
+
+    allocated_ports = []
+    for container in containers:
+        env_list = container.attrs["Config"]["Env"]
+        env = dict(item.split("=", 1) for item in env_list)
+        port = env.get("DAGSTER_SANDBOX_PORT")
+        if port:
+            allocated_ports.append(int(port))
+
+    return sorted(allocated_ports)

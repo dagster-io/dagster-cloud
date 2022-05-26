@@ -68,6 +68,26 @@ class Service:
 
         return task.get("createdAt")
 
+    @property
+    def environ(self):
+        task_arns = self.client.ecs.list_tasks(
+            cluster=self.client.cluster_name,
+            serviceName=self.name,
+        ).get("taskArns")
+
+        # Assume there's only one task per service
+        task = self.client.ecs.describe_tasks(
+            cluster=self.client.cluster_name,
+            tasks=task_arns,
+        ).get("tasks")[0]
+
+        # Assume there's only one container per task
+        task_definition_arn = task.get("taskDefinitionArn")
+        container = self.client.ecs.describe_task_definition(taskDefinition=task_definition_arn)[
+            "taskDefinition"
+        ]["containerDefinitions"][0]
+        return dict((env["name"], env["value"]) for env in container["environment"])
+
     def _long_arn(self, arn):
         # https://docs.aws.amazon.com/AmazonECS/latest/userguide/ecs-account-settings.html#ecs-resource-ids
         arn_parts = arn.split("/")

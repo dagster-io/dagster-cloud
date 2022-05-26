@@ -102,13 +102,17 @@ ASSET_RECORD_FRAGMENT = (
     """
 )
 
-GET_LOGS_FOR_RUN_QUERY = (
-    EVENT_LOG_ENTRY_FRAGMENT
+GET_RECORDS_FOR_RUN_QUERY = (
+    EVENT_RECORD_FRAGMENT
     + """
-    query getLogsForRun($runId: String!, $cursor: Int, $ofType: String, $ofTypes: [String!], $limit: Int) {
+    query getRecordsForRun($runId: String!, $cursor: String, $ofType: String, $ofTypes: [String!], $limit: Int) {
         eventLogs {
-            getLogsForRun(runId: $runId, cursor: $cursor, ofType: $ofType, ofTypes: $ofTypes, limit: $limit) {
-                ...EventLogEntryFragment
+            getRecordsForRun(runId: $runId, cursor: $cursor, ofType: $ofType, ofTypes: $ofTypes, limit: $limit) {
+                records {
+                    ...EventLogRecordFragment
+                }
+                cursor
+                hasMore
             }
         }
     }
@@ -295,26 +299,6 @@ WIPE_EVENT_LOG_STORAGE_MUTATION = """
     mutation WipeEventLogStorage {
         eventLogs {
             Wipe {
-                ok
-            }
-        }
-    }
-"""
-
-WATCH_MUTATION = """
-    mutation Watch($runId: String!, $startCursor: Int!, $callback: JSONString!) {
-        eventLogs {
-            Watch(runId: $runId, startCursor: $startCursor, callback: $callback) {
-                ok
-            }
-        }
-    }
-"""
-
-END_WATCH_MUTATION = """
-    mutation EndWatch($runId: String!, $handler: JSONString!) {
-        eventLogs {
-            EndWatch(runId: $runId, handler: $handler) {
                 ok
             }
         }

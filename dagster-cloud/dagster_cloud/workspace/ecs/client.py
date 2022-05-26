@@ -7,6 +7,7 @@ import boto3
 import dagster._check as check
 from dagster.utils import merge_dicts
 
+from ..user_code_launcher import DAGSTER_SANDBOX_PORT_ENV
 from .service import Service
 
 
@@ -154,7 +155,7 @@ class Client:
             image=image,
             task_role_arn=task_role_arn,
             command=command,
-            env=env,
+            env=merge_dicts(env or {}, {"DAGSTER_SERVER_NAME": service_name}),
             secrets=secrets,
         )
 
@@ -444,3 +445,12 @@ class Client:
         ).get("events")
 
         return [event.get("message") for event in events]
+
+    def list_allocated_sandbox_ports(self) -> List[int]:
+        allocated_ports = []
+        for service in self.list_services():
+            if "dagster/location_name" in service.tags.keys():
+                port = service.environ.get(DAGSTER_SANDBOX_PORT_ENV)
+                if port:
+                    allocated_ports.append(int(port))
+        return allocated_ports

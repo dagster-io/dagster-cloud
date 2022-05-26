@@ -1,19 +1,20 @@
 # pylint: disable=unused-argument
 
-from collections import Counter
 import os
+import re
 import subprocess
+from collections import Counter
 from datetime import timedelta
 from typing import Dict, List, Optional
-from dagster_cloud.cli.sandbox.utils import get_current_display_timestamp
 
 import typer
 import yaml
 from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
 from dagster_cloud.cli.config_utils import dagster_cloud_options
+from dagster_cloud.cli.sandbox.utils import get_current_display_timestamp
 from dagster_cloud.storage.client import GqlShimClient
 from typer import Typer
-import re
+
 from .. import gql, ui
 from .sync_method import MutagenSyncMethod, SyncMethod, SyncState, SyncedDirectory
 

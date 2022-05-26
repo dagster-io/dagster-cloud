@@ -19,6 +19,13 @@ WORKSPACE_ENTRIES_QUERY = """
                 hasOutdatedData
                 metadataTimestamp
                 sandboxSavedTimestamp
+                sandboxProxyInfo {
+                    hostname
+                    port
+                    authToken
+                    minPort
+                    maxPort
+                }
             }
         }
     }

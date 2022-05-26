@@ -11,7 +11,10 @@ from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster.grpc.server import GrpcServerProcess
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
-from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
+from dagster_cloud.api.dagster_cloud_api import (
+    DagsterCloudSandboxConnectionInfo,
+    DagsterCloudSandboxProxyInfo,
+)
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.execution.step_handler.process_step_handler import ProcessStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
@@ -153,6 +156,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         location_name: str,
         metadata: CodeDeploymentMetadata,
         authorized_key: str,
+        proxy_info: DagsterCloudSandboxProxyInfo,
     ) -> GrpcServerEndpoint:
         raise NotImplementedError
 

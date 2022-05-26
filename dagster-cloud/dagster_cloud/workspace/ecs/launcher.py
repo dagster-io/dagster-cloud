@@ -10,12 +10,16 @@ from dagster.utils import merge_dicts
 from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
-from dagster_cloud.api.dagster_cloud_api import DagsterCloudSandboxConnectionInfo
+from dagster_cloud.api.dagster_cloud_api import (
+    DagsterCloudSandboxConnectionInfo,
+    DagsterCloudSandboxProxyInfo,
+)
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     DagsterCloudUserCodeLauncher,
+    find_unallocated_sandbox_port,
 )
 from .client import Client
 from .service import Service
@@ -149,12 +153,24 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         location_name: str,
         metadata: CodeDeploymentMetadata,
         authorized_key: str,
+        proxy_info: DagsterCloudSandboxProxyInfo,
     ) -> GrpcServerEndpoint:
+        port = find_unallocated_sandbox_port(
+            allocated_ports=self.client.list_allocated_sandbox_ports(),
+            proxy_info=proxy_info,
+        )
         return self._launch(
             location_name,
             metadata,
             command=["supervisord"],
-            additional_environment={"DAGSTER_DEV_SANDBOX_AUTHORIZED_KEY": authorized_key},
+            additional_environment={
+                # TODO: Abstract into SandboxContainerEnvironment
+                "DAGSTER_SANDBOX_AUTHORIZED_KEY": authorized_key,
+                "DAGSTER_PROXY_HOSTNAME": proxy_info.hostname,
+                "DAGSTER_PROXY_PORT": str(proxy_info.port),
+                "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
+                "DAGSTER_SANDBOX_PORT": port,
+            },
         )
 
     def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
@@ -167,17 +183,23 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
         try:
-            hostname = services[-1].public_ip
+            service = services[-1]
         except IndexError:
             raise Exception(f"{location_name} has no running tasks.")
 
-        if not hostname:
-            raise Exception(f"{location_name} does not have a public IP address.")
+        hostname = service.environ.get("DAGSTER_PROXY_HOSTNAME")
+        port = service.environ.get("DAGSTER_SANDBOX_PORT")
 
-        port = 22  # Hardcoded for now
+        if not hostname and port:
+            raise Exception(f"{location_name} is not accessible via SSH")
+
         username = "root"  # Hardcoded for now
 
-        return DagsterCloudSandboxConnectionInfo(username=username, hostname=hostname, port=port)
+        return DagsterCloudSandboxConnectionInfo(
+            username=username,
+            hostname=hostname,
+            port=int(port),
+        )
 
     def _launch(
         self,
