@@ -41,8 +41,8 @@ from dagster.serdes.serdes import deserialize_as
 from dagster.utils import datetime_as_float
 from dagster.utils.error import SerializableErrorInfo
 from dagster_cloud.storage.event_logs.utils import truncate_event
+from dagster_cloud_cli.core.errors import GraphQLStorageError
 
-from ..errors import GraphQLStorageError
 from .queries import (
     DELETE_EVENTS_MUTATION,
     ENABLE_SECONDARY_INDEX_MUTATION,

@@ -27,7 +27,6 @@ from ..user_code_launcher import (
     DAGSTER_SANDBOX_PORT_ENV,
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     DagsterCloudUserCodeLauncher,
-    find_unallocated_sandbox_port,
 )
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
@@ -137,11 +136,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         authorized_key: str,
         proxy_info: DagsterCloudSandboxProxyInfo,
     ) -> GrpcServerEndpoint:
-        port = find_unallocated_sandbox_port(
-            allocated_ports=list_allocated_sandbox_ports(),
-            proxy_info=proxy_info,
-        )
-
         return self._launch(
             location_name=location_name,
             metadata=metadata,
@@ -151,7 +145,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
                 "DAGSTER_PROXY_HOSTNAME": proxy_info.hostname,
                 "DAGSTER_PROXY_PORT": str(proxy_info.port),
                 "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
-                DAGSTER_SANDBOX_PORT_ENV: port,
+                DAGSTER_SANDBOX_PORT_ENV: str(proxy_info.ssh_port),
             },
         )
 
@@ -333,22 +327,3 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         launcher.register_instance(self._instance)
 
         return launcher
-
-
-def list_allocated_sandbox_ports() -> List[int]:
-    client = docker.client.from_env()
-    containers = client.containers.list(
-        filters={
-            "label": GRPC_SERVER_LABEL,
-        },
-    )
-
-    allocated_ports = []
-    for container in containers:
-        env_list = container.attrs["Config"]["Env"]
-        env = dict(item.split("=", 1) for item in env_list)
-        port = env.get("DAGSTER_SANDBOX_PORT")
-        if port:
-            allocated_ports.append(int(port))
-
-    return sorted(allocated_ports)

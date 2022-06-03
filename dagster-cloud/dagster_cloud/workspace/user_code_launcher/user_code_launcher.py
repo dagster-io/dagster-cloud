@@ -33,7 +33,6 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
 )
-from dagster_cloud.errors import raise_http_error
 from dagster_cloud.execution.monitoring import (
     CloudRunWorkerStatuses,
     start_run_worker_monitoring_thread,
@@ -41,6 +40,7 @@ from dagster_cloud.execution.monitoring import (
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.util import diff_serializable_namedtuple_map
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_cloud_cli.core.errors import raise_http_error
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
 
@@ -49,12 +49,23 @@ USER_CODE_LAUNCHER_RECONCILE_INTERVAL = 1
 
 ServerHandle = TypeVar("ServerHandle")
 
-SANDBOX_QUERY = """
+DEPLOYMENT_INFO_QUERY = """
     query DeploymentInfo {
          deploymentInfo {
              deploymentType
          }
      }
+"""
+
+SANDBOX_PROXY_INFO_QUERY = """
+    query SandboxProxyInfo {
+        sandboxProxyInfo {
+            hostname
+            port
+            authToken
+            sshPort
+        }
+    }
 """
 
 AUTHORIZED_KEY_QUERY = """
@@ -67,6 +78,16 @@ AUTHORIZED_KEY_QUERY = """
      }
 """
 
+INIT_UPLOAD_LOCATIONS_QUERY = """
+    query WorkspaceEntries {
+        workspace {
+            workspaceEntries {
+                locationName
+            }
+        }
+    }
+"""
+
 
 @whitelist_for_serdes
 class UserCodeLauncherEntry(
@@ -76,7 +97,6 @@ class UserCodeLauncherEntry(
             ("code_deployment_metadata", CodeDeploymentMetadata),
             ("update_timestamp", float),
             ("sandbox_saved_timestamp", Optional[float]),
-            ("sandbox_proxy_info", Optional[DagsterCloudSandboxProxyInfo]),
         ],
     )
 ):
@@ -85,7 +105,6 @@ class UserCodeLauncherEntry(
         code_deployment_metadata,
         update_timestamp,
         sandbox_saved_timestamp=None,
-        sandbox_proxy_info=None,
     ):
         return super(UserCodeLauncherEntry, cls).__new__(
             cls,
@@ -94,9 +113,6 @@ class UserCodeLauncherEntry(
             ),
             check.float_param(update_timestamp, "update_timestamp"),
             check.opt_float_param(sandbox_saved_timestamp, "sandbox_saved_timestamp"),
-            check.opt_inst_param(
-                sandbox_proxy_info, "sandbox_proxy_info", DagsterCloudSandboxProxyInfo
-            ),
         )
 
 
@@ -138,7 +154,7 @@ class DagsterCloudUserCodeLauncher(
     def is_dev_sandbox(self):
         if self._is_dev_sandbox == None and self.supports_dev_sandbox:
             client = self._instance.graphql_client
-            result = client.execute(SANDBOX_QUERY)
+            result = client.execute(DEPLOYMENT_INFO_QUERY)
             self._is_dev_sandbox = result["data"]["deploymentInfo"]["deploymentType"] == "DEV"
         return self._is_dev_sandbox
 
@@ -152,9 +168,28 @@ class DagsterCloudUserCodeLauncher(
                 return keys[0]
         return None
 
+    def _get_proxy_info(self) -> Optional[DagsterCloudSandboxProxyInfo]:
+        client = self._instance.graphql_client
+        result = client.execute(SANDBOX_PROXY_INFO_QUERY)["data"]["sandboxProxyInfo"]
+        if result:
+            return DagsterCloudSandboxProxyInfo(
+                hostname=result["hostname"],
+                port=result["port"],
+                auth_token=result["authToken"],
+                ssh_port=result["sshPort"],
+            )
+        return None
+
     def start(self, run_reconcile_thread=True):
         # Initialize
         self.is_dev_sandbox()
+
+        if self.is_dev_sandbox():
+            # Make sure dev sandboxes trigger location uploads on start to upload
+            # new connection info
+            result = self._instance.graphql_client.execute(INIT_UPLOAD_LOCATIONS_QUERY)
+            entries = result["data"]["workspace"]["workspaceEntries"]
+            self._upload_locations = set([entry["locationName"] for entry in entries])
 
         check.invariant(
             not self._started,
@@ -542,7 +577,7 @@ class DagsterCloudUserCodeLauncher(
                             to_update_key,
                             code_deployment_metadata,
                             authorized_key=self._authorized_key(),
-                            proxy_info=desired_entries[to_update_key].sandbox_proxy_info,
+                            proxy_info=self._get_proxy_info(),
                         )
                 else:
                     new_updated_endpoint = self._create_new_server_endpoint(

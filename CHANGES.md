@@ -1,42 +1,54 @@
 # Dagster Cloud Changelog
 
+# 0.14.19
+
+### New
+
+- Added a new `dagster-cloud-cli` package. You can install this package if you want to interact with the CLI without also installing many of the additional packages that `dagster-cloud` depends on, simplifying installation on M1 Macs.
+- [Deployment settings](https://docs.dagster.cloud/guides/managing-deployments#deployment-settings) can now be configured using a YAML editor in the Dagster Cloud UI.
+
+### Bugfixes
+
+- Fixed an issue where a user could set their run coordinator’s `max_concurrent_runs` to be negative.
+- [dagit] Alerts can now be configured on a deployment with no jobs.
+
 # 0.14.17
 
 ### New
 
-* The Backfill page in Dagit now loads much faster when there are backfills with large numbers of runs.
+- The Backfill page in Dagit now loads much faster when there are backfills with large numbers of runs.
 
 ### Bugfixes
 
-* Added a pin to version 3 of the `protobuf` library in Dagster Cloud, due to a breaking change in version 4 that was causing an error on startup.
-* Fixed an issue where configuration errors while launching a run sometimes didn’t display a useful explanation for why the configuration was invalid.
-* Fixed an issue where Dagster Cloud would sometimes fail to fire failure alerts due to external rate limits.
+- Added a pin to version 3 of the `protobuf` library in Dagster Cloud, due to a breaking change in version 4 that was causing an error on startup.
+- Fixed an issue where configuration errors while launching a run sometimes didn’t display a useful explanation for why the configuration was invalid.
+- Fixed an issue where Dagster Cloud would sometimes fail to fire failure alerts due to external rate limits.
 
 # 0.14.16
 
 ### Bugfixes
 
-* Fixed an issue where the backfills page would fail to load when a deployment contained backfills from a code location that was no longer in the workspace.
-* Fixed an issue where certain types of failures caused alerts to not fire.
+- Fixed an issue where the backfills page would fail to load when a deployment contained backfills from a code location that was no longer in the workspace.
+- Fixed an issue where certain types of failures caused alerts to not fire.
 
 # 0.14.15
 
 ### New
 
-* You can now set up automatic retries for Jobs. Set a default for all Jobs in your deployment using `run_retries.max_retries` in [Deployment Settings](https://docs.dagster.cloud/guides/managing-deployments#configuring-the-settings), or set it per run using the `dagster/max_retries` tag. When configured, failed runs will be reexecuted from failure up to the maximum number of times.
-* When a Slack alert is sent for a run triggered by a sensor or schedule, the alert now contains a URL link to the sensor or schedule.
+- You can now set up automatic retries for Jobs. Set a default for all Jobs in your deployment using `run_retries.max_retries` in [Deployment Settings](https://docs.dagster.cloud/guides/managing-deployments#configuring-the-settings), or set it per run using the `dagster/max_retries` tag. When configured, failed runs will be reexecuted from failure up to the maximum number of times.
+- When a Slack alert is sent for a run triggered by a sensor or schedule, the alert now contains a URL link to the sensor or schedule.
 
 ### Bugfixes
 
-* Fixed github login setting misleading user display names when using multiple emails.
+- Fixed github login setting misleading user display names when using multiple emails.
 
 # 0.14.14
 
 ### New
 
-* Alert Policies can now be edited in Dagit. To view and configure the alert policies for your deployment, click on the profile picture in the upper-right corner of Dagit, navigate to the Cloud Settings page, and click on the Alerts tab. https://docs.dagster.cloud/guides/alerts
+- Alert Policies can now be edited in Dagit. To view and configure the alert policies for your deployment, click on the profile picture in the upper-right corner of Dagit, navigate to the Cloud Settings page, and click on the Alerts tab. https://docs.dagster.cloud/guides/alerts
 
-#  0.14.13
+# 0.14.13
 
 ### New
 

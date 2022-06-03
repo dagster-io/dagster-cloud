@@ -12,14 +12,14 @@ from dagster.core.instance import DagsterInstance
 from dagster.core.instance.config import config_field_for_configurable_class
 from dagster.core.instance.ref import ConfigurableClassData, InstanceRef, configurable_class_data
 from dagster.core.launcher import RunLauncher
-
-from ..auth.constants import get_organization_name_from_agent_token
-from ..storage.client import (
+from dagster_cloud_cli.core.graphql_client import (
     create_cloud_requests_session,
     create_proxy_client,
-    dagster_cloud_api_config,
     get_agent_headers,
 )
+
+from ..auth.constants import get_organization_name_from_agent_token
+from ..storage.client import dagster_cloud_api_config
 from ..util import get_env_names_from_config
 
 

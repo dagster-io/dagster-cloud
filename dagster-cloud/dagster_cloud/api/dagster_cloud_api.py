@@ -434,17 +434,15 @@ class DagsterCloudSandboxProxyInfo(
             ("hostname", str),
             ("port", int),
             ("auth_token", str),
-            ("min_port", int),
-            ("max_port", int),
+            ("ssh_port", int),
         ],
     )
 ):
-    def __new__(cls, hostname: str, port: int, auth_token: str, min_port: int, max_port: int):
+    def __new__(cls, hostname: str, port: int, auth_token: str, ssh_port: int):
         return super(DagsterCloudSandboxProxyInfo, cls).__new__(
             cls,
             check.str_param(hostname, "hostname"),
             check.int_param(port, "port"),
             check.str_param(auth_token, "auth_token"),
-            check.int_param(min_port, "min_port"),
-            check.int_param(max_port, "max_port"),
+            check.int_param(ssh_port, "min_port"),
         )

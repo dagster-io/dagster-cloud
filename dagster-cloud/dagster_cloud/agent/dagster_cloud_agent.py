@@ -34,19 +34,17 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudApiSuccess,
     DagsterCloudApiThreadTelemetry,
     DagsterCloudApiUnknownCommandResponse,
-    DagsterCloudSandboxProxyInfo,
     DagsterCloudUploadApiResponse,
     TimestampedError,
 )
 from dagster_cloud.instance import DagsterCloudAgentInstance
-from dagster_cloud.storage.errors import GraphQLStorageError
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,
 )
+from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
 
-from ..errors import raise_http_error
 from ..version import __version__
 from .queries import (
     ADD_AGENT_HEARTBEAT_MUTATION,
@@ -267,20 +265,10 @@ class DagsterCloudAgent:
                 if entry.get("sandboxSavedTimestamp")
                 else None
             )
-            sandbox_proxy_info = entry["sandboxProxyInfo"]
-            if sandbox_proxy_info:
-                sandbox_proxy_info = DagsterCloudSandboxProxyInfo(
-                    hostname=sandbox_proxy_info.get("hostname"),
-                    port=sandbox_proxy_info.get("port"),
-                    auth_token=sandbox_proxy_info.get("authToken"),
-                    min_port=sandbox_proxy_info.get("minPort"),
-                    max_port=sandbox_proxy_info.get("maxPort"),
-                )
             deployment_map[location_name] = UserCodeLauncherEntry(
                 code_deployment_metadata=deployment_metadata,
                 update_timestamp=float(entry["metadataTimestamp"]),
                 sandbox_saved_timestamp=sandbox_saved_timestamp,
-                sandbox_proxy_info=sandbox_proxy_info,
             )
             if upload_results and entry["hasOutdatedData"]:
                 upload_locations.add(location_name)

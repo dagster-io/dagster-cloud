@@ -19,18 +19,10 @@ WORKSPACE_ENTRIES_QUERY = """
                 hasOutdatedData
                 metadataTimestamp
                 sandboxSavedTimestamp
-                sandboxProxyInfo {
-                    hostname
-                    port
-                    authToken
-                    minPort
-                    maxPort
-                }
             }
         }
     }
 """
-
 
 ADD_AGENT_HEARTBEAT_MUTATION = """
     mutation AddAgentHeartbeat($serializedAgentHeartbeat: String!) {

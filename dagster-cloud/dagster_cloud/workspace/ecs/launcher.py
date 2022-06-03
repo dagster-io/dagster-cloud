@@ -19,7 +19,6 @@ from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     DagsterCloudUserCodeLauncher,
-    find_unallocated_sandbox_port,
 )
 from .client import Client
 from .service import Service
@@ -155,10 +154,6 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         authorized_key: str,
         proxy_info: DagsterCloudSandboxProxyInfo,
     ) -> GrpcServerEndpoint:
-        port = find_unallocated_sandbox_port(
-            allocated_ports=self.client.list_allocated_sandbox_ports(),
-            proxy_info=proxy_info,
-        )
         return self._launch(
             location_name,
             metadata,
@@ -169,7 +164,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "DAGSTER_PROXY_HOSTNAME": proxy_info.hostname,
                 "DAGSTER_PROXY_PORT": str(proxy_info.port),
                 "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
-                "DAGSTER_SANDBOX_PORT": port,
+                "DAGSTER_SANDBOX_PORT": str(proxy_info.ssh_port),
             },
         )
 

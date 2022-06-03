@@ -25,7 +25,6 @@ from ..user_code_launcher import (
     DAGSTER_SANDBOX_PORT_ENV,
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     DagsterCloudUserCodeLauncher,
-    find_unallocated_sandbox_port,
 )
 from .utils import (
     SERVICE_PORT,
@@ -222,11 +221,6 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         authorized_key: str,
         proxy_info: DagsterCloudSandboxProxyInfo,
     ) -> GrpcServerEndpoint:
-        port = find_unallocated_sandbox_port(
-            allocated_ports=[],
-            proxy_info=proxy_info,
-        )
-
         return self._launch(
             location_name,
             metadata,
@@ -236,7 +230,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
                 DAGSTER_PROXY_HOSTNAME_ENV: proxy_info.hostname,
                 "DAGSTER_PROXY_PORT": str(proxy_info.port),
                 "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
-                DAGSTER_SANDBOX_PORT_ENV: port,
+                DAGSTER_SANDBOX_PORT_ENV: str(proxy_info.ssh_port),
             },
         )
 
@@ -399,24 +393,6 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
 
     def run_launcher(self):
         return self._launcher
-
-    def find_allocated_sandbox_ports(self):
-        allocated_ports = []
-
-        with self._get_api_instance() as api_instance:
-            deployments = api_instance.list_namespaced_deployment(
-                self._namespace,
-                label_selector="managed_by=K8sUserCodeLauncher",
-            ).items
-            for deployment in deployments:
-                containers = deployment.spec.template.spec.containers
-                for container in containers:
-                    env = dict((env.name, env.value) for env in container.env)
-                    port = env.get(DAGSTER_SANDBOX_PORT_ENV)
-                    if port:
-                        allocated_ports.append(int(port))
-
-        return sorted(allocated_ports)
 
     @property
     def supports_dev_sandbox(self) -> bool:

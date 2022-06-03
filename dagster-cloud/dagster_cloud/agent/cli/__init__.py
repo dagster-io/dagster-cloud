@@ -11,9 +11,8 @@ from dagster.utils.interrupts import capture_interrupts
 from dagster.utils.log import default_date_format_string, default_format_string
 from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent
 from dagster_cloud.instance import DagsterCloudAgentInstance
+from dagster_cloud_cli import ui
 from typer import Argument, Option, Typer
-
-from ...cli import ui
 
 app = Typer(help="Interact with the Dagster Cloud agent.")
 

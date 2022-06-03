@@ -24,14 +24,13 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
 )
-from dagster_cloud.storage.client import GqlShimClient
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_cloud_cli import gql, ui
+from dagster_cloud_cli.config_utils import DEFAULT_AGENT_TIMEOUT, dagster_cloud_options
+from dagster_cloud_cli.core.graphql_client import GqlShimClient
+from dagster_cloud_cli.core.headers.impl import get_dagster_cloud_api_headers
+from dagster_cloud_cli.utils import add_options
 from typer import Argument, Option, Typer
-
-from ...cli import gql, ui
-from ...cli.config_utils import DEFAULT_AGENT_TIMEOUT, dagster_cloud_options
-from ...cli.utils import add_options
-from ...headers.impl import get_dagster_cloud_api_headers
 
 DEFAULT_LOCATIONS_YAML_FILENAME = "locations.yaml"
 

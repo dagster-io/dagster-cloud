@@ -30,6 +30,7 @@ if __name__ == "__main__":
         include_package_data=True,
         install_requires=[
             f"dagster{pin}",
+            f"dagster-cloud-cli{pin}",
             "questionary",
             "requests",
             "typer[all]",
@@ -62,9 +63,4 @@ if __name__ == "__main__":
             "License :: OSI Approved :: Apache Software License",
             "Operating System :: OS Independent",
         ],
-        entry_points={
-            "console_scripts": [
-                "dagster-cloud = dagster_cloud.cli.entrypoint:app",
-            ]
-        },
     )

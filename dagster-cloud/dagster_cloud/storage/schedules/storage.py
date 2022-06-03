@@ -10,8 +10,8 @@ from dagster.serdes import (
     deserialize_as,
     serialize_dagster_namedtuple,
 )
+from dagster_cloud_cli.core.errors import GraphQLStorageError
 
-from ..errors import GraphQLStorageError
 from .queries import (
     ADD_JOB_STATE_MUTATION,
     ALL_STORED_JOB_STATE_QUERY,

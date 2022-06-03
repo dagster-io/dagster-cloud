@@ -1,5 +1,5 @@
-from ..headers.impl import get_dagster_cloud_api_headers
-from ..storage.client import GqlShimClient
+from dagster_cloud_cli.core.graphql_client import GqlShimClient
+from dagster_cloud_cli.core.headers.impl import get_dagster_cloud_api_headers
 
 
 def create_cloud_dagit_client(url: str, api_token: str, retries=3):

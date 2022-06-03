@@ -34,8 +34,8 @@ from dagster.serdes import (
     serialize_dagster_namedtuple,
 )
 from dagster.utils import utc_datetime_from_timestamp
+from dagster_cloud_cli.core.errors import GraphQLStorageError
 
-from ..errors import GraphQLStorageError
 from .queries import (
     ADD_BACKFILL_MUTATION,
     ADD_DAEMON_HEARTBEAT_MUTATION,

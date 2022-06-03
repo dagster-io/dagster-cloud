@@ -14,8 +14,7 @@ from dagster.core.storage.compute_log_manager import (
 from dagster.core.storage.local_compute_log_manager import LocalComputeLogManager
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
 from dagster.utils import ensure_file
-
-from ...errors import raise_http_error
+from dagster_cloud_cli.core.errors import raise_http_error
 
 
 class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):

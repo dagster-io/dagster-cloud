@@ -1,9 +1,5 @@
 from typing import Optional
 
-API_TOKEN_HEADER = "Dagster-Cloud-Api-Token"
-
-DEPLOYMENT_NAME_HEADER = "Dagster-Cloud-Deployment"
-
 
 def get_hardcoded_test_agent_token(organization_name) -> str:
     return f"agent:{organization_name}:hardcoded"
