@@ -85,6 +85,8 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
 
+        self._run_launcher: Optional[CloudProcessRunLauncher] = None
+
         super(ProcessUserCodeLauncher, self).__init__()
 
     @property
@@ -250,10 +252,11 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         return self._step_handler
 
     def run_launcher(self) -> CloudProcessRunLauncher:
-        launcher = CloudProcessRunLauncher()
-        launcher.register_instance(self._instance)
+        if not self._run_launcher:
+            self._run_launcher = CloudProcessRunLauncher()
+            self._run_launcher.register_instance(self._instance)
 
-        return launcher
+        return self._run_launcher
 
     def _cleanup_servers(self):
         while len(self._process_entries):

@@ -32,6 +32,14 @@ SHARED_K8S_CONFIG = {
         is_required=False,
         description="The name of the Kubernetes service account under which to run.",
     ),
+    "env_vars": Field(
+        Noneable(Array(str)),
+        is_required=False,
+        description="A list of environment variables to inject into the Job. Each can be "
+        "of the form KEY=VALUE or just KEY (in which case the value will be pulled from "
+        "the current process). Default: ``[]``. See: "
+        "https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/#configure-all-key-value-pairs-in-a-secret-as-container-environment-variables",
+    ),
     "volume_mounts": Field(
         Array(
             # Can supply either snake_case or camelCase, but in typeaheads based on the

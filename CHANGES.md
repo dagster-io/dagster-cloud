@@ -1,5 +1,32 @@
 # Dagster Cloud Changelog
 
+# 0.14.20
+
+### New
+
+- The Kubernetes agent and ECS agent can now include arbitrary environment variables in the containers that they create to run Dagster code. You can configure environment variables by setting `env_vars` in the `dagster.yaml` file for the agent, which will apply them to all code locations. You can also set `env_vars` on individual code locations. For example, to configure a code location to always set `FOO_ENV_VAR` to `bar_value` when creating Kubernetes pods, you can set this config in the Workspace tab or via the Dagster Cloud GitHub action:
+
+```yaml
+location_name:my_location
+image: my_repo:my_tag
+code_source:
+  package_name: my_package
+container_context:
+  k8s:
+    env_vars:
+      - FOO_ENV_VAR=bar_value
+      - WILL_LOAD_ENV_VAR_FROM_PROCESS_IF_VALUE_NOT_SET
+```
+
+- Introduced a checklist to guide new organizations in setting up their Cloud deployment.
+
+- Users with Editor or Admin permissions can now edit [deployment settings](https://docs.dagster.cloud/guides/managing-deployments#deployment-settings) from the Dagster Cloud UI, by clicking on the gear icon next to the deployment name in the deployment switcher in the upper-right corner of the screen.
+
+### Bugfixes
+
+- Fixed a bug where renaming an alert created a new alert.
+- Attempting to create a deployment with a duplicate name now produces a clear error.
+
 # 0.14.19
 
 ### New

@@ -372,12 +372,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def upgrade(self):
         return self._execute_query(UPGRADE_EVENT_LOG_STORAGE_MUTATION)
 
-    def reindex_assets(self, print_fn: Callable = lambda _: None, force: bool = False):
+    def reindex_assets(self, print_fn: Optional[Callable] = lambda _: None, force: bool = False):
         return self._execute_query(
             REINDEX_MUTATION, variables={"force": check.bool_param(force, "force")}
         )
 
-    def reindex_events(self, print_fn: Callable = lambda _: None, force: bool = False):
+    def reindex_events(self, print_fn: Optional[Callable] = lambda _: None, force: bool = False):
         return self._execute_query(
             REINDEX_MUTATION, variables={"force": check.bool_param(force, "force")}
         )

@@ -40,6 +40,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         inst_data: Optional[ConfigurableClassData] = None,
         secrets=None,
         secrets_tag=None,
+        env_vars=None,
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
@@ -55,6 +56,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self.log_group = log_group
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
         self.secrets = check.opt_list_param(secrets, "secrets")
+        self.env_vars = check.opt_list_param(env_vars, "env_vars")
 
         if all(isinstance(secret, str) for secret in self.secrets):
             self.secrets = [
@@ -121,6 +123,13 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     "AWS Secrets Manager secrets with this tag will be mounted as "
                     "environment variables in the container."
                 ),
+            ),
+            "env_vars": Field(
+                [StringSource],
+                is_required=False,
+                description="List of environment variable names to include in the ECS task. "
+                "Each can be of the form KEY=VALUE or just KEY (in which case the value will be pulled "
+                "from the current process)",
             ),
             "server_process_startup_timeout": Field(
                 IntSource,
@@ -206,11 +215,15 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         port = 4000
 
         container_context = EcsContainerContext(
-            secrets=self.secrets, secrets_tags=[self.secrets_tag] if self.secrets_tag else []
+            secrets=self.secrets,
+            secrets_tags=[self.secrets_tag] if self.secrets_tag else [],
+            env_vars=self.env_vars,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         environment = merge_dicts(
-            (additional_environment or {}), metadata.get_grpc_server_env(port)
+            container_context.get_environment_dict(),
+            (additional_environment or {}),
+            metadata.get_grpc_server_env(port),
         )
 
         service = self.client.create_service(
@@ -266,7 +279,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         pass
 
     def run_launcher(self) -> RunLauncher:
-        launcher = EcsRunLauncher(secrets=self.secrets, secrets_tag=self.secrets_tag)
+        launcher = EcsRunLauncher(
+            secrets=self.secrets, secrets_tag=self.secrets_tag, env_vars=self.env_vars
+        )
         launcher.register_instance(self._instance)
 
         return launcher

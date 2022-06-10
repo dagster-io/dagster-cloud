@@ -246,6 +246,30 @@ instance_class:
             "GraphQLScheduleStorage",
             empty_yaml,
         )
+        defaults["storage"] = ConfigurableClassData(
+            module_name="dagster.core.storage.legacy_storage",
+            class_name="CompositeStorage",
+            config_yaml=yaml.dump(
+                {
+                    "run_storage": {
+                        "module_name": "dagster_cloud.storage.runs",
+                        "class_name": "GraphQLRunStorage",
+                        "config_yaml": empty_yaml,
+                    },
+                    "event_log_storage": {
+                        "module_name": "dagster_cloud.storage.event_logs",
+                        "class_name": "GraphQLEventLogStorage",
+                        "config_yaml": empty_yaml,
+                    },
+                    "schedule_storage": {
+                        "module_name": "dagster_cloud.storage.schedules",
+                        "class_name": "GraphQLScheduleStorage",
+                        "config_yaml": empty_yaml,
+                    },
+                },
+                default_flow_style=False,
+            ),
+        )
 
         defaults["compute_logs"] = ConfigurableClassData(
             "dagster_cloud.storage.compute_logs", "CloudComputeLogManager", empty_yaml

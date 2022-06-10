@@ -1,3 +1,5 @@
+import time
+
 import dagster._check as check
 from dagster.core.launcher import RunLauncher
 from dagster.core.launcher.base import LaunchRunContext
@@ -9,6 +11,10 @@ PID_TAG = "process/pid"
 
 
 class CloudProcessRunLauncher(RunLauncher):
+    def __init__(self):
+        self._run_ids = set()
+        super().__init__()
+
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.pipeline_run
         pipeline_code_origin = check.not_none(context.pipeline_code_origin)
@@ -22,7 +28,37 @@ class CloudProcessRunLauncher(RunLauncher):
         args = run_args.get_command_args()
         pid = launch_process(args)
 
+        self._run_ids.add(run.run_id)
+
         self._instance.add_run_tags(run.run_id, {PID_TAG: str(pid)})
+
+    def join(self, timeout=30):
+        total_time = 0
+        interval = 0.01
+
+        while True:
+            active_run_ids = [
+                run_id
+                for run_id in self._run_ids
+                if (
+                    self._instance.get_run_by_id(run_id)
+                    and not self._instance.get_run_by_id(run_id).is_finished
+                )
+            ]
+
+            if len(active_run_ids) == 0:
+                return
+
+            if total_time >= timeout:
+                raise Exception(
+                    "Timed out waiting for these runs to finish: {active_run_ids}".format(
+                        active_run_ids=repr(active_run_ids)
+                    )
+                )
+
+            total_time += interval
+            time.sleep(interval)
+            interval = interval * 2
 
     def _get_pid(self, run):
         if not run or run.is_finished:

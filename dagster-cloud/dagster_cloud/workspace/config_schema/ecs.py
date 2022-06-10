@@ -6,7 +6,7 @@ SHARED_ECS_CONFIG = {
         is_required=False,
         description=(
             "An array of AWS Secrets Manager secrets. These secrets will "
-            "be mounted as environment variabls in the container. See "
+            "be mounted as environment variables in the container. See "
             "https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_Secret.html."
         ),
     ),
@@ -17,5 +17,12 @@ SHARED_ECS_CONFIG = {
             "AWS Secrets Manager secrets with these tags will be mounted as "
             "environment variables in the container."
         ),
+    ),
+    "env_vars": Field(
+        [StringSource],
+        is_required=False,
+        description="List of environment variable names to include in the ECS task. "
+        "Each can be of the form KEY=VALUE or just KEY (in which case the value will be pulled "
+        "from the current process)",
     ),
 }

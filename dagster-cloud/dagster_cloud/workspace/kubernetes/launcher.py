@@ -52,6 +52,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         pull_policy=None,
         env_config_maps=None,
         env_secrets=None,
+        env_vars=None,
         service_account_name=None,
         volume_mounts=None,
         volumes=None,
@@ -73,6 +74,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             env_config_maps, "env_config_maps", of_type=str
         )
         self._env_secrets = check.opt_list_param(env_secrets, "env_secrets", of_type=str)
+        self._env_vars = check.opt_list_param(env_vars, "env_vars", of_type=str)
         self._service_account_name = check.str_param(service_account_name, "service_account_name")
         self._volume_mounts = [
             k8s_snake_case_dict(kubernetes.client.V1VolumeMount, mount)
@@ -120,6 +122,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             service_account_name=self._service_account_name,
             env_config_maps=self._env_config_maps,
             env_secrets=self._env_secrets,
+            env_vars=self._env_vars,
             job_namespace=self._namespace,
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
@@ -181,23 +184,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
     @staticmethod
     def from_config_value(inst_data, config_value):
         return K8sUserCodeLauncher(
-            dagster_home=config_value.get("dagster_home"),
-            instance_config_map=config_value.get("instance_config_map"),
             inst_data=inst_data,
-            namespace=config_value.get("namespace"),
-            kubeconfig_file=config_value.get("kubeconfig_file"),
-            pull_policy=config_value.get("pull_policy"),
-            env_config_maps=config_value.get("env_config_maps", []),
-            env_secrets=config_value.get("env_secrets", []),
-            service_account_name=config_value.get("service_account_name"),
-            image_pull_secrets=config_value.get("image_pull_secrets"),
-            volume_mounts=config_value.get("volume_mounts"),
-            volumes=config_value.get("volumes"),
-            deployment_startup_timeout=config_value.get("deployment_startup_timeout"),
-            server_process_startup_timeout=config_value.get("server_process_startup_timeout"),
-            image_pull_grace_period=config_value.get("image_pull_grace_period"),
-            labels=config_value.get("labels"),
-            resources=config_value.get("resources"),
+            **config_value,
         )
 
     @contextmanager
@@ -249,7 +237,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             service_account_name=self._service_account_name,
             env_config_maps=self._env_config_maps,
             env_secrets=self._env_secrets,
-            env_vars=[],
+            env_vars=self._env_vars,
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
             labels=self._labels,
@@ -275,7 +263,10 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
                         container_context.labels,
                         container_context.resources,
                         command=command,
-                        env=additional_environment,
+                        env=merge_dicts(
+                            container_context.get_environment_dict(),
+                            (additional_environment or {}),
+                        ),
                     ),
                 )
             self._logger.info("Created deployment: {}".format(api_response.metadata.name))
