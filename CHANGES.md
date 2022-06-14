@@ -1,5 +1,13 @@
 # Dagster Cloud Changelog
 
+# 0.15.0
+
+### New
+
+- The new features announced in the [Dagster 0.15.0 release](https://github.com/dagster-io/dagster/releases/tag/0.15.0) are also available to Dagster Cloud users. In particular, software-defined assets are now marked fully stable and are ready for prime time - we recommend using them whenever your goal using Dagster is to build and maintain data assets.
+- The [ECS agent CloudFormation template](https://docs.dagster.cloud/agents/ecs/setup#provisioning-using-cloudformation) is now versioned, allowing you to fix a specific version of the agent.
+- You can now configure job-level retries to re-execute the full run rather than just failed Ops by setting the `dagster/retry_strategy` tag to `ALL_STEPS`. See [the docs](https://docs.dagster.io/deployment/run-retries) for more information.
+
 # 0.14.20
 
 ### New

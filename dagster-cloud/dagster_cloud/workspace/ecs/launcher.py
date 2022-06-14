@@ -275,9 +275,6 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             if "dagster/location_name" in service.tags.keys():
                 self._remove_server_handle(service)
 
-    def get_step_handler(self, _execution_config):
-        pass
-
     def run_launcher(self) -> RunLauncher:
         launcher = EcsRunLauncher(
             secrets=self.secrets, secrets_tag=self.secrets_tag, env_vars=self.env_vars

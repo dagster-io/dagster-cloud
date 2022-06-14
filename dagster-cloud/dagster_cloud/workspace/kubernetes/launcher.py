@@ -6,7 +6,6 @@ import kubernetes
 import kubernetes.client as client
 from dagster import Field, IntSource, Noneable, StringSource
 from dagster import _check as check
-from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import merge_dicts
@@ -378,9 +377,6 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
     def __exit__(self, exception_type, exception_value, traceback):
         super().__exit__(exception_value, exception_value, traceback)
         self._launcher.dispose()
-
-    def get_step_handler(self, execution_config: Optional[Dict]) -> StepHandler:
-        pass
 
     def run_launcher(self):
         return self._launcher

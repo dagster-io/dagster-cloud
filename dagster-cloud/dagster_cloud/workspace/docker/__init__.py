@@ -16,7 +16,6 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudSandboxConnectionInfo,
     DagsterCloudSandboxProxyInfo,
 )
-from dagster_cloud.execution.step_handler.docker_step_handler import DockerStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
@@ -313,9 +312,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         containers = client.containers.list(all=True, filters={"label": GRPC_SERVER_LABEL})
         for container in containers:
             self._remove_server_handle(container)
-
-    def get_step_handler(self, _execution_config: Optional[Dict]) -> DockerStepHandler:
-        return DockerStepHandler(self._networks, self.env_vars, self._container_kwargs)
 
     def run_launcher(self):
         launcher = DockerRunLauncher(

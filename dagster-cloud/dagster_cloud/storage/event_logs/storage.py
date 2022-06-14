@@ -9,7 +9,6 @@ from typing import (
     Optional,
     Sequence,
     Set,
-    Tuple,
     Union,
     cast,
 )
@@ -28,7 +27,6 @@ from dagster.core.storage.event_log.base import (
     EventLogStorage,
     EventRecordsFilter,
     RunShardedEventsCursor,
-    extract_asset_events_cursor,
 )
 from dagster.core.storage.pipeline_run import PipelineRunStatsSnapshot
 from dagster.serdes import (
@@ -482,46 +480,6 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 result[event.dagster_event.asset_key] = event
 
         return result
-
-    def get_asset_events(
-        self,
-        asset_key: AssetKey,
-        partitions: Optional[List[str]] = None,
-        before_cursor: Optional[int] = None,
-        after_cursor: Optional[int] = None,
-        limit: Optional[int] = None,
-        ascending: bool = False,
-        include_cursor: bool = False,
-        before_timestamp: Optional[float] = None,
-        cursor: Optional[int] = None,
-    ) -> Union[List[EventLogEntry], List[Tuple[int, EventLogEntry]]]:
-        check.inst_param(asset_key, "asset_key", AssetKey)
-        before_cursor = check.opt_int_param(before_cursor, "before_cursor")
-        after_cursor = check.opt_int_param(after_cursor, "after_cursor")
-        before_timestamp = check.opt_float_param(before_timestamp, "before_timestamp")
-        cursor = check.opt_int_param(cursor, "cursor")
-
-        before_cursor, after_cursor = extract_asset_events_cursor(
-            cursor, before_cursor, after_cursor, ascending
-        )
-
-        event_records = self.get_event_records(
-            EventRecordsFilter(
-                event_type=DagsterEventType.ASSET_MATERIALIZATION,
-                asset_key=asset_key,
-                asset_partitions=partitions,
-                before_cursor=before_cursor,
-                after_cursor=after_cursor,
-                before_timestamp=before_timestamp,
-            ),
-            limit=limit,
-            ascending=ascending,
-        )
-
-        if include_cursor:
-            return [(record.storage_id, record.event_log_entry) for record in event_records]
-        else:
-            return [record.event_log_entry for record in event_records]
 
     def get_asset_run_ids(self, asset_key: AssetKey) -> Iterable[str]:
         res = self._execute_query(

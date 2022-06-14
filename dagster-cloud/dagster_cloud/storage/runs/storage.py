@@ -33,7 +33,7 @@ from dagster.serdes import (
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster.utils import utc_datetime_from_timestamp
+from dagster.utils import merge_dicts, utc_datetime_from_timestamp
 from dagster_cloud_cli.core.errors import GraphQLStorageError
 
 from .queries import (
@@ -75,7 +75,11 @@ def _get_filters_input(filters) -> Optional[Dict[str, Any]]:
         "mode": filters.mode,
         "statuses": [status.value for status in filters.statuses],
         "tags": [
-            {"key": tag_key, "value": tag_value} for tag_key, tag_value in filters.tags.items()
+            merge_dicts(
+                {"key": tag_key},
+                ({"value": tag_value} if isinstance(tag_value, str) else {"values": tag_value}),
+            )
+            for tag_key, tag_value in filters.tags.items()
         ]
         if filters.tags
         else [],
@@ -470,3 +474,12 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "serializedPartitionBackfill": serialize_dagster_namedtuple(partition_backfill)
             },
         )
+
+    def supports_kvs(self):
+        return False
+
+    def kvs_get(self, keys: Set[str]):
+        return NotImplementedError("KVS is not supported from the user cloud")
+
+    def kvs_set(self, pairs: Dict[str, str]):
+        return NotImplementedError("KVS is not supported from the user cloud")

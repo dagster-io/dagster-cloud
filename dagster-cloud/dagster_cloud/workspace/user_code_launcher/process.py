@@ -16,7 +16,6 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudSandboxProxyInfo,
 )
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
-from dagster_cloud.execution.step_handler.process_step_handler import ProcessStepHandler
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
 from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, DagsterCloudUserCodeLauncher
@@ -75,9 +74,6 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         self._cleanup_zombies_shutdown_event = threading.Event()
         self._cleanup_zombies_thread = None
-
-        # the process handler keeps pids in memory, so we keep a single instance of it
-        self._step_handler = ProcessStepHandler()
 
         self._server_process_startup_timeout = check.opt_int_param(
             server_process_startup_timeout,
@@ -247,9 +243,6 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         for pids in self._active_pids.values():
             if pid in pids:
                 pids.remove(pid)
-
-    def get_step_handler(self, _execution_config: Optional[Dict]) -> ProcessStepHandler:
-        return self._step_handler
 
     def run_launcher(self) -> CloudProcessRunLauncher:
         if not self._run_launcher:

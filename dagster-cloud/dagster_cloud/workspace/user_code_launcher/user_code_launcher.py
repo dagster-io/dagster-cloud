@@ -13,7 +13,6 @@ import dagster._check as check
 from dagster.api.get_server_id import sync_get_server_id
 from dagster.api.list_repositories import sync_list_repositories_grpc
 from dagster.core.errors import DagsterUserCodeUnreachableError
-from dagster.core.executor.step_delegating import StepHandler
 from dagster.core.host_representation import ExternalRepositoryOrigin
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.host_representation.origin import (
@@ -450,10 +449,6 @@ class DagsterCloudUserCodeLauncher(
     @abstractmethod
     def _cleanup_servers(self):
         """Remove all servers, across all locations."""
-
-    @abstractmethod
-    def get_step_handler(self, execution_config: Optional[Dict]) -> StepHandler:
-        pass
 
     @abstractmethod
     def run_launcher(self) -> RunLauncher:
