@@ -1,5 +1,13 @@
 # Dagster Cloud Changelog
 
+# 0.15.1
+
+### Bugfixes
+
+* Fixed an issue where an empty list of email addresses could be configured on an email alert policy.
+* When an agent is accidentally configured with a user token rather than an agent token, an informative exception is now displayed.
+* Fixed an issue where jobs using [memoization](https://docs.dagster.io/guides/dagster/memoization#versioning-and-memoization) sometimes did not launch in Dagster Cloud.
+
 # 0.15.0
 
 ### New

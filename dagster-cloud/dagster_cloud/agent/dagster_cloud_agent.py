@@ -312,7 +312,9 @@ class DagsterCloudAgent:
                 external_pipeline_origin.external_repository_origin.repository_location_origin,
             )
             serialized_snapshot_or_error = client.execution_plan_snapshot(
-                execution_plan_snapshot_args=request.request_args
+                execution_plan_snapshot_args=request.request_args._replace(
+                    instance_ref=instance.get_ref()
+                )
             )
             return DagsterCloudApiGrpcResponse(serialized_snapshot_or_error)
 

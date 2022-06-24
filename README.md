@@ -1,5 +1,5 @@
 <p align="center">
-<img src="assets/dagster-cloud-logo.png" />
+<a href="https://dagster.io/cloud"><img src="https://github.com/dagster-io/dagster-cloud/raw/main/assets/dagster-cloud-logo.png"/></a>
 <br /><br />
 <a href="https://badge.fury.io/py/dagster-cloud"><img src="https://badge.fury.io/py/dagster-cloud.svg"></>
 <a href="https://dagster-slackin.herokuapp.com/"><img src="https://dagster-slackin.herokuapp.com/badge.svg"></a>
