@@ -1,6 +1,9 @@
+import copy
+import importlib
 import uuid
 from contextlib import ExitStack
-from typing import Any, Dict, List, Optional
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Type
 
 import yaml
 from dagster import Field
@@ -8,10 +11,11 @@ from dagster import _check as check
 from dagster.builtins import Bool
 from dagster.config.validate import process_config, resolve_to_config_type
 from dagster.core.errors import DagsterInvalidConfigError, DagsterInvariantViolationError
-from dagster.core.instance import DagsterInstance
+from dagster.core.instance import DagsterInstance, InstanceType
 from dagster.core.instance.config import config_field_for_configurable_class
 from dagster.core.instance.ref import ConfigurableClassData, InstanceRef, configurable_class_data
 from dagster.core.launcher import RunLauncher
+from dagster.serdes import ConfigurableClass
 from dagster_cloud_cli.core.graphql_client import (
     create_cloud_requests_session,
     create_proxy_client,
@@ -78,11 +82,38 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             )
         return processed_config.value
 
+    def _dagster_cloud_api_config_for_deployment(self, deployment_name: Optional[str]):
+        new_api_config = dict(copy.deepcopy(self._dagster_cloud_api_config))
+        if deployment_name:
+            new_api_config["deployment"] = deployment_name
+            if self.for_branch_deployments:
+                del new_api_config["branch_deployments"]
+        else:
+            del new_api_config["deployment"]
+        return new_api_config
+
+    def ref_for_deployment(self, deployment_name: Optional[str]):
+        my_ref = self.get_ref()
+        my_custom_instance_class_data = my_ref.custom_instance_class_data
+        new_class_data = _cached_inject_deployment(my_custom_instance_class_data, deployment_name)
+
+        return my_ref._replace(custom_instance_class_data=new_class_data)
+
+    def graphql_client_for_deployment(self, deployment_name: Optional[str]):
+        return create_proxy_client(
+            self.requests_session,
+            self.dagster_cloud_graphql_url,
+            self._dagster_cloud_api_config_for_deployment(deployment_name),
+        )
+
+    def headers_for_deployment(self, deployment_name: Optional[str]):
+        return get_agent_headers(self._dagster_cloud_api_config_for_deployment(deployment_name))
+
     def create_graphql_client(self):
         return create_proxy_client(
+            self.requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config,
-            self.requests_session,
         )
 
     @property
@@ -97,7 +128,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     @property
     def graphql_client(self):
         if self._graphql_client == None:
-            self._graphql_client = self._exit_stack.enter_context(self.create_graphql_client())
+            self._graphql_client = self.create_graphql_client()
 
         return self._graphql_client
 
@@ -113,6 +144,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             )
 
         return f"https://{organization}.agent.dagster.cloud"
+
+    @property
+    def deployment_name(self) -> Optional[str]:
+        return self._dagster_cloud_api_config.get("deployment")
 
     @property
     def dagit_url(self):
@@ -160,6 +195,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     @property
     def dagster_cloud_api_agent_label(self) -> Optional[str]:
         return self._dagster_cloud_api_config.get("agent_label")
+
+    @property
+    def for_branch_deployments(self) -> Optional[str]:
+        return self._dagster_cloud_api_config.get("branch_deployments")
 
     @property
     def instance_uuid(self) -> str:
@@ -292,3 +331,27 @@ instance_class:
     @property
     def dagster_cloud_run_worker_monitoring_interval_seconds(self):
         return 30
+
+
+@lru_cache(maxsize=100)  # Scales on order of active branch deployments
+def _cached_inject_deployment(
+    custom_instance_class_data: ConfigurableClassData,
+    deployment_name: Optional[str],
+) -> ConfigurableClassData:
+    # incurs costly yaml parse
+    config_dict = custom_instance_class_data.config_dict
+
+    if deployment_name:
+        config_dict["dagster_cloud_api"]["deployment"] = deployment_name
+        if config_dict["dagster_cloud_api"].get("branch_deployments"):
+            del config_dict["dagster_cloud_api"]["branch_deployments"]
+    else:
+        # Add whatever header you had in mind to indicate that it's organization-scoped instead
+        del config_dict["dagster_cloud_api"]["deployment"]
+
+    return ConfigurableClassData(
+        "dagster_cloud.instance",
+        "DagsterCloudAgentInstance",
+        # incurs costly yaml dump
+        yaml.dump(config_dict),
+    )

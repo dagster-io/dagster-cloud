@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 import threading
-from typing import Collection, Dict, NamedTuple, Optional, Set
+from typing import Collection, Dict, NamedTuple, Optional, Set, Tuple
 
 from dagster import BoolSource, Field, IntSource
 from dagster import _check as check
@@ -11,14 +11,15 @@ from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster.grpc.server import GrpcServerProcess
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
-from dagster_cloud.api.dagster_cloud_api import (
-    DagsterCloudSandboxConnectionInfo,
-    DagsterCloudSandboxProxyInfo,
-)
+from dagster.utils import merge_dicts
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 
-from .user_code_launcher import DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT, DagsterCloudUserCodeLauncher
+from .user_code_launcher import (
+    DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+    SHARED_USER_CODE_LAUNCHER_CONFIG,
+    DagsterCloudUserCodeLauncher,
+)
 
 CLEANUP_ZOMBIE_PROCESSES_INTERVAL = 5
 
@@ -56,6 +57,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         server_process_startup_timeout=None,
         inst_data: Optional[ConfigurableClassData] = None,
         wait_for_processes: bool = False,
+        server_ttl=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("dagster_cloud")
@@ -67,7 +69,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         # map from locationname to the pid(s) for that location-metadata combination.
         # Generally there should be only one pid per location unless an exception was raised partway
         # through an update
-        self._active_pids: Dict[str, Set[int]] = {}
+        self._active_pids: Dict[Tuple[str, str], Set[int]] = {}
 
         self._heartbeat_ttl = 60
         self._wait_for_processes = wait_for_processes
@@ -83,7 +85,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         self._run_launcher: Optional[CloudProcessRunLauncher] = None
 
-        super(ProcessUserCodeLauncher, self).__init__()
+        super(ProcessUserCodeLauncher, self).__init__(server_ttl=server_ttl)
 
     @property
     def requires_images(self) -> bool:
@@ -127,21 +129,24 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
     @classmethod
     def config_type(cls) -> Dict:
-        return {
-            "server_process_startup_timeout": Field(
-                IntSource,
-                is_required=False,
-                default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                description="Timeout when waiting for a code server to be ready after it is created",
-            ),
-            "wait_for_processes": Field(
-                BoolSource,
-                is_required=False,
-                default_value=False,
-                description="When cleaning up the agent, wait for any subprocesses to "
-                "finish before shutting down. Generally only needed in tests/automation.",
-            ),
-        }
+        return merge_dicts(
+            {
+                "server_process_startup_timeout": Field(
+                    IntSource,
+                    is_required=False,
+                    default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+                    description="Timeout when waiting for a code server to be ready after it is created",
+                ),
+                "wait_for_processes": Field(
+                    BoolSource,
+                    is_required=False,
+                    default_value=False,
+                    description="When cleaning up the agent, wait for any subprocesses to "
+                    "finish before shutting down. Generally only needed in tests/automation.",
+                ),
+            },
+            SHARED_USER_CODE_LAUNCHER_CONFIG,
+        )
 
     @staticmethod
     def from_config_value(
@@ -149,20 +154,8 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     ) -> "ProcessUserCodeLauncher":
         return ProcessUserCodeLauncher(inst_data=inst_data, **config_value)
 
-    def _create_dev_sandbox_endpoint(
-        self,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        authorized_key: str,
-        proxy_info: DagsterCloudSandboxProxyInfo,
-    ) -> GrpcServerEndpoint:
-        raise NotImplementedError
-
-    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
-        raise NotImplementedError
-
     def _create_new_server_endpoint(
-        self, location_name: str, metadata: CodeDeploymentMetadata
+        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
         loadable_target_origin = self._get_loadable_target_origin(metadata)
         server_process = GrpcServerProcess(
@@ -201,10 +194,12 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             heartbeat_thread,
         )
 
-        if location_name not in self._active_pids:
-            self._active_pids[location_name] = set()
+        key = (deployment_name, location_name)
 
-        self._active_pids[location_name].add(pid)
+        if key not in self._active_pids:
+            self._active_pids[key] = set()
+
+        self._active_pids[key].add(pid)
 
         endpoint = GrpcServerEndpoint(
             server_id=server_id,
@@ -225,8 +220,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             attribute=metadata.attribute,
         )
 
-    def _get_server_handles_for_location(self, location_name: str) -> Collection[int]:
-        return self._active_pids.get(location_name, set()).copy()
+    def _get_server_handles_for_location(
+        self, deployment_name: str, location_name: str
+    ) -> Collection[int]:
+        return self._active_pids.get((deployment_name, location_name), set()).copy()
 
     def _remove_server_handle(self, server_handle: int) -> None:
         pid = server_handle

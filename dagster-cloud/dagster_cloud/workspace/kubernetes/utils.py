@@ -1,54 +1,60 @@
-import hashlib
 import re
 import time
-import uuid
 
 import kubernetes
 from dagster.utils import merge_dicts
 from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
 
+from ..user_code_launcher.utils import (
+    deterministic_label_for_location,
+    get_human_readable_label,
+    unique_resource_name,
+)
+
 MANAGED_RESOURCES_LABEL = {"managed_by": "K8sUserCodeLauncher"}
 SERVICE_PORT = 4000
 
 
-def unique_resource_name(location_name):
+def unique_k8s_resource_name(deployment_name, location_name):
     """
     https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
 
     K8s resource names are restricted, so we must sanitize the location name to not include disallowed characters.
     """
-    hash_value = str(uuid.uuid4().hex)[0:6]
+    return unique_resource_name(
+        deployment_name,
+        location_name,
+        length_limit=63,
+        sanitize_fn=lambda name: re.sub("[^a-z0-9-]", "", name).strip("-"),
+    )
 
-    sanitized_location_name = re.sub("[^a-z0-9-]", "", location_name).strip("-")
-    truncated_location_name = sanitized_location_name[:56]
-    sanitized_unique_name = f"{truncated_location_name}-{hash_value}"
-    assert len(sanitized_unique_name) <= 63
-    return sanitized_unique_name
 
-
-def get_human_readable_label_for_location(location_name):
+def get_k8s_human_readable_label(name):
     """
     https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
 
     K8s label values are restricted, so we must sanitize the location name to not include disallowed characters.
     These are purely to help humans debug, so they don't need to be unique.
     """
-    sanitized_location_name = (
-        re.sub("[^a-zA-Z0-9-_.]", "", location_name).strip("-").strip("_").strip(".")
+    return get_human_readable_label(
+        name,
+        length_limit=63,
+        sanitize_fn=lambda name: (
+            re.sub("[^a-zA-Z0-9-_.]", "", name).strip("-").strip("_").strip(".")
+        ),
     )
-    truncated_location_name = sanitized_location_name[:63]
-    return truncated_location_name
 
 
-def construct_repo_location_service(location_name, service_name):
+def construct_repo_location_service(deployment_name, location_name, service_name):
     return client.V1Service(
         metadata=client.V1ObjectMeta(
             name=service_name,
             labels={
                 **MANAGED_RESOURCES_LABEL,
-                "location_hash": get_unique_label_for_location(location_name),
-                "location_name": get_human_readable_label_for_location(location_name),
+                "location_hash": deterministic_label_for_location(deployment_name, location_name),
+                "location_name": get_k8s_human_readable_label(location_name),
+                "deployment_name": get_k8s_human_readable_label(deployment_name),
             },
         ),
         spec=client.V1ServiceSpec(
@@ -58,23 +64,10 @@ def construct_repo_location_service(location_name, service_name):
     )
 
 
-def get_unique_label_for_location(location_name):
-    """
-    Need a label here that is a unique function of location name since we use it to
-    search for existing deployments on update and remove them. Does not need to be human-readable.
-    """
-
-    m = hashlib.sha1()  # Creates a 40-byte hash
-    m.update(location_name.encode("utf-8"))
-
-    unique_label = m.hexdigest()
-    assert len(unique_label) <= 63
-    return unique_label
-
-
 def construct_repo_location_deployment(
-    location_name,
     deployment_name,
+    location_name,
+    k8s_deployment_name,
     metadata,
     pull_policy,
     env_config_maps,
@@ -91,22 +84,25 @@ def construct_repo_location_deployment(
     env = merge_dicts(
         metadata.get_grpc_server_env(SERVICE_PORT),
         env or {},
-        {"DAGSTER_SERVER_NAME": deployment_name},
+        {"DAGSTER_SERVER_NAME": k8s_deployment_name},
     )
     # TODO: enable liveness probes
     return client.V1Deployment(
         metadata=client.V1ObjectMeta(
-            name=deployment_name,
+            name=k8s_deployment_name,
             labels={
                 **MANAGED_RESOURCES_LABEL,
-                "location_hash": get_unique_label_for_location(location_name),
-                "location_name": get_human_readable_label_for_location(location_name),
+                "location_hash": deterministic_label_for_location(deployment_name, location_name),
+                "location_name": get_k8s_human_readable_label(location_name),
+                "deployment_name": get_k8s_human_readable_label(deployment_name),
             },
         ),
         spec=client.V1DeploymentSpec(
-            selector=client.V1LabelSelector(match_labels={"user-deployment": deployment_name}),
+            selector=client.V1LabelSelector(match_labels={"user-deployment": k8s_deployment_name}),
             template=client.V1PodTemplateSpec(
-                metadata=client.V1ObjectMeta(labels={"user-deployment": deployment_name, **labels}),
+                metadata=client.V1ObjectMeta(
+                    labels={"user-deployment": k8s_deployment_name, **labels}
+                ),
                 spec=client.V1PodSpec(
                     image_pull_secrets=[
                         client.V1LocalObjectReference(name=x["name"]) for x in image_pull_secrets
@@ -174,7 +170,7 @@ def did_pod_image_fail(pod):
 
 
 def wait_for_deployment_complete(
-    deployment_name,
+    k8s_deployment_name,
     namespace,
     logger,
     location_name,
@@ -199,9 +195,9 @@ def wait_for_deployment_complete(
         time_elapsed = time.time() - start
 
         if time_elapsed >= timeout:
-            raise Exception(f"Timed out waiting for deployment {deployment_name}")
+            raise Exception(f"Timed out waiting for deployment {k8s_deployment_name}")
 
-        deployment = api.read_namespaced_deployment(deployment_name, namespace)
+        deployment = api.read_namespaced_deployment(k8s_deployment_name, namespace)
         status = deployment.status
         spec = deployment.spec
 
@@ -220,7 +216,7 @@ def wait_for_deployment_complete(
             return True
 
         pod_list = core_api.list_namespaced_pod(
-            namespace, label_selector="user-deployment={}".format(deployment_name)
+            namespace, label_selector="user-deployment={}".format(k8s_deployment_name)
         )
 
         if time_elapsed >= image_pull_grace_period:

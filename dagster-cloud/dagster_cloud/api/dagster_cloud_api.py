@@ -82,6 +82,8 @@ class DagsterCloudApi(Enum):
     CHECK_STEP_HEALTH = "CHECK_STEP_HEALTH"  # deprecated with cloud executor
     TERMINATE_STEP = "TERMINATE_STEP"  # deprecated with cloud executor
 
+    PING_LOCATION = "PING_LOCATION"  # Signal that a location is in use and should keep servers up
+
     def __structlog__(self):
         return self.name
 
@@ -272,6 +274,11 @@ class LoadRepositoriesResponse(
 
 
 @whitelist_for_serdes
+class PingLocationArgs(NamedTuple("_PingLocationArgs", [("location_name", str)])):
+    pass
+
+
+@whitelist_for_serdes
 class LaunchRunArgs(namedtuple("_LaunchRunArgs", "pipeline_run")):
     def __new__(cls, pipeline_run):
         return super(cls, LaunchRunArgs).__new__(
@@ -297,6 +304,7 @@ class DagsterCloudApiRequest(
             ("request_id", str),
             ("request_api", DagsterCloudApi),
             ("request_args", Any),
+            ("deployment_name", str),
             ("expire_at", float),
         ],
     )
@@ -306,6 +314,7 @@ class DagsterCloudApiRequest(
         request_id: str,
         request_api: DagsterCloudApi,
         request_args: Any,
+        deployment_name: str,
         expire_at: Optional[float] = None,
     ):
         return super(cls, DagsterCloudApiRequest).__new__(
@@ -313,6 +322,7 @@ class DagsterCloudApiRequest(
             check.str_param(request_id, "request_id"),
             check.inst_param(request_api, "request_api", DagsterCloudApi),
             request_args,
+            check.str_param(deployment_name, "deployment_name"),
             check.opt_float_param(
                 expire_at,
                 "expire_at",

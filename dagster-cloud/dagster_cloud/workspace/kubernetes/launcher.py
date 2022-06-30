@@ -9,10 +9,6 @@ from dagster import _check as check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.serdes import ConfigurableClass
 from dagster.utils import merge_dicts
-from dagster_cloud.api.dagster_cloud_api import (
-    DagsterCloudSandboxConnectionInfo,
-    DagsterCloudSandboxProxyInfo,
-)
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
@@ -20,17 +16,16 @@ from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
 
 from ..user_code_launcher import (
-    DAGSTER_PROXY_HOSTNAME_ENV,
-    DAGSTER_SANDBOX_PORT_ENV,
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+    SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudUserCodeLauncher,
 )
+from ..user_code_launcher.utils import deterministic_label_for_location
 from .utils import (
     SERVICE_PORT,
     construct_repo_location_deployment,
     construct_repo_location_service,
-    get_unique_label_for_location,
-    unique_resource_name,
+    unique_k8s_resource_name,
     wait_for_deployment_complete,
 )
 
@@ -61,6 +56,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         image_pull_grace_period=None,
         labels=None,
         resources=None,
+        server_ttl=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("K8sUserCodeLauncher")
@@ -109,7 +105,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         else:
             kubernetes.config.load_incluster_config()
 
-        super(K8sUserCodeLauncher, self).__init__()
+        super(K8sUserCodeLauncher, self).__init__(server_ttl=server_ttl)
 
         self._launcher = CloudK8sRunLauncher(
             dagster_home=self._dagster_home,
@@ -178,6 +174,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
                 ),
                 "namespace": Field(StringSource, is_required=False, default_value="default"),
             },
+            SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
 
     @staticmethod
@@ -193,42 +190,24 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             yield client.AppsV1Api(api_client)
 
     def _create_new_server_endpoint(
-        self, location_name: str, metadata: CodeDeploymentMetadata
+        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
         return self._launch(
+            deployment_name,
             location_name,
             metadata,
             command=metadata.get_grpc_server_command(),
         )
 
-    def _create_dev_sandbox_endpoint(
-        self,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        authorized_key: str,
-        proxy_info: DagsterCloudSandboxProxyInfo,
-    ) -> GrpcServerEndpoint:
-        return self._launch(
-            location_name,
-            metadata,
-            command=["supervisord"],
-            additional_environment={  # TODO: Abstract into SandboxContainerEnvironment
-                "DAGSTER_SANDBOX_AUTHORIZED_KEY": authorized_key,
-                DAGSTER_PROXY_HOSTNAME_ENV: proxy_info.hostname,
-                "DAGSTER_PROXY_PORT": str(proxy_info.port),
-                "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
-                DAGSTER_SANDBOX_PORT_ENV: str(proxy_info.ssh_port),
-            },
-        )
-
     def _launch(
         self,
+        deployment_name: str,
         location_name: str,
         metadata: CodeDeploymentMetadata,
         command: List[str],
         additional_environment: Optional[Dict[str, str]] = None,
     ) -> GrpcServerEndpoint:
-        resource_name = unique_resource_name(location_name)
+        resource_name = unique_k8s_resource_name(deployment_name, location_name)
 
         container_context = K8sContainerContext(
             image_pull_policy=self._pull_policy,
@@ -249,6 +228,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
                 api_response = api_instance.create_namespaced_deployment(
                     container_context.namespace,
                     construct_repo_location_deployment(
+                        deployment_name,
                         location_name,
                         resource_name,
                         metadata,
@@ -278,7 +258,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         try:
             api_response = client.CoreV1Api().create_namespaced_service(
                 self._namespace,
-                construct_repo_location_service(location_name, resource_name),
+                construct_repo_location_service(deployment_name, location_name, resource_name),
             )
             self._logger.info("Created service: {}".format(api_response.metadata.name))
         except ApiException as e:
@@ -310,51 +290,13 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
 
         return endpoint
 
-    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
-        # TODO: Re-implement this in the base class. We'll need to extend handles to include
-        # info like the environment and created timestamp or add abstract methods to look
-        # this information up.
-
+    def _get_server_handles_for_location(
+        self, deployment_name: str, location_name: str
+    ) -> Collection[str]:
         with self._get_api_instance() as api_instance:
             deployments = api_instance.list_namespaced_deployment(
                 self._namespace,
-                label_selector=f"location_hash={get_unique_label_for_location(location_name)}",
-            ).items
-
-        # If there are multiple handles for a location,
-        # get the most recently created one. We assume this
-        # is the "new" one in our blue/green deployment.
-        sorted_deployments = sorted(
-            list(deployments),
-            key=lambda deployment: deployment.metadata.creation_timestamp,
-        )
-
-        try:
-            deployment = sorted_deployments[-1]
-        except IndexError:
-            raise Exception(f"{location_name} has no running deployments.")
-
-        containers = deployment.spec.template.spec.containers
-        for container in containers:
-            env = dict((env.name, env.value) for env in container.env)
-            port = env.get(DAGSTER_SANDBOX_PORT_ENV)
-            hostname = env.get(DAGSTER_PROXY_HOSTNAME_ENV)
-
-        if not hostname or not port:
-            raise Exception(f"{location_name} is not accessible via SSH")
-        username = "root"  # Hardcoded for now
-
-        return DagsterCloudSandboxConnectionInfo(
-            username=username,
-            hostname=hostname,
-            port=int(port),
-        )
-
-    def _get_server_handles_for_location(self, location_name: str) -> Collection[str]:
-        with self._get_api_instance() as api_instance:
-            deployments = api_instance.list_namespaced_deployment(
-                self._namespace,
-                label_selector=f"location_hash={get_unique_label_for_location(location_name)}",
+                label_selector=f"location_hash={deterministic_label_for_location(deployment_name, location_name)}",
             ).items
             return [deployment.metadata.name for deployment in deployments]
 
@@ -380,7 +322,3 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
 
     def run_launcher(self):
         return self._launcher
-
-    @property
-    def supports_dev_sandbox(self) -> bool:
-        return True

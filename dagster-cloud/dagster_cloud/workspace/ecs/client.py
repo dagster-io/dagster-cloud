@@ -143,10 +143,11 @@ class Client:
         tags=None,
         register_service_discovery=True,
         secrets=None,
+        append_unique_suffix=True,
     ):
         # Append a unique suffix to the service name so we can do blue/green
         # deploys without setting up a load balancer.
-        service_name = f"{name}_{uuid.uuid4().hex[:7]}"
+        service_name = f"{name}_{uuid.uuid4().hex[:7]}" if append_unique_suffix else name
 
         # Register a task definition
         task_definition_arn = self.register_task_definition(

@@ -7,9 +7,10 @@ import time
 import zlib
 from abc import abstractmethod
 from contextlib import AbstractContextManager
-from typing import Collection, Dict, Generic, List, NamedTuple, Optional, Set, TypeVar, Union
+from typing import Collection, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, TypeVar, Union
 
 import dagster._check as check
+from dagster import BoolSource, Field, IntSource
 from dagster.api.get_server_id import sync_get_server_id
 from dagster.api.list_repositories import sync_list_repositories_grpc
 from dagster.core.errors import DagsterUserCodeUnreachableError
@@ -24,10 +25,9 @@ from dagster.core.launcher import RunLauncher
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.grpc.types import GetCurrentImageResult
 from dagster.serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
+from dagster.utils import merge_dicts
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud.api.dagster_cloud_api import (
-    DagsterCloudSandboxConnectionInfo,
-    DagsterCloudSandboxProxyInfo,
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
@@ -52,27 +52,6 @@ DEPLOYMENT_INFO_QUERY = """
     query DeploymentInfo {
          deploymentInfo {
              deploymentType
-         }
-     }
-"""
-
-SANDBOX_PROXY_INFO_QUERY = """
-    query SandboxProxyInfo {
-        sandboxProxyInfo {
-            hostname
-            port
-            authToken
-            sshPort
-        }
-    }
-"""
-
-AUTHORIZED_KEY_QUERY = """
-    query DeploymentInfo {
-         deploymentInfo {
-             sshKeys {
-                publicKey
-            }
          }
      }
 """
@@ -115,19 +94,48 @@ class UserCodeLauncherEntry(
         )
 
 
+SHARED_USER_CODE_LAUNCHER_CONFIG = {
+    "server_ttl": Field(
+        {
+            "enabled": Field(
+                BoolSource,
+                is_required=False,
+                default_value=False,
+                description="Whether to shut down servers created by the agent when they are not serving requests",
+            ),
+            "ttl_seconds": Field(
+                IntSource,
+                is_required=False,
+                default_value=3600,
+                description="If enabled, how long to a leave server running once it has been launched. "
+                "Decreasing this value will cause fewer servers to be running at once, but "
+                "request latency may increase if more requests need to wait for a server to launch",
+            ),
+        },
+        is_required=False,
+    )
+}
+
+DeploymentAndLocation = Tuple[str, str]
+
+
 class DagsterCloudUserCodeLauncher(
     AbstractContextManager, MayHaveInstanceWeakref[DagsterCloudAgentInstance], Generic[ServerHandle]
 ):
-    def __init__(self):
-        self._grpc_endpoints: Dict[str, Union[GrpcServerEndpoint, SerializableErrorInfo]] = {}
+    def __init__(self, server_ttl):
+        self._grpc_endpoints: Dict[
+            DeploymentAndLocation, Union[GrpcServerEndpoint, SerializableErrorInfo]
+        ] = {}
         self._grpc_endpoints_lock = threading.Lock()
 
+        self._server_ttl_config = check.opt_dict_param(server_ttl, "server_ttl")
+
         # periodically reconciles to make desired = actual
-        self._desired_entries: Optional[Dict[str, UserCodeLauncherEntry]] = None
+        self._desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
         self._actual_entries = {}
         self._metadata_lock = threading.Lock()
 
-        self._upload_locations: Set[str] = set()
+        self._upload_locations: Set[DeploymentAndLocation] = set()
 
         self._logger = logging.getLogger("dagster_cloud")
         self._started: bool = False
@@ -140,56 +148,18 @@ class DagsterCloudUserCodeLauncher(
         self._reconcile_grpc_metadata_shutdown_event = threading.Event()
         self._reconcile_grpc_metadata_thread = None
 
-        self._is_workspace_ready_lock = threading.Lock()
-        self._is_workspace_ready: bool = False
-
-        self._is_dev_sandbox = None
         super().__init__()
 
     @property
-    def supports_dev_sandbox(self) -> bool:
-        return False
+    def server_ttl_enabled(self) -> bool:
+        return self._server_ttl_config.get("enabled", False)
 
-    def is_dev_sandbox(self):
-        if self._is_dev_sandbox == None and self.supports_dev_sandbox:
-            client = self._instance.graphql_client
-            result = client.execute(DEPLOYMENT_INFO_QUERY)
-            self._is_dev_sandbox = result["data"]["deploymentInfo"]["deploymentType"] == "DEV"
-        return self._is_dev_sandbox
-
-    def _authorized_key(self) -> Optional[str]:
-        if self.is_dev_sandbox():
-            client = self._instance.graphql_client
-            result = client.execute(AUTHORIZED_KEY_QUERY)
-            keys = [key["publicKey"] for key in result["data"]["deploymentInfo"]["sshKeys"]]
-            if keys:
-                # TODO: Support multiple keys
-                return keys[0]
-        return None
-
-    def _get_proxy_info(self) -> Optional[DagsterCloudSandboxProxyInfo]:
-        client = self._instance.graphql_client
-        result = client.execute(SANDBOX_PROXY_INFO_QUERY)["data"]["sandboxProxyInfo"]
-        if result:
-            return DagsterCloudSandboxProxyInfo(
-                hostname=result["hostname"],
-                port=result["port"],
-                auth_token=result["authToken"],
-                ssh_port=result["sshPort"],
-            )
-        return None
+    @property
+    def server_ttl_seconds(self) -> int:
+        return self._server_ttl_config.get("ttl_seconds", 3600)
 
     def start(self, run_reconcile_thread=True):
         # Initialize
-        self.is_dev_sandbox()
-
-        if self.is_dev_sandbox():
-            # Make sure dev sandboxes trigger location uploads on start to upload
-            # new connection info
-            result = self._instance.graphql_client.execute(INIT_UPLOAD_LOCATIONS_QUERY)
-            entries = result["data"]["workspace"]["workspaceEntries"]
-            self._upload_locations = set([entry["locationName"] for entry in entries])
-
         check.invariant(
             not self._started,
             "Called start() on a DagsterCloudUserCodeLauncher that was already started",
@@ -252,7 +222,9 @@ class DagsterCloudUserCodeLauncher(
     def supports_reload(self) -> bool:
         return False
 
-    def _update_workspace_entry(self, workspace_entry: DagsterCloudUploadWorkspaceEntry):
+    def _update_workspace_entry(
+        self, deployment_name: str, workspace_entry: DagsterCloudUploadWorkspaceEntry
+    ):
         with tempfile.TemporaryDirectory() as temp_dir:
             dst = os.path.join(temp_dir, "workspace_entry.tmp")
             with open(dst, "wb") as f:
@@ -262,38 +234,34 @@ class DagsterCloudUserCodeLauncher(
 
             with open(dst, "rb") as f:
                 self._logger.info(
-                    "Uploading workspace entry for {location_name} ({size} bytes)".format(
-                        location_name=workspace_entry.location_name, size=os.path.getsize(dst)
+                    "Uploading workspace entry for {deployment_name}:{location_name} ({size} bytes)".format(
+                        deployment_name=deployment_name,
+                        location_name=workspace_entry.location_name,
+                        size=os.path.getsize(dst),
                     )
                 )
 
-                connection_info = None
-                if self.is_dev_sandbox():
-                    connection_info = self.get_sandbox_connection_info(
-                        workspace_entry.location_name,
-                    )
                 resp = self._instance.requests_session.post(
                     self._instance.dagster_cloud_upload_workspace_entry_url,
-                    headers=self._instance.dagster_cloud_api_headers,
-                    data={
-                        "sandbox_connection_info": serialize_dagster_namedtuple(connection_info)
-                        if connection_info
-                        else None
-                    },
+                    headers=self._instance.headers_for_deployment(deployment_name),
+                    data={},
                     files={"workspace_entry.tmp": f},
                     timeout=self._instance.dagster_cloud_api_timeout,
                 )
                 raise_http_error(resp)
 
                 self._logger.info(
-                    "Successfully uploaded workspace entry for {location_name}".format(
-                        location_name=workspace_entry.location_name
+                    "Successfully uploaded workspace entry for {deployment_name}:{location_name}".format(
+                        deployment_name=deployment_name, location_name=workspace_entry.location_name
                     )
                 )
 
-    def _get_upload_location_data(self, location_name: str) -> DagsterCloudUploadLocationData:
+    def _get_upload_location_data(
+        self, deployment_name: str, location_name: str
+    ) -> DagsterCloudUploadLocationData:
+
         location_origin = self._get_repository_location_origin(location_name)
-        client = self.get_grpc_endpoint(location_origin).create_client()
+        client = self.get_grpc_endpoint(deployment_name, location_name).create_client()
 
         list_repositories_response = sync_list_repositories_grpc(client)
 
@@ -337,12 +305,14 @@ class DagsterCloudUserCodeLauncher(
 
     def _update_location_error(
         self,
+        deployment_name: str,
         location_name: str,
         error_info: SerializableErrorInfo,
         metadata: CodeDeploymentMetadata,
     ):
         self._logger.error(
-            "Unable to load location {location_name}. Updating location with error data: {error_info}.".format(
+            "Unable to load {deployment_name}:{location_name}. Updating location with error data: {error_info}.".format(
+                deployment_name=deployment_name,
                 location_name=location_name,
                 error_info=str(error_info),
             )
@@ -356,27 +326,40 @@ class DagsterCloudUserCodeLauncher(
             serialized_error_info=error_info,
         )
 
-        self._update_workspace_entry(errored_workspace_entry)
+        self._update_workspace_entry(deployment_name, errored_workspace_entry)
 
-    def _update_location_data(self, location_name: str, endpoint, metadata: CodeDeploymentMetadata):
+    def _update_location_data(
+        self,
+        deployment_name: str,
+        location_name: str,
+        endpoint,
+        metadata: CodeDeploymentMetadata,
+    ):
         self._logger.info(
-            "Uploading metadata for location {location_name}".format(location_name=location_name)
+            "Uploading metadata for {deployment_name}:{location_name}".format(
+                deployment_name=deployment_name, location_name=location_name
+            )
         )
 
         try:
             if isinstance(endpoint, SerializableErrorInfo):
-                self._update_location_error(location_name, error_info=endpoint, metadata=metadata)
+                self._update_location_error(
+                    deployment_name, location_name, error_info=endpoint, metadata=metadata
+                )
                 return
 
             try:
                 loaded_workspace_entry = DagsterCloudUploadWorkspaceEntry(
                     location_name=location_name,
                     deployment_metadata=metadata,
-                    upload_location_data=self._get_upload_location_data(location_name),
+                    upload_location_data=self._get_upload_location_data(
+                        deployment_name, location_name
+                    ),
                     serialized_error_info=None,
                 )
             except Exception:
                 self._update_location_error(
+                    deployment_name,
                     location_name,
                     error_info=serializable_error_info_from_exc_info(sys.exc_info()),
                     metadata=metadata,
@@ -384,26 +367,23 @@ class DagsterCloudUserCodeLauncher(
                 return
 
             self._logger.info(
-                "Updating location {location_name} with repository load data".format(
+                "Updating {deployment_name}:{location_name} with repository load data".format(
+                    deployment_name=deployment_name,
                     location_name=location_name,
                 )
             )
-            self._update_workspace_entry(loaded_workspace_entry)
+            self._update_workspace_entry(deployment_name, loaded_workspace_entry)
         except Exception:
             # Don't let a failure uploading the serialized data keep other locations
             # from being updated or continue reconciling in a loop
             error_info = serializable_error_info_from_exc_info(sys.exc_info())
             self._logger.error(
-                "Error while writing location data for location {location_name}: {error_info}".format(
+                "Error while writing location data for {deployment_name}:{location_name}: {error_info}".format(
+                    deployment_name=deployment_name,
                     location_name=location_name,
                     error_info=error_info,
                 )
             )
-
-    @property
-    def is_workspace_ready(self) -> bool:
-        with self._is_workspace_ready_lock:
-            return self._is_workspace_ready
 
     @property
     @abstractmethod
@@ -411,7 +391,9 @@ class DagsterCloudUserCodeLauncher(
         pass
 
     @abstractmethod
-    def _get_server_handles_for_location(self, location_name: str) -> Collection[ServerHandle]:
+    def _get_server_handles_for_location(
+        self, deployment_name: str, location_name: str
+    ) -> Collection[ServerHandle]:
         """Return a list of 'handles' that represent all running servers for a given location.
         Typically this will be a single server (unless an error was previous raised during a
         reconciliation loop. ServerHandle can be any type that is sufficient for
@@ -419,27 +401,14 @@ class DagsterCloudUserCodeLauncher(
 
     @abstractmethod
     def _create_new_server_endpoint(
-        self, location_name: str, metadata: CodeDeploymentMetadata
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
     ) -> GrpcServerEndpoint:
         """Create a new server for the given location using the given metadata as configuration
         and return a GrpcServerEndpoint indicating a hostname/port that can be used to access
         the server. Should result in an additional handle being returned from _get_server_handles_for_location."""
-
-    @abstractmethod
-    def _create_dev_sandbox_endpoint(
-        self,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        authorized_key: str,
-        proxy_info: DagsterCloudSandboxProxyInfo,
-    ) -> GrpcServerEndpoint:
-        """Create a new dev sandbox for the given location using the given metadata as configuration
-        and return a GrpcServerEndpoint indicating a hostname/port that can be used to access
-        the server. Should result in an additional handle being returned from _get_server_handles_for_location."""
-
-    @abstractmethod
-    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
-        pass
 
     @abstractmethod
     def _remove_server_handle(self, server_handle: ServerHandle) -> None:
@@ -448,7 +417,7 @@ class DagsterCloudUserCodeLauncher(
 
     @abstractmethod
     def _cleanup_servers(self):
-        """Remove all servers, across all locations."""
+        """Remove all servers, across all deployments and locations."""
 
     @abstractmethod
     def run_launcher(self) -> RunLauncher:
@@ -468,23 +437,32 @@ class DagsterCloudUserCodeLauncher(
 
         super().__exit__(exception_value, exception_value, traceback)
 
+    def add_upload_metadata(self, upload_metadata: Dict[Tuple[str, str], UserCodeLauncherEntry]):
+        """Add a set of locations to be uploaded in the next reconcilation loop."""
+        with self._metadata_lock:
+            self._upload_locations = self._upload_locations.union(upload_metadata)
+            self._desired_entries = merge_dicts(self._desired_entries, upload_metadata)
+
     def update_grpc_metadata(
         self,
-        desired_metadata: Dict[str, UserCodeLauncherEntry],
-        upload_locations: Set[str],
+        desired_metadata: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
     ):
         check.dict_param(
             desired_metadata,
             "desired_metadata",
-            key_type=str,
+            key_type=tuple,
             value_type=UserCodeLauncherEntry,
         )
-        check.set_param(upload_locations, "upload_locations", str)
 
         with self._metadata_lock:
-            # Change the inputs for the next reconciliation loop
-            self._desired_entries = desired_metadata
-            self._upload_locations = self._upload_locations.union(upload_locations)
+            # Need to be careful here to not wipe out locations that are marked to be uploaded
+            # before they get a chance to be uploaded - make sure those locations and their
+            # metadata don't get removed until the upload happens
+            keys_to_keep = self._upload_locations.difference(desired_metadata)
+            metadata_to_keep = {
+                key_to_keep: self._desired_entries[key_to_keep] for key_to_keep in keys_to_keep
+            }
+            self._desired_entries = merge_dicts(metadata_to_keep, desired_metadata)
 
     def _get_repository_location_origin(
         self, location_name: str
@@ -521,10 +499,6 @@ class DagsterCloudUserCodeLauncher(
         self._reconcile(desired_entries, upload_locations)
         self._reconcile_count += 1
 
-        if self._reconcile_count == 1:
-            with self._is_workspace_ready_lock:
-                self._is_workspace_ready = True
-
     def _check_for_image(self, metadata: CodeDeploymentMetadata):
         if self.requires_images and not metadata.image:
             raise Exception(
@@ -540,45 +514,40 @@ class DagsterCloudUserCodeLauncher(
                 "field in your agent's `dagster.yaml` file to a launcher that can load Docker images. "
             )
 
-    def _reconcile(self, desired_entries, upload_locations):
+    def _reconcile(
+        self,
+        desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        upload_locations: Set[DeploymentAndLocation],
+    ):
         diff = diff_serializable_namedtuple_map(desired_entries, self._actual_entries)
 
         to_update_keys = diff.to_add.union(diff.to_update)
-        existing_server_handles: Dict[str, List[ServerHandle]] = {}
+        existing_server_handles: Dict[DeploymentAndLocation, Collection[ServerHandle]] = {}
         for to_update_key in to_update_keys:
-            try:
+            deployment_name, location_name = to_update_key
 
+            try:
                 code_deployment_metadata = desired_entries[to_update_key].code_deployment_metadata
 
                 self._logger.info(
-                    "Updating server for location {location_name}".format(
-                        location_name=to_update_key
+                    "Updating server for {deployment_name}:{location_name}".format(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
                     )
                 )
                 existing_server_handles[to_update_key] = self._get_server_handles_for_location(
-                    to_update_key
+                    deployment_name, location_name
                 )
 
                 self._check_for_image(code_deployment_metadata)
 
-                if self.is_dev_sandbox():
-                    if self._should_soft_reload(
-                        location_name=to_update_key,
-                        entry=desired_entries[to_update_key],
-                    ):
-                        new_updated_endpoint = self._soft_reload(to_update_key)
-                    else:
-                        new_updated_endpoint = self._create_dev_sandbox_endpoint(
-                            to_update_key,
-                            code_deployment_metadata,
-                            authorized_key=self._authorized_key(),
-                            proxy_info=self._get_proxy_info(),
-                        )
-                else:
-                    new_updated_endpoint = self._create_new_server_endpoint(
-                        to_update_key,
-                        code_deployment_metadata,
-                    )
+                new_updated_endpoint: Union[
+                    GrpcServerEndpoint, SerializableErrorInfo
+                ] = self._create_new_server_endpoint(
+                    deployment_name,
+                    location_name,
+                    code_deployment_metadata,
+                )
 
                 self._logger.info(
                     "Created a new server for location {location_name}".format(
@@ -586,70 +555,75 @@ class DagsterCloudUserCodeLauncher(
                     )
                 )
             except Exception:
+                deployment_name, location_name = to_update_key
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 self._logger.error(
-                    "Error while updating server for {to_update_key}: {error_info}".format(
-                        to_update_key=to_update_key,
+                    "Error while updating server for {deployment_name}:{location_name}: {error_info}".format(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
                         error_info=error_info,
                     )
                 )
-                new_updated_endpoint: SerializableErrorInfo = error_info
+                new_updated_endpoint = error_info
 
             with self._grpc_endpoints_lock:
                 self._grpc_endpoints[to_update_key] = new_updated_endpoint
 
             if to_update_key in upload_locations:
+                deployment_name, location_name = to_update_key
                 upload_locations.remove(to_update_key)
                 self._update_location_data(
-                    to_update_key,
+                    deployment_name,
+                    location_name,
                     new_updated_endpoint,
                     desired_entries[to_update_key].code_deployment_metadata,
                 )
 
         for to_update_key in to_update_keys:
-            # If a hard reload, clean up the server handles
-            # If a soft reload, don't because we changed them in place
-            if not self._should_soft_reload(
-                location_name=to_update_key,
-                entry=desired_entries[to_update_key],
-            ):
-                server_handles = existing_server_handles.get(to_update_key, [])
+            deployment_name, location_name = to_update_key
+            server_handles = existing_server_handles.get(to_update_key, [])
 
-                if server_handles:
-                    self._logger.info(
-                        "Removing {num_servers} existing servers for location {location_name}".format(
-                            num_servers=len(server_handles), location_name=to_update_key
+            if server_handles:
+                self._logger.info(
+                    "Removing {num_servers} existing servers for {deployment_name}:{location_name}".format(
+                        num_servers=len(server_handles),
+                        location_name=location_name,
+                        deployment_name=deployment_name,
+                    )
+                )
+
+            for server_handle in server_handles:
+                try:
+                    self._remove_server_handle(server_handle)
+                except Exception:
+                    self._logger.error(
+                        "Error while cleaning up after updating server for {deployment_name}:{location_name}: {error_info}".format(
+                            deployment_name=deployment_name,
+                            location_name=location_name,
+                            error_info=serializable_error_info_from_exc_info(sys.exc_info()),
                         )
                     )
 
-                for server_handle in server_handles:
-                    try:
-                        self._remove_server_handle(server_handle)
-                    except Exception:
-                        self._logger.error(
-                            "Error while cleaning up after updating server for {to_update_key}: {error_info}".format(
-                                to_update_key=to_update_key,
-                                error_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                            )
-                        )
-
-                if server_handles:
-                    self._logger.info(
-                        "Removed all previous servers for {location_name}".format(
-                            location_name=to_update_key
-                        )
+            if server_handles:
+                self._logger.info(
+                    "Removed all previous servers for {deployment_name}:{location_name}".format(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
                     )
+                )
 
             # Always update our actual entries
             self._actual_entries[to_update_key] = desired_entries[to_update_key]
 
         for to_remove_key in diff.to_remove:
+            deployment_name, location_name = to_remove_key
             try:
-                self._remove_server(to_remove_key)
+                self._remove_server(deployment_name, location_name)
             except Exception:
                 self._logger.error(
-                    "Error while removing server for {to_remove_key}: {error_info}".format(
-                        to_remove_key=to_remove_key,
+                    "Error while removing server for {deployment_name}:{location_name}: {error_info}".format(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
                         error_info=serializable_error_info_from_exc_info(sys.exc_info()),
                     )
                 )
@@ -664,43 +638,54 @@ class DagsterCloudUserCodeLauncher(
             with self._grpc_endpoints_lock:
                 endpoint = self._grpc_endpoints.get(location)
 
+            deployment_name, location_name = location
             self._update_location_data(
-                location,
+                deployment_name,
+                location_name,
                 endpoint,
                 self._actual_entries[location].code_deployment_metadata,
             )
 
+    def has_grpc_endpoint(self, deployment_name: str, location_name: str) -> bool:
+        with self._grpc_endpoints_lock:
+            return (deployment_name, location_name) in self._grpc_endpoints
+
     def get_grpc_endpoint(
-        self, repository_location_origin: RepositoryLocationOrigin
+        self,
+        deployment_name: str,
+        location_name: str,
     ) -> GrpcServerEndpoint:
         with self._grpc_endpoints_lock:
-            location_name = repository_location_origin.location_name
-            endpoint = self._grpc_endpoints.get(location_name)
+            endpoint = self._grpc_endpoints.get((deployment_name, location_name))
 
         if not endpoint:
             raise DagsterUserCodeUnreachableError(
-                f"No server endpoint exists for location {location_name}"
+                f"No server endpoint exists for {deployment_name}:{location_name}"
             )
 
         if isinstance(endpoint, SerializableErrorInfo):
             # Consider raising the original exception here instead of a wrapped one
             raise DagsterUserCodeUnreachableError(
-                f"Failure loading server endpoint for location {location_name}: {endpoint}"
+                f"Failure loading server endpoint for {deployment_name}:{location_name}: {endpoint}"
             )
 
         return endpoint
 
     def get_grpc_endpoints(
         self,
-    ) -> Dict[str, Union[GrpcServerEndpoint, SerializableErrorInfo]]:
+    ) -> Dict[DeploymentAndLocation, Union[GrpcServerEndpoint, SerializableErrorInfo]]:
         with self._grpc_endpoints_lock:
             return self._grpc_endpoints.copy()
 
-    def _remove_server(self, location_name: str):
+    def _remove_server(self, deployment_name: str, location_name: str):
         self._logger.info(
-            "Removing server for location {location_name}".format(location_name=location_name)
+            "Removing server for {deployment_name}:{location_name}".format(
+                deployment_name=deployment_name, location_name=location_name
+            )
         )
-        existing_server_handles = self._get_server_handles_for_location(location_name)
+        existing_server_handles = self._get_server_handles_for_location(
+            deployment_name, location_name
+        )
         for server_handle in existing_server_handles:
             self._remove_server_handle(server_handle)
 
@@ -726,56 +711,3 @@ class DagsterCloudUserCodeLauncher(
 
             time.sleep(1)
         return server_id
-
-    def _should_soft_reload(self, location_name: str, entry: UserCodeLauncherEntry) -> bool:
-        if not self.is_dev_sandbox():
-            return False
-
-        existing_entry = self._actual_entries.get(location_name)
-        if not existing_entry:
-            return False
-
-        # A hard reload has been triggered
-        if entry.update_timestamp > existing_entry.update_timestamp:
-            return False
-
-        if not existing_entry.sandbox_saved_timestamp:
-            return True
-
-        if entry.sandbox_saved_timestamp > existing_entry.sandbox_saved_timestamp:
-            return True
-
-        # Getting here shouldn't be possible
-        return False
-
-    def _soft_reload(self, to_update_key):
-        existing_dev_sandbox_endpoint = self.get_grpc_endpoints().get(to_update_key)
-        if existing_dev_sandbox_endpoint:
-            server_id = existing_dev_sandbox_endpoint.server_id
-            host = existing_dev_sandbox_endpoint.host
-            port = existing_dev_sandbox_endpoint.port
-
-            client = existing_dev_sandbox_endpoint.create_client()
-            client.shutdown_server()
-
-            start_time = time.time()
-            last_error = f"Server {server_id} is still running."
-            while True:
-                try:
-                    # Wait for the server ID to change; this means we've reloaded the gRPC server.
-                    if server_id != sync_get_server_id(client):
-                        break
-                except Exception:
-                    last_error = serializable_error_info_from_exc_info(sys.exc_info())
-                if time.time() - start_time > 15:
-                    raise Exception(
-                        f"Timed out waiting for server {host}:{port} to reload. Most recent error: {str(last_error)}"
-                    )
-                time.sleep(1)
-            new_updated_endpoint = GrpcServerEndpoint(
-                server_id=sync_get_server_id(client),
-                host=host,
-                port=port,
-                socket=None,
-            )
-            return new_updated_endpoint

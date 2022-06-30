@@ -7,13 +7,13 @@ import time
 import zlib
 from collections import deque
 from contextlib import ExitStack
-from typing import Dict, Iterator, NamedTuple, Optional, Union, cast
+from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple, Union, cast
 
 import dagster._check as check
 import pendulum
-from dagster import DefaultRunLauncher
-from dagster.core.errors import DagsterUserCodeUnreachableError
+from dagster import DagsterInstance
 from dagster.core.host_representation import RepositoryLocationOrigin
+from dagster.core.host_representation.origin import RegisteredRepositoryLocationOrigin
 from dagster.core.launcher.base import LaunchRunContext
 from dagster.grpc.client import DagsterGrpcClient
 from dagster.serdes import (
@@ -21,7 +21,7 @@ from dagster.serdes import (
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster.utils import backoff, merge_dicts
+from dagster.utils import merge_dicts
 from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster.utils.interrupts import raise_interrupts_as
 from dagster_cloud.api.dagster_cloud_api import (
@@ -47,6 +47,7 @@ from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
 
 from ..version import __version__
 from .queries import (
+    ADD_AGENT_HEARTBEATS_MUTATION,
     ADD_AGENT_HEARTBEAT_MUTATION,
     GET_USER_CLOUD_REQUESTS_QUERY,
     WORKSPACE_ENTRIES_QUERY,
@@ -58,6 +59,16 @@ CHECK_WORKSPACE_INTERVAL_SECONDS = 5
 AGENT_HEARTBEAT_INTERVAL_SECONDS = 30
 
 AGENT_HEARTBEAT_ERROR_LIMIT = 25  # Send at most 25 errors
+
+DEFAULT_PENDING_REQUESTS_LIMIT = 100
+
+DEPLOYMENT_INFO_QUERY = """
+    query DeploymentInfo {
+         deploymentInfo {
+             deploymentName
+         }
+     }
+"""
 
 
 class DagsterCloudApiFutureContext(
@@ -93,7 +104,7 @@ class DagsterCloudApiFutureContext(
 class DagsterCloudAgent:
     MAX_THREADS_PER_CORE = 10
 
-    def __init__(self):
+    def __init__(self, pending_requests_limit: int = DEFAULT_PENDING_REQUESTS_LIMIT):
         self._logger = logging.getLogger("dagster_cloud")
 
         self._logger.info("Starting Dagster Cloud agent...")
@@ -101,7 +112,7 @@ class DagsterCloudAgent:
         self._exit_stack = ExitStack()
         self._iteration = 0
 
-        max_workers = os.cpu_count() * self.MAX_THREADS_PER_CORE
+        max_workers = (os.cpu_count() or 1) * self.MAX_THREADS_PER_CORE
         self._executor = self._exit_stack.enter_context(
             concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers,
@@ -115,9 +126,19 @@ class DagsterCloudAgent:
 
         self._last_workspace_check_time = None
 
-        self._errors = deque(
+        self._errors: deque = deque(
             maxlen=AGENT_HEARTBEAT_ERROR_LIMIT
         )  # (SerializableErrorInfo, timestamp) tuples
+
+        self._pending_requests: List[Dict[str, Any]] = []
+        self._locations_with_pending_requests: Set[Tuple[str, str]] = set()
+        self._ready_requests: List[Dict[str, Any]] = []
+
+        self._location_query_times: Dict[Tuple[str, str], float] = {}
+        self._pending_requests_limit = check.int_param(
+            pending_requests_limit, "pending_requests_limit"
+        )
+        self._active_deployments: Set[str]
 
     def __enter__(self):
         return self
@@ -125,19 +146,24 @@ class DagsterCloudAgent:
     def __exit__(self, _exception_type, _exception_value, _traceback):
         self._exit_stack.close()
 
-    def initialize_workspace(self, instance, user_code_launcher):
-        self._check_update_workspace(instance, user_code_launcher)
-
-        self._logger.info("Loading Dagster repositories...")
-        while not user_code_launcher.is_workspace_ready:
-            # Check for any received interrupts
-            with raise_interrupts_as(KeyboardInterrupt):
-                time.sleep(5)
-
     def run_loop(self, instance, user_code_launcher, agent_uuid):
         heartbeat_interval_seconds = AGENT_HEARTBEAT_INTERVAL_SECONDS
 
-        self.initialize_workspace(instance, user_code_launcher)
+        if not user_code_launcher.server_ttl_enabled:
+
+            if not instance.deployment_name:
+                self._logger.info(
+                    "Deployment name was not set - checking to see if it can be fetched from the server..."
+                )
+                # Fetch the deployment name from the server if it isn't set (only true
+                # for old agents, and only will work if there's a single deployment in the org)
+                result = instance.graphql_client.execute(DEPLOYMENT_INFO_QUERY)
+                deployment_name = result["data"]["deploymentInfo"]["deploymentName"]
+                instance = self._exit_stack.enter_context(
+                    DagsterInstance.from_ref(instance.ref_for_deployment(deployment_name))
+                )
+
+            self._check_update_workspace(instance, user_code_launcher)
 
         self._logger.info("Started polling for requests from {}".format(instance.dagster_cloud_url))
 
@@ -194,8 +220,7 @@ class DagsterCloudAgent:
             return
 
         self._last_workspace_check_time = curr_time
-
-        self._query_for_workspace_updates(instance, user_code_launcher, upload_results=False)
+        self._query_for_workspace_updates(instance, user_code_launcher)
 
     def _check_add_heartbeat(self, instance, agent_uuid, heartbeat_interval_seconds):
         curr_time = pendulum.now("UTC")
@@ -226,10 +251,21 @@ class DagsterCloudAgent:
             run_worker_statuses=run_worker_statuses,
         )
 
-        res = instance.graphql_client.execute(
-            ADD_AGENT_HEARTBEAT_MUTATION,
-            variable_values={"serializedAgentHeartbeat": serialize_dagster_namedtuple(heartbeat)},
-        )
+        if instance.for_branch_deployments:
+            res = instance.graphql_client.execute(
+                ADD_AGENT_HEARTBEATS_MUTATION,
+                variable_values={
+                    "serializedAgentHeartbeat": serialize_dagster_namedtuple(heartbeat),
+                    "deploymentNames": list(self._active_deployments),
+                },
+            )
+        else:
+            res = instance.graphql_client.execute(
+                ADD_AGENT_HEARTBEAT_MUTATION,
+                variable_values={
+                    "serializedAgentHeartbeat": serialize_dagster_namedtuple(heartbeat)
+                },
+            )
         if "errors" in res:
             raise GraphQLStorageError(res)
 
@@ -241,88 +277,191 @@ class DagsterCloudAgent:
     def request_ids_to_future_context(self) -> Dict[str, DagsterCloudApiFutureContext]:
         return self._request_ids_to_future_context
 
-    def _query_for_workspace_updates(
+    def _upload_outdated_workspace_entries(
         self,
         instance: DagsterCloudAgentInstance,
+        deployment_name: str,
         user_code_launcher: DagsterCloudUserCodeLauncher,
-        upload_results: bool,
     ):
-        # Get list of workspace entries from DB
-        result = instance.graphql_client.execute(WORKSPACE_ENTRIES_QUERY)
-        entries = result["data"]["workspace"]["workspaceEntries"]
+        result = instance.graphql_client_for_deployment(deployment_name).execute(
+            WORKSPACE_ENTRIES_QUERY,
+            variable_values={"deploymentNames": [deployment_name]},
+        )
+        entries = result["data"]["deployments"][0]["workspaceEntries"]
+        now = time.time()
 
-        # Create mapping of
-        # - location name => deployment metadata
-        deployment_map: Dict[str, UserCodeLauncherEntry] = {}
-        upload_locations = set()
+        upload_metadata = {}
+
         for entry in entries:
             location_name = entry["locationName"]
             deployment_metadata = deserialize_as(
                 entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
             )
-            sandbox_saved_timestamp = (
-                float(entry["sandboxSavedTimestamp"])
-                if entry.get("sandboxSavedTimestamp")
-                else None
-            )
-            deployment_map[location_name] = UserCodeLauncherEntry(
-                code_deployment_metadata=deployment_metadata,
-                update_timestamp=float(entry["metadataTimestamp"]),
-                sandbox_saved_timestamp=sandbox_saved_timestamp,
-            )
-            if upload_results and entry["hasOutdatedData"]:
-                upload_locations.add(location_name)
+            if entry["hasOutdatedData"]:
+                # Spin up a server for this location and upload its metadata to Cloud
+                # (Bump the TTL counter as well to leave the server up)
+                self._location_query_times[(deployment_name, location_name)] = now
+                upload_metadata[(deployment_name, location_name)] = UserCodeLauncherEntry(
+                    code_deployment_metadata=deployment_metadata,
+                    update_timestamp=float(entry["metadataTimestamp"]),
+                )
 
-        user_code_launcher.update_grpc_metadata(deployment_map, upload_locations)
+        user_code_launcher.add_upload_metadata(upload_metadata)
+
+    def _query_for_workspace_updates(
+        self,
+        instance: DagsterCloudAgentInstance,
+        user_code_launcher: DagsterCloudUserCodeLauncher,
+    ):
+
+        now = time.time()
+
+        if user_code_launcher.server_ttl_enabled:
+            # Include the location if:
+            # - There's a pending request in the queue for it
+            # - Its TTL hasn't expired since the last time somebody asked for it
+            locations_to_consider = {
+                deployment_and_location
+                for deployment_and_location in self._locations_with_pending_requests
+            }.union(
+                {
+                    deployment_and_location
+                    for deployment_and_location in self._location_query_times
+                    if (
+                        now - self._location_query_times[deployment_and_location]
+                        < user_code_launcher.server_ttl_seconds
+                    )
+                }
+            )
+            deployments_to_consider = {key[0] for key in locations_to_consider}
+        else:
+            deployments_to_consider = {cast(str, instance.deployment_name)}
+            locations_to_consider = None  # All locations from this deployment are loaded
+        self._active_deployments = deployments_to_consider
+
+        # Create mapping of
+        # - location name => deployment metadata
+        deployment_map: Dict[Tuple[str, str], UserCodeLauncherEntry] = {}
+        all_locations: Set[Tuple[str, str]] = set()
+
+        if deployments_to_consider:
+            result = instance.graphql_client.execute(
+                WORKSPACE_ENTRIES_QUERY,
+                variable_values={"deploymentNames": list(deployments_to_consider)},
+            )
+
+            for deployment_result in result["data"]["deployments"]:
+                deployment_name = deployment_result["deploymentName"]
+
+                entries = deployment_result["workspaceEntries"]
+
+                for entry in entries:
+                    location_name = entry["locationName"]
+
+                    location_key = (deployment_name, location_name)
+
+                    all_locations.add(location_key)
+                    deployment_metadata = deserialize_as(
+                        entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
+                    )
+
+                    if not user_code_launcher.server_ttl_enabled or location_key in cast(
+                        Set[Tuple[str, str]], locations_to_consider
+                    ):
+                        deployment_map[location_key] = UserCodeLauncherEntry(
+                            code_deployment_metadata=deployment_metadata,
+                            update_timestamp=float(entry["metadataTimestamp"]),
+                        )
+
+        user_code_launcher.update_grpc_metadata(deployment_map)
+
+        # In the rare event that there are pending requests that are no longer in the workspace at
+        # all (if, say, a location is removed while requests are enqueued), they should be forcibly
+        # moved to ready so that they don't stay pending forever - callsites will get an error
+        # about the location not existing, but that's preferable to slowly timing out
+        pending_requests_copy = self._pending_requests.copy()
+        self._pending_requests = []
+        for json_request in pending_requests_copy:
+            location_name = self._get_location_from_request(json_request)
+            deployment_name = json_request["deploymentName"]
+            if (deployment_name, location_name) not in all_locations:
+                self._ready_requests.append(json_request)
+            else:
+                self._pending_requests.append(json_request)
 
     def _get_grpc_client(
         self,
         user_code_launcher: DagsterCloudUserCodeLauncher,
-        repository_location_origin: RepositoryLocationOrigin,
+        deployment_name: str,
+        location_name: str,
     ) -> DagsterGrpcClient:
-        endpoint = user_code_launcher.get_grpc_endpoint(repository_location_origin)
-        if user_code_launcher.is_dev_sandbox():
-            # Retry client construction on sandboxes because their gRPC servers
-            # have brief downtimes while soft reloading.
-            client = backoff.backoff(
-                fn=endpoint.create_client,
-                retry_on=(DagsterUserCodeUnreachableError,),
-                max_retries=5,
-            )
+        endpoint = user_code_launcher.get_grpc_endpoint(deployment_name, location_name)
+        return endpoint.create_client()
+
+    def _get_location_origin_from_request(
+        self,
+        request: DagsterCloudApiRequest,
+    ) -> Optional[RepositoryLocationOrigin]:
+        """Derive the location from the specific argument passed in to a dagster_cloud_api call."""
+        api_name = request.request_api
+        if api_name in {
+            DagsterCloudApi.GET_EXTERNAL_EXECUTION_PLAN,
+            DagsterCloudApi.GET_SUBSET_EXTERNAL_PIPELINE_RESULT,
+        }:
+            external_pipeline_origin = request.request_args.pipeline_origin
+            return external_pipeline_origin.external_repository_origin.repository_location_origin
+        elif api_name in {
+            DagsterCloudApi.GET_EXTERNAL_PARTITION_CONFIG,
+            DagsterCloudApi.GET_EXTERNAL_PARTITION_TAGS,
+            DagsterCloudApi.GET_EXTERNAL_PARTITION_NAMES,
+            DagsterCloudApi.GET_EXTERNAL_PARTITION_SET_EXECUTION_PARAM_DATA,
+            DagsterCloudApi.GET_EXTERNAL_SCHEDULE_EXECUTION_DATA,
+            DagsterCloudApi.GET_EXTERNAL_SENSOR_EXECUTION_DATA,
+        }:
+            return request.request_args.repository_origin.repository_location_origin
+        elif api_name == DagsterCloudApi.GET_EXTERNAL_NOTEBOOK_DATA:
+            return request.request_args.repository_location_origin
+        elif api_name == DagsterCloudApi.PING_LOCATION:
+            return RegisteredRepositoryLocationOrigin(request.request_args.location_name)
         else:
-            client = endpoint.create_client()
-        return client
+            return None
 
     def _handle_api_request(
         self,
         request: DagsterCloudApiRequest,
+        deployment_name: str,
         instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
     ) -> Union[DagsterCloudApiSuccess, DagsterCloudApiGrpcResponse]:
         api_name = request.request_api
-        if api_name == DagsterCloudApi.CHECK_FOR_WORKSPACE_UPDATES:
+
+        repository_location_origin = self._get_location_origin_from_request(request)
+        location_name = (
+            repository_location_origin.location_name if repository_location_origin else None
+        )
+
+        if api_name == DagsterCloudApi.PING_LOCATION:
+            # Do nothing - this request only exists to bump TTL for the location
+            return DagsterCloudApiSuccess()
+        elif api_name == DagsterCloudApi.CHECK_FOR_WORKSPACE_UPDATES:
             # Dagster Cloud has requested that we upload new metadata for any out of date locations in
             # the workspace
-            self._query_for_workspace_updates(instance, user_code_launcher, upload_results=True)
+            self._upload_outdated_workspace_entries(instance, deployment_name, user_code_launcher)
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.GET_EXTERNAL_EXECUTION_PLAN:
-            external_pipeline_origin = request.request_args.pipeline_origin
             client = self._get_grpc_client(
-                user_code_launcher,
-                external_pipeline_origin.external_repository_origin.repository_location_origin,
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
             serialized_snapshot_or_error = client.execution_plan_snapshot(
                 execution_plan_snapshot_args=request.request_args._replace(
-                    instance_ref=instance.get_ref()
+                    instance_ref=instance.ref_for_deployment(deployment_name)
                 )
             )
             return DagsterCloudApiGrpcResponse(serialized_snapshot_or_error)
 
         elif api_name == DagsterCloudApi.GET_SUBSET_EXTERNAL_PIPELINE_RESULT:
-            external_pipeline_origin = request.request_args.pipeline_origin
             client = self._get_grpc_client(
-                user_code_launcher,
-                external_pipeline_origin.external_repository_origin.repository_location_origin,
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
 
             serialized_subset_result_or_error = client.external_pipeline_subset(
@@ -331,36 +470,32 @@ class DagsterCloudAgent:
 
             return DagsterCloudApiGrpcResponse(serialized_subset_result_or_error)
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_CONFIG:
-            external_repository_origin = request.request_args.repository_origin
             client = self._get_grpc_client(
-                user_code_launcher, external_repository_origin.repository_location_origin
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
             serialized_partition_config_or_error = client.external_partition_config(
                 partition_args=request.request_args,
             )
             return DagsterCloudApiGrpcResponse(serialized_partition_config_or_error)
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_TAGS:
-            external_repository_origin = request.request_args.repository_origin
             client = self._get_grpc_client(
-                user_code_launcher, external_repository_origin.repository_location_origin
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
             serialized_partition_tags_or_error = client.external_partition_tags(
                 partition_args=request.request_args,
             )
             return DagsterCloudApiGrpcResponse(serialized_partition_tags_or_error)
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_NAMES:
-            external_repository_origin = request.request_args.repository_origin
             client = self._get_grpc_client(
-                user_code_launcher, external_repository_origin.repository_location_origin
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
             serialized_partition_names_or_error = client.external_partition_names(
                 partition_names_args=request.request_args,
             )
             return DagsterCloudApiGrpcResponse(serialized_partition_names_or_error)
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_SET_EXECUTION_PARAM_DATA:
-            external_repository_origin = request.request_args.repository_origin
             client = self._get_grpc_client(
-                user_code_launcher, external_repository_origin.repository_location_origin
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
             serialized_partition_execution_params_or_error = (
                 client.external_partition_set_execution_params(
@@ -369,12 +504,13 @@ class DagsterCloudAgent:
             )
             return DagsterCloudApiGrpcResponse(serialized_partition_execution_params_or_error)
         elif api_name == DagsterCloudApi.GET_EXTERNAL_SCHEDULE_EXECUTION_DATA:
-            external_repository_origin = request.request_args.repository_origin
             client = self._get_grpc_client(
-                user_code_launcher, external_repository_origin.repository_location_origin
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
 
-            args = request.request_args._replace(instance_ref=instance.get_ref())
+            args = request.request_args._replace(
+                instance_ref=instance.ref_for_deployment(deployment_name)
+            )
 
             serialized_schedule_data_or_error = client.external_schedule_execution(
                 external_schedule_execution_args=args,
@@ -383,12 +519,13 @@ class DagsterCloudAgent:
             return DagsterCloudApiGrpcResponse(serialized_schedule_data_or_error)
 
         elif api_name == DagsterCloudApi.GET_EXTERNAL_SENSOR_EXECUTION_DATA:
-            external_repository_origin = request.request_args.repository_origin
             client = self._get_grpc_client(
-                user_code_launcher, external_repository_origin.repository_location_origin
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
 
-            args = request.request_args._replace(instance_ref=instance.get_ref())
+            args = request.request_args._replace(
+                instance_ref=instance.ref_for_deployment(deployment_name)
+            )
 
             serialized_sensor_data_or_error = client.external_sensor_execution(
                 sensor_execution_args=args,
@@ -397,72 +534,60 @@ class DagsterCloudAgent:
             return DagsterCloudApiGrpcResponse(serialized_sensor_data_or_error)
         elif api_name == DagsterCloudApi.GET_EXTERNAL_NOTEBOOK_DATA:
             client = self._get_grpc_client(
-                user_code_launcher, request.request_args.repository_location_origin
+                user_code_launcher, deployment_name, cast(str, location_name)
             )
             response = client.external_notebook_data(request.request_args.notebook_path)
             return DagsterCloudApiGrpcResponse(response.decode())
         elif api_name == DagsterCloudApi.LAUNCH_RUN:
             run = request.request_args.pipeline_run
 
-            instance.report_engine_event(
-                f"{instance.agent_display_name} is launching run {run.run_id}",
-                run,
-                cls=self.__class__,
-            )
-
-            instance.add_run_tags(
-                run.run_id,
-                merge_dicts(
-                    {"dagster/agent_label": instance.dagster_cloud_api_agent_label}
-                    if instance.dagster_cloud_api_agent_label
-                    else {},
-                    {"dagster/agent_id": instance.instance_uuid},
-                ),
-            )
-
-            if user_code_launcher.is_dev_sandbox():
-                repository_location_origin = (
-                    run.external_pipeline_origin.external_repository_origin.repository_location_origin
+            with DagsterInstance.from_ref(
+                instance.ref_for_deployment(deployment_name)
+            ) as scoped_instance:
+                scoped_instance.report_engine_event(
+                    f"{instance.agent_display_name} is launching run {run.run_id}",
+                    run,
+                    cls=self.__class__,
                 )
 
-                client = self._get_grpc_client(
-                    user_code_launcher,
-                    repository_location_origin,
+                scoped_instance.add_run_tags(
+                    run.run_id,
+                    merge_dicts(
+                        {"dagster/agent_label": instance.dagster_cloud_api_agent_label}
+                        if instance.dagster_cloud_api_agent_label
+                        else {},
+                        {"dagster/agent_id": instance.instance_uuid},
+                    ),
                 )
-                DefaultRunLauncher.launch_run_from_grpc_client(
-                    instance=instance,
-                    run=run,
-                    grpc_client=client,
+
+                scoped_instance.run_launcher.launch_run(
+                    LaunchRunContext(pipeline_run=run, workspace=None)
                 )
-            else:
-                launcher = user_code_launcher.run_launcher()
-                launcher.launch_run(LaunchRunContext(pipeline_run=run, workspace=None))
-            return DagsterCloudApiSuccess()
+                return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.TERMINATE_RUN:
             # With agent replicas enabled:
             # Run workers now poll for run status. We don't use the run launcher to terminate.
             # Once min agent version is bumped, we can deprecate this command.
             # For backcompat, we use the run launcher to terminate unless the user opts in.
             run = request.request_args.pipeline_run
-            if instance.agent_replicas_enabled:
-                instance.report_engine_event(
-                    f"{instance.agent_display_name} received request to mark run as canceling",
-                    run,
-                    cls=self.__class__,
-                )
-                instance.report_run_canceling(run)
-            else:
-                instance.report_engine_event(
-                    f"{instance.agent_display_name} received request to terminate run",
-                    run,
-                    cls=self.__class__,
-                )
-                if user_code_launcher.is_dev_sandbox():
-                    launcher = DefaultRunLauncher()
-                    launcher.register_instance(instance)
+
+            with DagsterInstance.from_ref(
+                instance.ref_for_deployment(deployment_name)
+            ) as scoped_instance:
+                if instance.agent_replicas_enabled:
+                    scoped_instance.report_engine_event(
+                        f"{instance.agent_display_name} received request to mark run as canceling",
+                        run,
+                        cls=self.__class__,
+                    )
+                    scoped_instance.report_run_canceling(run)
                 else:
-                    launcher = user_code_launcher.run_launcher()
-                launcher.terminate(run.run_id)
+                    scoped_instance.report_engine_event(
+                        f"{instance.agent_display_name} received request to terminate run",
+                        run,
+                        cls=self.__class__,
+                    )
+                    scoped_instance.run_launcher.terminate(run.run_id)
             return DagsterCloudApiSuccess()
 
         else:
@@ -485,6 +610,7 @@ class DagsterCloudAgent:
         request_id = json_request["requestId"]
         request_api = json_request["requestApi"]
         request_body = json_request["requestBody"]
+        deployment_name = json_request["deploymentName"]
 
         request: Union[str, DagsterCloudApiRequest] = DagsterCloudApiRequest.format_request(
             request_id, request_api
@@ -506,7 +632,9 @@ class DagsterCloudAgent:
                         request=request,
                     )
                 )
-                api_result = self._handle_api_request(request, instance, user_code_launcher)
+                api_result = self._handle_api_request(
+                    request, deployment_name, instance, user_code_launcher
+                )
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 api_result = DagsterCloudApiErrorResponse(error_infos=[error_info])
@@ -545,7 +673,7 @@ class DagsterCloudAgent:
             )
         )
 
-        upload_api_response(instance, upload_response)
+        upload_api_response(instance, deployment_name, upload_response)
 
         self._logger.info(
             "Finished uploading response for request {request}.".format(
@@ -555,22 +683,76 @@ class DagsterCloudAgent:
 
         return error_info
 
+    def _get_location_from_request(self, json_request: Dict[str, Any]) -> Optional[str]:
+        request_api = json_request["requestApi"]
+        request_body = json_request["requestBody"]
+        if request_api not in DagsterCloudApi.__members__:
+            return None
+
+        request = cast(DagsterCloudApiRequest, deserialize_json_to_dagster_namedtuple(request_body))
+        location_origin = self._get_location_origin_from_request(request)
+        if not location_origin:
+            return None
+
+        return location_origin.location_name
+
     def run_iteration(
         self, instance: DagsterCloudAgentInstance, user_code_launcher: DagsterCloudUserCodeLauncher
     ) -> Iterator[Optional[SerializableErrorInfo]]:
-        result = instance.graphql_client.execute(GET_USER_CLOUD_REQUESTS_QUERY)
-        json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
 
-        self._logger.debug(
-            "Iteration #{iteration}: Adding {num_requests} requests to process.".format(
-                iteration=self._iteration, num_requests=len(json_requests)
+        num_pending_requests = len(self._pending_requests)
+
+        if num_pending_requests < self._pending_requests_limit:
+            result = instance.graphql_client.execute(
+                GET_USER_CLOUD_REQUESTS_QUERY,
+                {"forBranchDeployments": instance.for_branch_deployments},
             )
-        )
+            json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
 
-        # Submit requests to threadpool and store the futures
-        for json_request in json_requests:
+            self._logger.debug(
+                "Iteration #{iteration}: Adding {num_requests} requests to be processed. Currently {num_pending_requests} waiting for server to be ready".format(
+                    iteration=self._iteration,
+                    num_requests=len(json_requests),
+                    num_pending_requests=num_pending_requests,
+                )
+            )
+
+            self._pending_requests.extend(json_requests)
+        else:
+            self._logger.warning(
+                "Iteration #{iteration}: Waiting to pull requests from the queue since there are already {num_pending_requests} in the queue".format(
+                    iteration=self._iteration,
+                    num_pending_requests=len(self._pending_requests),
+                )
+            )
+
+        invalid_requests = []
+        self._locations_with_pending_requests = set()
+
+        # Determine which pending requests are now ready (their locations have been loaded, or the
+        # request does not correspond to a particular location)
+        for json_request in self._pending_requests:
+            deployment_name = json_request["deploymentName"]
+            location_name = self._get_location_from_request(json_request)
+            if location_name:
+                self._location_query_times[(deployment_name, location_name)] = time.time()
+
+                if not user_code_launcher.has_grpc_endpoint(deployment_name, location_name):
+                    # Next completed periodic workspace update will make the location up to date
+                    # - keep this in the queue until then
+                    invalid_requests.append(json_request)
+                    self._locations_with_pending_requests.add((deployment_name, location_name))
+                    continue
+
+            self._ready_requests.append(json_request)
+
+        # Any invalid requests go back in the pending queue - the next workspace update will
+        # ensure that the usercodelauncher spins up locations for those requests
+        self._pending_requests = invalid_requests
+
+        # send all ready requests to the threadpool
+        for json_request in self._ready_requests:
             request_id = json_request["requestId"]
-
             submitted_to_executor_timestamp = pendulum.now("UTC").timestamp()
             future_context = DagsterCloudApiFutureContext(
                 future=self._executor.submit(
@@ -583,6 +765,8 @@ class DagsterCloudAgent:
             )
 
             self._request_ids_to_future_context[request_id] = future_context
+
+        self._ready_requests = []
 
         # Process futures that are done or have timed out
         # Create a shallow copy of the futures dict to modify it while iterating
@@ -608,7 +792,9 @@ class DagsterCloudAgent:
 
 
 def upload_api_response(
-    instance: DagsterCloudAgentInstance, upload_response: DagsterCloudUploadApiResponse
+    instance: DagsterCloudAgentInstance,
+    deployment_name: str,
+    upload_response: DagsterCloudUploadApiResponse,
 ):
     with tempfile.TemporaryDirectory() as temp_dir:
         dst = os.path.join(temp_dir, "api_response.tmp")
@@ -618,7 +804,7 @@ def upload_api_response(
         with open(dst, "rb") as f:
             resp = instance.requests_session.post(
                 instance.dagster_cloud_upload_api_response_url,
-                headers=instance.dagster_cloud_api_headers,
+                headers=instance.headers_for_deployment(deployment_name),
                 files={"api_response.tmp": f},
                 timeout=instance.dagster_cloud_api_timeout,
             )

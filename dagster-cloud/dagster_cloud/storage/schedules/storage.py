@@ -18,7 +18,6 @@ from .queries import (
     CREATE_JOB_TICK_MUTATION,
     GET_JOB_STATE_QUERY,
     GET_JOB_TICKS_QUERY,
-    PURGE_JOB_TICKS_MUTATION,
     UPDATE_JOB_STATE_MUTATION,
     UPDATE_JOB_TICK_MUTATION,
 )
@@ -169,16 +168,14 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         )
         return tick
 
-    def purge_ticks(self, origin_id: str, selector_id: str, tick_status: TickStatus, before: float):
-        self._execute_query(
-            PURGE_JOB_TICKS_MUTATION,
-            variables={
-                "jobOriginId": origin_id,
-                "selectorId": selector_id,
-                "tickStatus": tick_status.value if tick_status else None,
-                "before": before,
-            },
-        )
+    def purge_ticks(
+        self,
+        origin_id: str,
+        selector_id: str,
+        before: float,
+        tick_statuses: Optional[List[TickStatus]] = None,
+    ):
+        raise NotImplementedError("Not callable from user cloud")
 
     def upgrade(self):
         raise NotImplementedError("Not callable from user cloud")

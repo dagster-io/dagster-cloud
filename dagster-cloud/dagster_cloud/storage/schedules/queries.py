@@ -63,14 +63,3 @@ UPDATE_JOB_STATE_MUTATION = """
         }
     }
 """
-
-PURGE_JOB_TICKS_MUTATION = """
-    mutation purgeJobTicksMutation($jobOriginId: String!, $selectorId: String, $tickStatus: InstigationTickStatus, $before: Float) {
-        schedules {
-            purgeJobTicks(jobOriginId: $jobOriginId, selectorId: $selectorId, tickStatus: $tickStatus, before: $before) {
-                ok
-            }
-        }
-    }
-
-"""

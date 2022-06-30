@@ -204,9 +204,9 @@ def add_command(
     **kwargs,
 ):
     """Add or update the image for a repository location in the workspace."""
-    client = gql.graphql_client_from_url(url, api_token)
-    location_document = _get_location_document(location, kwargs)
-    _add_or_update_location(client, location_document, agent_timeout)
+    with gql.graphql_client_from_url(url, api_token) as client:
+        location_document = _get_location_document(location, kwargs)
+        _add_or_update_location(client, location_document, agent_timeout)
 
 
 def list_locations(location_names: List[str]) -> str:
@@ -230,9 +230,9 @@ def update_command(
     **kwargs,
 ):
     """Update the image for a repository location in the workspace."""
-    client = gql.graphql_client_from_url(url, api_token)
-    location_document = _get_location_document(location, kwargs)
-    _add_or_update_location(client, location_document, agent_timeout)
+    with gql.graphql_client_from_url(url, api_token) as client:
+        location_document = _get_location_document(location, kwargs)
+        _add_or_update_location(client, location_document, agent_timeout)
 
 
 def wait_for_load(client, locations, timeout=DEFAULT_AGENT_TIMEOUT):
@@ -304,12 +304,12 @@ def delete_command(
     location: str = Argument(..., help="Code location name."),
 ):
     """Delete a repository location from the workspace."""
-    client = gql.graphql_client_from_url(url, api_token)
-    try:
-        gql.delete_code_location(client, location)
-        ui.print(f"Deleted location {location}.")
-    except Exception as e:
-        raise ui.error(str(e))
+    with gql.graphql_client_from_url(url, api_token) as client:
+        try:
+            gql.delete_code_location(client, location)
+            ui.print(f"Deleted location {location}.")
+        except Exception as e:
+            raise ui.error(str(e))
 
 
 @app.command(
@@ -321,8 +321,8 @@ def list_command(
     api_token: str,
 ):
     """List repository locations in the workspace."""
-    client = gql.graphql_client_from_url(url, api_token)
-    execute_list_command(client)
+    with gql.graphql_client_from_url(url, api_token) as client:
+        execute_list_command(client)
 
 
 def execute_list_command(client):
@@ -354,9 +354,9 @@ def pull_command(
     api_token: str,
 ):
     """Retrieve code location definitions as a workspace.yaml file."""
-    client = gql.graphql_client_from_url(url, api_token)
-    document = gql.fetch_locations_as_document(client)
-    ui.print_yaml(document or {})
+    with gql.graphql_client_from_url(url, api_token) as client:
+        document = gql.fetch_locations_as_document(client)
+        ui.print_yaml(document or {})
 
 
 @app.command(name="sync", short_help="Sync workspace with a workspace.yaml file.")
@@ -374,8 +374,8 @@ def sync_command(
     ),
 ):
     """Sync the workspace with the contents of a workspace.yaml file."""
-    client = gql.graphql_client_from_url(url, api_token)
-    execute_sync_command(client, workspace, agent_timeout)
+    with gql.graphql_client_from_url(url, api_token) as client:
+        execute_sync_command(client, workspace, agent_timeout)
 
 
 def format_workspace_config(workspace_config) -> Dict[str, Any]:

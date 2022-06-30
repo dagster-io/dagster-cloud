@@ -12,10 +12,6 @@ from dagster.core.host_representation.grpc_server_registry import GrpcServerEndp
 from dagster.core.utils import parse_env_var
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
-from dagster_cloud.api.dagster_cloud_api import (
-    DagsterCloudSandboxConnectionInfo,
-    DagsterCloudSandboxProxyInfo,
-)
 from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
@@ -23,10 +19,12 @@ from docker.models.containers import Container
 
 from ..config_schema.docker import SHARED_DOCKER_CONFIG
 from ..user_code_launcher import (
-    DAGSTER_SANDBOX_PORT_ENV,
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+    SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudUserCodeLauncher,
 )
+from ..user_code_launcher.utils import deterministic_label_for_location
+from .utils import unique_docker_resource_name
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
 
@@ -41,6 +39,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         env_vars=None,
         container_kwargs=None,
         server_process_startup_timeout=None,
+        server_ttl=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("dagster_cloud")
@@ -57,7 +56,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
 
-        super(DockerUserCodeLauncher, self).__init__()
+        super(DockerUserCodeLauncher, self).__init__(server_ttl)
 
     @property
     def requires_images(self):
@@ -87,6 +86,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
                     description="Timeout when waiting for a code server to be ready after it is created",
                 ),
             },
+            SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
 
     @staticmethod
@@ -96,6 +96,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
     def _create_container(
         self,
         client,
+        deployment_name,
         location_name,
         metadata,
         container_name,
@@ -112,82 +113,29 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             name=container_name,
             network=container_context.networks[0] if len(container_context.networks) else None,
             environment=environment,
-            labels=[GRPC_SERVER_LABEL, self._get_label_for_location(location_name)],
+            labels=[
+                GRPC_SERVER_LABEL,
+                deterministic_label_for_location(deployment_name, location_name),
+            ],
             command=command,
             ports=ports,
             **container_context.container_kwargs,
         )
 
-    def _get_server_handles_for_location(self, location_name: str) -> Collection[Container]:
+    def _get_server_handles_for_location(
+        self, deployment_name: str, location_name: str
+    ) -> Collection[Container]:
         client = docker.client.from_env()
         return client.containers.list(
-            all=True, filters={"label": self._get_label_for_location(location_name)}
-        )
-
-    @property
-    def supports_dev_sandbox(self) -> bool:
-        return True
-
-    def _create_dev_sandbox_endpoint(
-        self,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        authorized_key: str,
-        proxy_info: DagsterCloudSandboxProxyInfo,
-    ) -> GrpcServerEndpoint:
-        return self._launch(
-            location_name=location_name,
-            metadata=metadata,
-            command=["supervisord"],
-            additional_environment={  # TODO: Abstract into SandboxContainerEnvironment
-                "DAGSTER_SANDBOX_AUTHORIZED_KEY": authorized_key,
-                "DAGSTER_PROXY_HOSTNAME": proxy_info.hostname,
-                "DAGSTER_PROXY_PORT": str(proxy_info.port),
-                "DAGSTER_PROXY_AUTH_TOKEN": proxy_info.auth_token,
-                DAGSTER_SANDBOX_PORT_ENV: str(proxy_info.ssh_port),
-            },
-        )
-
-    def get_sandbox_connection_info(self, location_name: str) -> DagsterCloudSandboxConnectionInfo:
-        # TODO: Re-implement this in the base class. We'll need to extend handles to include
-        # info like the environment and created timestamp or add abstract methods to look
-        # this information up.
-
-        # If there are multiple handles for a location,
-        # get the most recently created one. We assume this
-        # is the "new" one in our blue/green deployment.
-        containers = sorted(
-            list(self._get_server_handles_for_location(location_name)),
-            key=lambda handle: handle.attrs["Created"],
-        )
-
-        try:
-            container = containers[-1]
-        except IndexError:
-            raise Exception(f"{location_name} has no running containers.")
-
-        port_env = next(
-            (env for env in container.attrs["Config"]["Env"] if "DAGSTER_SANDBOX_PORT" in env)
-        )
-        port = port_env.split("=")[1]
-
-        hostname_env = next(
-            (env for env in container.attrs["Config"]["Env"] if "DAGSTER_PROXY_HOSTNAME" in env)
-        )
-        hostname = hostname_env.split("=")[1]
-
-        username = "root"  # Hardcoded for now
-
-        return DagsterCloudSandboxConnectionInfo(
-            username=username,
-            hostname=hostname,
-            port=int(port),
+            all=True,
+            filters={"label": deterministic_label_for_location(deployment_name, location_name)},
         )
 
     def _create_new_server_endpoint(
-        self, location_name: str, metadata: CodeDeploymentMetadata
+        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> GrpcServerEndpoint:
         return self._launch(
+            deployment_name=deployment_name,
             location_name=location_name,
             metadata=metadata,
             command=metadata.get_grpc_server_command(),
@@ -195,6 +143,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
     def _launch(
         self,
+        deployment_name: str,
         location_name: str,
         metadata: CodeDeploymentMetadata,
         command: List[str],
@@ -209,11 +158,14 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             container_kwargs=self._container_kwargs,
         ).merge(DockerContainerContext.create_from_config(metadata.container_context))
 
-        container_name = f"{location_name}_{str(uuid.uuid4().hex)[0:6]}"
+        container_name = unique_docker_resource_name(deployment_name, location_name)
 
         self._logger.info(
-            "Starting a new container for location {location_name} with image {image}: {container_name}".format(
-                location_name=location_name, image=metadata.image, container_name=container_name
+            "Starting a new container for {deployment_name}:{location_name} with image {image}: {container_name}".format(
+                deployment_name=deployment_name,
+                location_name=location_name,
+                image=metadata.image,
+                container_name=container_name,
             )
         )
 
@@ -238,6 +190,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         try:
             container = self._create_container(
                 client,
+                deployment_name,
                 location_name,
                 metadata,
                 container_name,
@@ -257,6 +210,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
             container = self._create_container(
                 client,
+                deployment_name,
                 location_name,
                 metadata,
                 container_name,
@@ -288,9 +242,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         )
 
         return endpoint
-
-    def _get_label_for_location(self, location_name):
-        return f"location_{location_name}"
 
     def _remove_server_handle(self, server_handle: Container) -> None:
         container = server_handle

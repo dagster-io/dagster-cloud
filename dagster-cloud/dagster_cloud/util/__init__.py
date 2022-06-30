@@ -21,16 +21,16 @@ class SerializableNamedtupleMapDiff(
     ):
         return super(SerializableNamedtupleMapDiff, cls).__new__(
             cls,
-            check.set_param(to_add, "to_add", str),
-            check.set_param(to_update, "to_update", str),
-            check.set_param(to_remove, "to_remove", str),
+            check.set_param(to_add, "to_add", tuple),
+            check.set_param(to_update, "to_update", tuple),
+            check.set_param(to_remove, "to_remove", tuple),
         )
 
 
 def diff_serializable_namedtuple_map(desired_map, actual_map, force_update_keys=None):
     desired_keys = set(desired_map.keys())
     actual_keys = set(actual_map.keys())
-    force_update_keys = check.opt_set_param(force_update_keys, "force_update_keys", str)
+    force_update_keys = check.opt_set_param(force_update_keys, "force_update_keys", tuple)
 
     to_add = desired_keys.difference(actual_keys)
     to_remove = actual_keys.difference(desired_keys)

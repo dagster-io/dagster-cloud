@@ -1,11 +1,32 @@
 # Dagster Cloud Changelog
 
+# 0.15.3
+
+### New
+
+- User code servers now support a configurable time-to-live (TTL). The agent will spin down any user code servers that haven’t served requests recently and will spin them back up the next time they’re needed. You can use this TTL to save compute cost because your user code servers will spend less time sitting idle. [You can configure TTL](https://docs.dagster.cloud/agents/agent-settings#enabling-user-code-server-ttl) in your agent’s `dagster.yaml`:
+
+```yaml
+user_code_launcher:
+  config:
+    server_ttl:
+      enabled: true
+      ttl_seconds: 7200 # 2 hours
+```
+
+- When viewing agent and user tokens under the settings page, tokens are now sorted by latest creation date.
+
+### Bugfixes
+
+- When configuring alert policies, all inputs are now validated before submission.
+- When copying an agent related error message, the original error and stack trace are now included.
+
 # 0.15.2
 
 ### New
 
 - Added [Terms of Service](https://dagster.io/terms) to Dagster Cloud.
-- Organization admins can now be managed from the Cloud permissions page. For more information, see the Cloud [RBAC docs](https://docs.dagster.cloud/auth#role-based-access-controls). 
+- Organization admins can now be managed from the Cloud permissions page. For more information, see the Cloud [RBAC docs](https://docs.dagster.cloud/auth#role-based-access-controls).
 
 # 0.15.1
 
