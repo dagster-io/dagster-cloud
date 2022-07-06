@@ -1,18 +1,16 @@
 import logging
-import os
 import sys
 import time
-import uuid
 from typing import Any, Collection, Dict, List, Optional
 
 import docker
-from dagster import Array, Field, IntSource, Permissive
+from dagster import Field, IntSource
 from dagster import _check as check
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.utils import parse_env_var
 from dagster.serdes import ConfigurableClass
 from dagster.utils import find_free_port, merge_dicts
-from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
 from docker.models.containers import Container

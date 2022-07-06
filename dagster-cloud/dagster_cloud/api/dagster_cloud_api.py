@@ -11,7 +11,7 @@ from dagster.core.storage.pipeline_run import PipelineRun
 from dagster.serdes import whitelist_for_serdes
 from dagster.utils.error import SerializableErrorInfo
 from dagster_cloud.execution.monitoring import CloudRunWorkerStatuses
-from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
 

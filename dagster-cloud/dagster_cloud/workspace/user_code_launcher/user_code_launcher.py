@@ -38,8 +38,8 @@ from dagster_cloud.execution.monitoring import (
 )
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.util import diff_serializable_namedtuple_map
-from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_cloud_cli.core.errors import raise_http_error
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
 

@@ -13,7 +13,7 @@ from dagster.grpc.server import GrpcServerProcess
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
 from dagster.utils import merge_dicts
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
-from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from .user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,

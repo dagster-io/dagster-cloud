@@ -10,7 +10,7 @@ from dagster.utils import merge_dicts
 from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
-from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,

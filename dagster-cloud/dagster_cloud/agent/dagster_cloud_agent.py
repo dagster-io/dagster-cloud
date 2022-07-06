@@ -38,12 +38,12 @@ from dagster_cloud.api.dagster_cloud_api import (
     TimestampedError,
 )
 from dagster_cloud.instance import DagsterCloudAgentInstance
-from dagster_cloud.workspace.origin import CodeDeploymentMetadata
 from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,
 )
 from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from ..version import __version__
 from .queries import (
@@ -138,7 +138,7 @@ class DagsterCloudAgent:
         self._pending_requests_limit = check.int_param(
             pending_requests_limit, "pending_requests_limit"
         )
-        self._active_deployments: Set[str]
+        self._active_deployments: Set[str] = set()
 
     def __enter__(self):
         return self

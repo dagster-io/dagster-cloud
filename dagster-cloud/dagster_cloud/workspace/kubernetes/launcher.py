@@ -10,7 +10,7 @@ from dagster.core.host_representation.grpc_server_registry import GrpcServerEndp
 from dagster.serdes import ConfigurableClass
 from dagster.utils import merge_dicts
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
-from dagster_cloud.workspace.origin import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
