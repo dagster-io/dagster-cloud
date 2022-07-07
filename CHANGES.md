@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 0.15.5
+
+### New
+
+- The dagster-cloud CLI now supports adding a single code location from a file containing a list of locations by specifying the `--location-name` parameter.
+
 # 0.15.3
 
 ### New
