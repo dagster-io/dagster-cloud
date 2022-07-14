@@ -22,6 +22,7 @@ from dagster.core.storage.pipeline_run import (
     PipelineRunsFilter,
     RunPartitionData,
     RunRecord,
+    RunsFilter,
     TagBucket,
 )
 from dagster.core.storage.runs.base import RunStorage
@@ -386,15 +387,11 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             res["data"]["runs"]["getExecutionPlanSnapshot"], ExecutionPlanSnapshot
         )
 
-    def get_run_partition_data(
-        self, partition_set_name: str, job_name: str, repository_label: str
-    ) -> List[RunPartitionData]:
+    def get_run_partition_data(self, runs_filter: RunsFilter) -> List[RunPartitionData]:
         res = self._execute_query(
             GET_RUN_PARTITION_DATA_QUERY,
             variables={
-                "partitionSetName": check.str_param(partition_set_name, "partition_set_name"),
-                "jobName": check.str_param(job_name, "job_name"),
-                "repositoryLabel": check.str_param(repository_label, "repository_label"),
+                "runsFilter": _get_filters_input(runs_filter),
             },
         )
         return [

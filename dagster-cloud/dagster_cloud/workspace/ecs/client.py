@@ -9,6 +9,9 @@ from dagster.utils import merge_dicts
 
 from .service import Service
 
+DEFAULT_ECS_TIMEOUT = 300
+DEFAULT_ECS_GRACE_PERIOD = 10
+
 
 class EcsServiceError(Exception):
     def __init__(self, task_arn, logs):
@@ -27,6 +30,8 @@ class Client:
         security_group_ids: Optional[List[str]] = None,
         ecs_client=None,
         wait_for_service: bool = True,
+        timeout: int = DEFAULT_ECS_TIMEOUT,
+        grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
     ):
         self.ecs = ecs_client if ecs_client else boto3.client("ecs")
         self.logs = boto3.client("logs")
@@ -42,6 +47,8 @@ class Client:
         self.log_group = check.str_param(log_group, "log_group")
         self.execution_role_arn = check.str_param(execution_role_arn, "execution_role_arn")
         self.wait_for_service = check.bool_param(wait_for_service, "wait_for_service")
+        self.timeout = check.int_param(timeout, "timeout")
+        self.grace_period = check.int_param(grace_period, "grace_period")
 
     @property
     def namespace(self):
@@ -191,7 +198,7 @@ class Client:
         self.ecs.get_waiter("services_stable").wait(
             cluster=self.cluster_name,
             services=[service.name],
-            WaiterConfig={"Delay": 1, "MaxAttempts": 300},
+            WaiterConfig={"Delay": 1, "MaxAttempts": self.timeout},
         )
 
         # Delete the ECS service
@@ -202,7 +209,7 @@ class Client:
         self.ecs.get_waiter("services_inactive").wait(
             cluster=self.cluster_name,
             services=[service.name],
-            WaiterConfig={"Delay": 1, "MaxAttempts": 300},
+            WaiterConfig={"Delay": 1, "MaxAttempts": self.timeout},
         )
 
         # Delete service discovery
@@ -246,7 +253,7 @@ class Client:
         self.ecs.get_waiter("tasks_stopped").wait(
             cluster=self.cluster_name,
             tasks=[task_arn],
-            WaiterConfig={"Delay": 1, "MaxAttempts": 300},
+            WaiterConfig={"Delay": 1, "MaxAttempts": self.timeout},
         )
 
         exit_code = (
@@ -309,7 +316,7 @@ class Client:
         service_name = service.name
         messages = []
         start_time = time.time()
-        while start_time + 300 > time.time():
+        while start_time + self.timeout > time.time():
             response = self.ecs.describe_services(
                 cluster=self.cluster_name,
                 # We only expect our API call to describe one service
@@ -325,17 +332,22 @@ class Client:
                 # https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency
                 if any(["has started 1 tasks" in message for message in messages]):
                     return self._wait_for_task(service_name)
-                time.sleep(1)
             elif response.get("failures"):
                 failures = response.get("failures")
-                raise Exception(f"ECS DescribeTasks API returned failures: {json.dumps(failures)}")
+                # Even if we fail, check a few more times in case it's just the ECS API
+                # being eventually consistent
+                if start_time + self.grace_period > time.time():
+                    raise Exception(
+                        f"ECS DescribeServices API returned failures: {json.dumps(failures)}"
+                    )
             else:
                 # This might not be a possible state; it's unclear if the ECS API can return empty lists for both
                 # "failures" and "services":
                 # https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeServices.html
                 raise Exception(
-                    f"ECS DescribeTasks API returned an empty response for service {service.arn}."
+                    f"ECS DescribeServices API returned an empty response for service {service.arn}."
                 )
+            time.sleep(1)
         raise Exception(messages)
 
     def _wait_for_task(self, service_name):

@@ -256,9 +256,9 @@ UPDATE_BACKFILL_MUTATION = """
 """
 
 GET_RUN_PARTITION_DATA_QUERY = """
-    query getRunPartitionData($partitionSetName: String!, $jobName: String!, $repositoryLabel: String!) {
+    query getRunPartitionData($runsFilter: RunsFilter!) {
         runs {
-            getRunPartitionData(partitionSetName: $partitionSetName, jobName: $jobName, repositoryLabel: $repositoryLabel)
+            getRunPartitionData(runsFilter: $runsFilter)
         }
     }
 """

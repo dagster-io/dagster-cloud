@@ -167,7 +167,10 @@ class DagsterCloudUserCodeLauncher(
         # Begin spinning user code up and down
         self._started = True
 
-        if self._instance.run_launcher.supports_check_run_worker_health:
+        if (
+            self._instance.run_launcher.supports_check_run_worker_health
+            and not self._instance.for_branch_deployments
+        ):
             self._logger.debug("Starting run worker monitoring.")
             (
                 self._run_worker_monitoring_thread,

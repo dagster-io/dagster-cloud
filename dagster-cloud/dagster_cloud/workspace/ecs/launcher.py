@@ -18,7 +18,7 @@ from ..user_code_launcher import (
     DagsterCloudUserCodeLauncher,
 )
 from ..user_code_launcher.utils import deterministic_label_for_location
-from .client import Client
+from .client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
 from .service import Service
 from .utils import get_ecs_human_readable_label, unique_ecs_resource_name
 
@@ -41,6 +41,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         secrets_tag=None,
         env_vars=None,
         server_ttl=None,
+        ecs_timeout=None,
+        ecs_grace_period=None,
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
@@ -74,6 +76,18 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
 
+        self._ecs_timeout = check.opt_int_param(
+            ecs_timeout,
+            "ecs_timeout",
+            DEFAULT_ECS_TIMEOUT,
+        )
+
+        self._ecs_grace_period = check.opt_int_param(
+            ecs_grace_period,
+            "ecs_grace_period",
+            DEFAULT_ECS_GRACE_PERIOD,
+        )
+
         self.client = Client(
             cluster_name=self.cluster,
             subnet_ids=self.subnets,
@@ -81,6 +95,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             service_discovery_namespace_id=self.service_discovery_namespace_id,
             log_group=self.log_group,
             execution_role_arn=self.execution_role_arn,
+            timeout=self._ecs_timeout,
+            grace_period=self._ecs_grace_period,
         )
         super(EcsUserCodeLauncher, self).__init__(server_ttl=server_ttl)
 
@@ -133,6 +149,19 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     is_required=False,
                     default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
                     description="Timeout when waiting for a code server to be ready after it is created",
+                ),
+                "ecs_timeout": Field(
+                    IntSource,
+                    is_required=False,
+                    default_value=DEFAULT_ECS_TIMEOUT,
+                    description="How long (in seconds) to poll against ECS API endpoints",
+                ),
+                "ecs_grace_period": Field(
+                    IntSource,
+                    is_required=False,
+                    default_value=DEFAULT_ECS_GRACE_PERIOD,
+                    description="How long (in seconds) to continue polling if an ECS API endpoint fails "
+                    "(because the ECS API is eventually consistent)",
                 ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,

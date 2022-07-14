@@ -1,6 +1,7 @@
 import logging
+from collections import defaultdict
 from contextlib import contextmanager
-from typing import Collection, Dict, List, Optional
+from typing import Collection, Dict, List, NamedTuple, Optional, Set, Tuple
 
 import kubernetes
 import kubernetes.client as client
@@ -35,7 +36,12 @@ DEFAULT_IMAGE_PULL_GRACE_PERIOD = 30
 from ..config_schema.kubernetes import SHARED_K8S_CONFIG
 
 
-class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
+class K8sHandle(NamedTuple):
+    namespace: str
+    name: str
+
+
+class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableClass):
     def __init__(
         self,
         dagster_home,
@@ -125,6 +131,9 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             resources=self._resources,
         )
 
+        # mutable set of observed namespaces to assist with cleanup
+        self._used_namespaces: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
+
     @property
     def requires_images(self):
         return True
@@ -199,17 +208,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             command=metadata.get_grpc_server_command(),
         )
 
-    def _launch(
-        self,
-        deployment_name: str,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        command: List[str],
-        additional_environment: Optional[Dict[str, str]] = None,
-    ) -> GrpcServerEndpoint:
-        resource_name = unique_k8s_resource_name(deployment_name, location_name)
-
-        container_context = K8sContainerContext(
+    def _resolve_container_context(self, metadata: CodeDeploymentMetadata) -> K8sContainerContext:
+        return K8sContainerContext(
             image_pull_policy=self._pull_policy,
             image_pull_secrets=self._image_pull_secrets,
             service_account_name=self._service_account_name,
@@ -222,6 +222,18 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             namespace=self._namespace,
             resources=self._resources,
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
+
+    def _launch(
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        command: List[str],
+        additional_environment: Optional[Dict[str, str]] = None,
+    ) -> GrpcServerEndpoint:
+        resource_name = unique_k8s_resource_name(deployment_name, location_name)
+
+        container_context = self._resolve_container_context(metadata)
 
         try:
             with self._get_api_instance() as api_instance:
@@ -248,19 +260,33 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
                         ),
                     ),
                 )
-            self._logger.info("Created deployment: {}".format(api_response.metadata.name))
+            self._logger.info(
+                "Created deployment {} in namespace {}".format(
+                    api_response.metadata.name,
+                    container_context.namespace,
+                )
+            )
         except ApiException as e:
             self._logger.error(
                 "Exception when calling AppsV1Api->create_namespaced_deployment: %s\n" % e
             )
             raise e
 
+        self._used_namespaces[(deployment_name, location_name)].add(
+            check.not_none(container_context.namespace)
+        )
+
         try:
             api_response = client.CoreV1Api().create_namespaced_service(
-                self._namespace,
+                container_context.namespace,
                 construct_repo_location_service(deployment_name, location_name, resource_name),
             )
-            self._logger.info("Created service: {}".format(api_response.metadata.name))
+            self._logger.info(
+                "Created service {} in namespace {}".format(
+                    api_response.metadata.name,
+                    container_context.namespace,
+                )
+            )
         except ApiException as e:
             self._logger.error(
                 "Exception when calling AppsV1Api->create_namespaced_service: %s\n" % e
@@ -269,7 +295,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
 
         wait_for_deployment_complete(
             resource_name,
-            self._namespace,
+            container_context.namespace,
             self._logger,
             location_name,
             metadata,
@@ -277,13 +303,19 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
             timeout=self._deployment_startup_timeout,
             image_pull_grace_period=self._image_pull_grace_period,
         )
+
+        # use namespace scoped host name
+        host = f"{resource_name}.{container_context.namespace}"
+
         server_id = self._wait_for_server(
-            host=resource_name, port=SERVICE_PORT, timeout=self._server_process_startup_timeout
+            host=host,
+            port=SERVICE_PORT,
+            timeout=self._server_process_startup_timeout,
         )
 
         endpoint = GrpcServerEndpoint(
             server_id=server_id,
-            host=resource_name,
+            host=host,
             port=SERVICE_PORT,
             socket=None,
         )
@@ -291,30 +323,53 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[str], ConfigurableClass):
         return endpoint
 
     def _get_server_handles_for_location(
-        self, deployment_name: str, location_name: str
-    ) -> Collection[str]:
+        self,
+        deployment_name: str,
+        location_name: str,
+    ) -> Collection[K8sHandle]:
+        handles = []
+        namespaces_to_search = self._used_namespaces.get(
+            (deployment_name, location_name),
+            [self._namespace],
+        )
         with self._get_api_instance() as api_instance:
-            deployments = api_instance.list_namespaced_deployment(
-                self._namespace,
-                label_selector=f"location_hash={deterministic_label_for_location(deployment_name, location_name)}",
-            ).items
-            return [deployment.metadata.name for deployment in deployments]
+            for namespace in namespaces_to_search:
+                deployments = api_instance.list_namespaced_deployment(
+                    namespace,
+                    label_selector=f"location_hash={deterministic_label_for_location(deployment_name, location_name)}",
+                ).items
+                for deployment in deployments:
+                    handles.append(K8sHandle(namespace=namespace, name=deployment.metadata.name))
+
+        return handles
 
     def _cleanup_servers(self) -> None:
         with self._get_api_instance() as api_instance:
-            deployments = api_instance.list_namespaced_deployment(
-                self._namespace,
-                label_selector="managed_by=K8sUserCodeLauncher",
-            ).items
-            for deployment in deployments:
-                self._remove_server_handle(deployment.metadata.name)
+            # search all used namespaces for to clean out
+            # note: this will only clean the launchers default namespace on startup
+            namespaces = set(
+                namespace for used in self._used_namespaces.values() for namespace in used
+            )
+            namespaces.add(self._namespace)
+            for namespace in namespaces:
+                deployments = api_instance.list_namespaced_deployment(
+                    namespace,
+                    label_selector="managed_by=K8sUserCodeLauncher",
+                ).items
+                for deployment in deployments:
+                    self._remove_server_handle(
+                        K8sHandle(namespace=namespace, name=deployment.metadata.name)
+                    )
 
-    def _remove_server_handle(self, server_handle: str) -> None:
-        check.str_param(server_handle, "server_handle")
+    def _remove_server_handle(self, server_handle: K8sHandle) -> None:
         with self._get_api_instance() as api_instance:
-            api_instance.delete_namespaced_deployment(server_handle, self._namespace)
-        client.CoreV1Api().delete_namespaced_service(server_handle, self._namespace)
-        self._logger.info("Removed deployment and service: {}".format(server_handle))
+            api_instance.delete_namespaced_deployment(server_handle.name, server_handle.namespace)
+        client.CoreV1Api().delete_namespaced_service(server_handle.name, server_handle.namespace)
+        self._logger.info(
+            "Removed deployment and service {} in namespace {}".format(
+                server_handle.name, server_handle.namespace
+            )
+        )
 
     def __exit__(self, exception_type, exception_value, traceback):
         super().__exit__(exception_value, exception_value, traceback)

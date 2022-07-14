@@ -1,5 +1,36 @@
 # Dagster Cloud Changelog
 
+# 0.15.6
+
+### New
+
+- Improved query performance for loading the Asset Graph in Dagit.
+- The ECS agent is now more resilient to ECS’s eventual consistency model. In your dagster.yaml, you can configure how long ECS polls against AWS ECS API endpoints by setting:
+
+  ```
+  user_code_launcher:
+    module: dagster_cloud.workspace.ecs
+      class: EcsUserCodeLauncher
+      config:
+        timeout: 180 # default: 300
+  ```
+
+  And you can configure how long ECS will retry a failed AWS ECS API endpoint by setting:
+
+  ```
+  user_code_launcher:
+    module: dagster_cloud.workspace.ecs
+      class: EcsUserCodeLauncher
+      config:
+        grace_period: 20 # default: 10
+  ```
+
+- The Dagster Cloud API may start returning HTTP response code 429 when it receives an unusually large number of requests in a short period of time. The HTTP response will include a `Retry-After` header indicating the number of seconds to wait before retrying the request.
+
+### Bugfixes
+
+- Fixed an issue where the Kubernetes agent didn’t work correctly when setting `container_context.namespace` to run code locations in different Kubernetes namespaces.
+
 # 0.15.5
 
 ### New
