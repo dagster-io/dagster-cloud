@@ -2,7 +2,7 @@ import logging
 import sys
 import threading
 from collections import namedtuple
-from typing import List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Set
 
 import dagster._check as check
 from dagster.core.errors import DagsterInvariantViolationError
@@ -11,6 +11,7 @@ from dagster.core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, Pipeline
 from dagster.serdes import whitelist_for_serdes
 from dagster.utils.error import serializable_error_info_from_exc_info
 from dagster_cloud.instance import DagsterCloudAgentInstance, InstanceRef
+from dagster_cloud.storage.runs import GraphQLRunStorage
 
 
 @whitelist_for_serdes
@@ -63,22 +64,31 @@ class CloudRunWorkerStatuses(
         )
 
 
-def get_cloud_run_worker_statuses(instance):
+def get_cloud_run_worker_statuses(instance, deployment_names):
     launcher = instance.run_launcher
     check.invariant(launcher.supports_check_run_worker_health)
-    runs = instance.get_runs(PipelineRunsFilter(statuses=IN_PROGRESS_RUN_STATUSES))
-    return [
-        CloudRunWorkerStatus.from_check_run_health_result(
-            run.run_id, launcher.check_run_worker_health(run)
-        )
-        for run in runs
-    ]
+
+    statuses = {}
+
+    for deployment_name in deployment_names:
+        runs = GraphQLRunStorage(
+            override_graphql_client=instance.graphql_client_for_deployment(deployment_name)
+        ).get_runs(PipelineRunsFilter(statuses=IN_PROGRESS_RUN_STATUSES))
+        statuses[deployment_name] = [
+            CloudRunWorkerStatus.from_check_run_health_result(
+                run.run_id, launcher.check_run_worker_health(run)
+            )
+            for run in runs
+        ]
+
+    return statuses
 
 
 def run_worker_monitoring_thread(
     instance_ref: InstanceRef,
-    statuses_list: List[CloudRunWorkerStatus],
-    statuses_lock: threading.Lock,
+    deployments_to_check: Set[str],
+    statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
+    run_worker_monitoring_lock: threading.Lock,
     shutdown_event: threading.Event,
 ):
     logger = logging.getLogger("dagster_cloud")
@@ -86,23 +96,31 @@ def run_worker_monitoring_thread(
     logger.debug("Run Monitor thread has started")
     with DagsterCloudAgentInstance.from_ref(instance_ref) as instance:
         while not shutdown_event.is_set():
-            run_worker_monitoring_thread_iteration(instance, statuses_list, statuses_lock, logger)
+            run_worker_monitoring_thread_iteration(
+                instance, deployments_to_check, statuses_dict, run_worker_monitoring_lock, logger
+            )
             shutdown_event.wait(instance.dagster_cloud_run_worker_monitoring_interval_seconds)
     logger.debug("Run monitor thread shutting down")
 
 
 def run_worker_monitoring_thread_iteration(
     instance: DagsterCloudAgentInstance,
-    statuses_list: List[CloudRunWorkerStatus],
-    statuses_lock: threading.Lock,
+    deployments_to_check: Set[str],
+    statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
+    run_worker_monitoring_lock: threading.Lock,
     logger: logging.Logger,
 ):
     try:
-        statuses = get_cloud_run_worker_statuses(instance)
+        # Check the deployment names
+        with run_worker_monitoring_lock:
+            deployments_to_check_copy = deployments_to_check.copy()
+
+        statuses = get_cloud_run_worker_statuses(instance, deployments_to_check_copy)
         logger.debug("Thread got statuses: {}".format(statuses))
-        with statuses_lock:
-            statuses_list.clear()
-            statuses_list.extend(statuses)
+        with run_worker_monitoring_lock:
+            statuses_dict.clear()
+            for deployment_name, statuses in statuses.items():
+                statuses_dict[deployment_name] = statuses
     except Exception:
         error_info = serializable_error_info_from_exc_info(sys.exc_info())
         logger.error("Caught error in run monitoring thread:\n{}".format(error_info))
@@ -110,13 +128,20 @@ def run_worker_monitoring_thread_iteration(
 
 def start_run_worker_monitoring_thread(
     instance: DagsterCloudAgentInstance,
-    statuses_list: List[CloudRunWorkerStatus],
-    statuses_lock: threading.Lock,
+    deployments_to_check: Set[str],
+    statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
+    run_worker_monitoring_lock: threading.Lock,
 ):
     shutdown_event = threading.Event()
     thread = threading.Thread(
         target=run_worker_monitoring_thread,
-        args=(instance.get_ref(), statuses_list, statuses_lock, shutdown_event),
+        args=(
+            instance.get_ref(),
+            deployments_to_check,
+            statuses_dict,
+            run_worker_monitoring_lock,
+            shutdown_event,
+        ),
         name="run-monitoring",
     )
     thread.start()

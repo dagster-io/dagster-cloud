@@ -107,7 +107,7 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
                 IntSource,
                 is_required=False,
                 default_value=3600,
-                description="If enabled, how long to a leave server running once it has been launched. "
+                description="If enabled, how long to leave a server running once it has been launched. "
                 "Decreasing this value will cause fewer servers to be running at once, but "
                 "request latency may increase if more requests need to wait for a server to launch",
             ),
@@ -141,8 +141,9 @@ class DagsterCloudUserCodeLauncher(
         self._started: bool = False
         self._run_worker_monitoring_thread = None
         self._run_worker_monitoring_thread_shutdown_event = None
-        self._run_worker_statuses_list = []
-        self._run_worker_statuses_list_lock = threading.Lock()
+        self._run_worker_deployments_to_check = set()
+        self._run_worker_statuses_dict = {}
+        self._run_worker_monitoring_lock = threading.Lock()
 
         self._reconcile_count = 0
         self._reconcile_grpc_metadata_shutdown_event = threading.Event()
@@ -167,16 +168,18 @@ class DagsterCloudUserCodeLauncher(
         # Begin spinning user code up and down
         self._started = True
 
-        if (
-            self._instance.run_launcher.supports_check_run_worker_health
-            and not self._instance.for_branch_deployments
+        if self._instance.run_launcher.supports_check_run_worker_health and (
+            self._instance.deployment_names or self._instance.include_all_serverless_deployments
         ):
             self._logger.debug("Starting run worker monitoring.")
             (
                 self._run_worker_monitoring_thread,
                 self._run_worker_monitoring_thread_shutdown_event,
             ) = start_run_worker_monitoring_thread(
-                self._instance, self._run_worker_statuses_list, self._run_worker_statuses_list_lock
+                self._instance,
+                self._run_worker_deployments_to_check,
+                self._run_worker_statuses_dict,
+                self._run_worker_monitoring_lock,
             )
         else:
             self._logger.debug(
@@ -200,23 +203,41 @@ class DagsterCloudUserCodeLauncher(
             and self._run_worker_monitoring_thread.is_alive()
         )
 
-    def get_cloud_run_worker_statuses(self):
-        if not self._instance.run_launcher.supports_check_run_worker_health:
-            return CloudRunWorkerStatuses(
-                None, run_worker_monitoring_supported=False, run_worker_monitoring_thread_alive=None
-            )
+    def update_run_worker_monitoring_deployments(self, deployment_names):
+        with self._run_worker_monitoring_lock:
+            self._run_worker_deployments_to_check.clear()
+            self._run_worker_deployments_to_check.update(deployment_names)
+
+    def get_cloud_run_worker_statuses(self, deployment_names):
+        supports_check = self._instance.run_launcher.supports_check_run_worker_health
+
+        if not supports_check:
+            return {
+                deployment_name: CloudRunWorkerStatuses(
+                    [],
+                    run_worker_monitoring_supported=False,
+                    run_worker_monitoring_thread_alive=None,
+                )
+                for deployment_name in deployment_names
+            }
 
         self._logger.debug("Getting cloud run worker statuses for a heartbeat")
 
-        with self._run_worker_statuses_list_lock:
+        with self._run_worker_monitoring_lock:
             # values are immutable, don't need deepcopy
-            statuses_list = self._run_worker_statuses_list.copy()
-        self._logger.debug("Returning statuses_list: {}".format(statuses_list))
-        return CloudRunWorkerStatuses(
-            statuses=statuses_list,
-            run_worker_monitoring_supported=True,
-            run_worker_monitoring_thread_alive=self.is_run_worker_monitoring_thread_alive(),
-        )
+            statuses_dict = self._run_worker_statuses_dict.copy()
+        self._logger.debug("Returning statuses_dict: {}".format(statuses_dict))
+
+        is_alive = self.is_run_worker_monitoring_thread_alive()
+
+        return {
+            deployment_name: CloudRunWorkerStatuses(
+                statuses=statuses_dict.get(deployment_name, []),
+                run_worker_monitoring_supported=True,
+                run_worker_monitoring_thread_alive=is_alive,
+            )
+            for deployment_name in deployment_names
+        }
 
     def supports_origin(self, repository_location_origin: RepositoryLocationOrigin) -> bool:
         return isinstance(repository_location_origin, RegisteredRepositoryLocationOrigin)

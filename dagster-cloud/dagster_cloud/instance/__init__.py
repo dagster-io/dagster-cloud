@@ -16,11 +16,13 @@ from dagster.core.instance.config import config_field_for_configurable_class
 from dagster.core.instance.ref import ConfigurableClassData, InstanceRef, configurable_class_data
 from dagster.core.launcher import RunLauncher
 from dagster.serdes import ConfigurableClass
+from dagster.utils import frozendict
 from dagster_cloud_cli.core.graphql_client import (
     create_cloud_requests_session,
     create_proxy_client,
     get_agent_headers,
 )
+from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 
 from ..auth.constants import get_organization_name_from_agent_token
 from ..storage.client import dagster_cloud_api_config
@@ -42,6 +44,14 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._unprocessed_dagster_cloud_api_config = dagster_cloud_api
         self._dagster_cloud_api_config = self._get_processed_config(
             "dagster_cloud_api", dagster_cloud_api, dagster_cloud_api_config()
+        )
+
+        check.invariant(
+            not (
+                self._dagster_cloud_api_config.get("deployment")
+                and self._dagster_cloud_api_config.get("deployments")
+            ),
+            "Cannot set both deployment and deployments in `dagster_cloud_api`",
         )
 
         self._user_code_launcher_data = (
@@ -86,10 +96,18 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         new_api_config = dict(copy.deepcopy(self._dagster_cloud_api_config))
         if deployment_name:
             new_api_config["deployment"] = deployment_name
-            if self.for_branch_deployments:
+            if self.includes_branch_deployments:
                 del new_api_config["branch_deployments"]
+            if "deployments" in new_api_config:
+                del new_api_config["deployments"]
+            if "all_serverless_deployments" in new_api_config:
+                del new_api_config["all_serverless_deployments"]
         else:
-            del new_api_config["deployment"]
+            if "deployment" in new_api_config:
+                del new_api_config["deployment"]
+            if "deployments" in new_api_config:
+                del new_api_config["deployments"]
+
         return new_api_config
 
     def ref_for_deployment(self, deployment_name: Optional[str]):
@@ -99,21 +117,36 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
         return my_ref._replace(custom_instance_class_data=new_class_data)
 
+    def organization_scoped_graphql_client(self):
+        return create_proxy_client(
+            self.requests_session,
+            self.dagster_cloud_graphql_url,
+            self._dagster_cloud_api_config_for_deployment(None),
+            scope=DagsterCloudInstanceScope.ORGANIZATION,
+        )
+
     def graphql_client_for_deployment(self, deployment_name: Optional[str]):
         return create_proxy_client(
             self.requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config_for_deployment(deployment_name),
+            scope=DagsterCloudInstanceScope.DEPLOYMENT,
         )
 
-    def headers_for_deployment(self, deployment_name: Optional[str]):
-        return get_agent_headers(self._dagster_cloud_api_config_for_deployment(deployment_name))
+    def headers_for_deployment(self, deployment_name: str):
+        return get_agent_headers(
+            self._dagster_cloud_api_config_for_deployment(deployment_name),
+            DagsterCloudInstanceScope.DEPLOYMENT,
+        )
 
-    def create_graphql_client(self):
+    def create_graphql_client(
+        self, scope: DagsterCloudInstanceScope = DagsterCloudInstanceScope.DEPLOYMENT
+    ):
         return create_proxy_client(
             self.requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config,
+            scope=scope,
         )
 
     @property
@@ -128,7 +161,9 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     @property
     def graphql_client(self):
         if self._graphql_client == None:
-            self._graphql_client = self.create_graphql_client()
+            self._graphql_client = self.create_graphql_client(
+                scope=DagsterCloudInstanceScope.DEPLOYMENT
+            )
 
         return self._graphql_client
 
@@ -147,7 +182,25 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
     @property
     def deployment_name(self) -> Optional[str]:
-        return self._dagster_cloud_api_config.get("deployment")
+        deployment_names = self.deployment_names
+        check.invariant(
+            len(deployment_names) <= 1,
+            "Cannot call instance.deployment_name if multiple deployments are set",
+        )
+        if not deployment_names:
+            return None
+        return deployment_names[0]
+
+    @property
+    def deployment_names(self) -> List[str]:
+        if self._dagster_cloud_api_config.get("deployment"):
+            return [self._dagster_cloud_api_config["deployment"]]
+
+        return self._dagster_cloud_api_config.get("deployments", [])
+
+    @property
+    def include_all_serverless_deployments(self) -> bool:
+        return self._dagster_cloud_api_config.get("all_serverless_deployments")
 
     @property
     def dagit_url(self):
@@ -176,9 +229,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     def dagster_cloud_upload_api_response_url(self):
         return f"{self.dagster_cloud_url}/upload_api_response"
 
-    @property
-    def dagster_cloud_api_headers(self):
-        return get_agent_headers(self._dagster_cloud_api_config)
+    def dagster_cloud_api_headers(self, scope: DagsterCloudInstanceScope):
+        return get_agent_headers(self._dagster_cloud_api_config, scope=scope)
 
     @property
     def dagster_cloud_agent_token(self):
@@ -197,8 +249,21 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._dagster_cloud_api_config.get("agent_label")
 
     @property
-    def for_branch_deployments(self) -> Optional[str]:
-        return self._dagster_cloud_api_config.get("branch_deployments")
+    def includes_branch_deployments(self) -> bool:
+        branch_deployments = self._dagster_cloud_api_config.get("branch_deployments")
+        return (
+            branch_deployments.get("enabled")
+            if isinstance(branch_deployments, (frozendict, dict))
+            else branch_deployments
+        )
+
+    @property
+    def branch_deployment_ttl_seconds(self) -> int:
+        branch_deployments = self._dagster_cloud_api_config.get("branch_deployments")
+        branch_deployments_config = (
+            branch_deployments if isinstance(branch_deployments, (frozendict, dict)) else {}
+        )
+        return branch_deployments_config.get("ttl_seconds", 3600)
 
     @property
     def instance_uuid(self) -> str:

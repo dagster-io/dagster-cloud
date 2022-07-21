@@ -6,15 +6,17 @@ GET_USER_CLOUD_REQUESTS_QUERY = """
                 requestApi
                 requestBody
                 deploymentName
+                isBranchDeployment
             }
         }
     }
 """
 
 WORKSPACE_ENTRIES_QUERY = """
-    query WorkspaceEntries($deploymentNames: [String!]!) {
-        deployments(deploymentNames: $deploymentNames) {
+    query WorkspaceEntries($deploymentNames: [String!]!, $includeAllServerlessDeployments: Boolean!) {
+        deployments(deploymentNames: $deploymentNames, includeAllServerlessDeployments: $includeAllServerlessDeployments) {
             deploymentName
+            isBranchDeployment
             workspaceEntries {
                 locationName
                 serializedDeploymentMetadata
@@ -26,20 +28,11 @@ WORKSPACE_ENTRIES_QUERY = """
     }
 """
 
-ADD_AGENT_HEARTBEAT_MUTATION = """
-    mutation AddAgentHeartbeat($serializedAgentHeartbeat: String!) {
-        userCloudAgent {
-            addAgentHeartbeat (serializedAgentHeartbeat: $serializedAgentHeartbeat) {
-                ok
-            }
-        }
-    }
-"""
 
 ADD_AGENT_HEARTBEATS_MUTATION = """
-    mutation AddAgentHeartbeats($serializedAgentHeartbeat: String!, $deploymentNames: [String]) {
+    mutation AddAgentHeartbeats($serializedAgentHeartbeats: [AgentHeartbeatInput!]) {
         userCloudAgent {
-            addAgentHeartbeats (serializedAgentHeartbeat: $serializedAgentHeartbeat, deploymentNames: $deploymentNames) {
+            addAgentHeartbeats (serializedAgentHeartbeats: $serializedAgentHeartbeats) {
                 ok
             }
         }

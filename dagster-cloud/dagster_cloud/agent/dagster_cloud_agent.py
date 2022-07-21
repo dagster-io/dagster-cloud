@@ -48,7 +48,6 @@ from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from ..version import __version__
 from .queries import (
     ADD_AGENT_HEARTBEATS_MUTATION,
-    ADD_AGENT_HEARTBEAT_MUTATION,
     GET_USER_CLOUD_REQUESTS_QUERY,
     WORKSPACE_ENTRIES_QUERY,
 )
@@ -131,14 +130,16 @@ class DagsterCloudAgent:
         )  # (SerializableErrorInfo, timestamp) tuples
 
         self._pending_requests: List[Dict[str, Any]] = []
-        self._locations_with_pending_requests: Set[Tuple[str, str]] = set()
+        self._locations_with_pending_requests: Set[Tuple[str, str, bool]] = set()
         self._ready_requests: List[Dict[str, Any]] = []
 
-        self._location_query_times: Dict[Tuple[str, str], float] = {}
+        self._location_query_times: Dict[Tuple[str, str, bool], float] = {}
         self._pending_requests_limit = check.int_param(
             pending_requests_limit, "pending_requests_limit"
         )
-        self._active_deployments: Set[str] = set()
+        self._active_deployments: Set[
+            Tuple[str, bool]  # deployment_name, is_branch_deployment
+        ] = set()
 
     def __enter__(self):
         return self
@@ -146,24 +147,38 @@ class DagsterCloudAgent:
     def __exit__(self, _exception_type, _exception_value, _traceback):
         self._exit_stack.close()
 
+    @property
+    def _active_deployment_names(self):
+        return [deployment[0] for deployment in self._active_deployments]
+
+    @property
+    def _active_production_deployment_names(self):
+        return [
+            deployment
+            for deployment, is_branch_deployment in self._active_deployments
+            if not is_branch_deployment
+        ]
+
     def run_loop(self, instance, user_code_launcher, agent_uuid):
         heartbeat_interval_seconds = AGENT_HEARTBEAT_INTERVAL_SECONDS
 
-        if not user_code_launcher.server_ttl_enabled:
+        if (
+            not instance.includes_branch_deployments
+            and not instance.deployment_names
+            and not instance.include_all_serverless_deployments
+        ):
+            self._logger.info(
+                "Deployment name was not set - checking to see if it can be fetched from the server..."
+            )
+            # Fetch the deployment name from the server if it isn't set (only true
+            # for old agents, and only will work if there's a single deployment in the org)
+            result = instance.graphql_client.execute(DEPLOYMENT_INFO_QUERY)
+            deployment_name = result["data"]["deploymentInfo"]["deploymentName"]
+            instance = self._exit_stack.enter_context(
+                DagsterInstance.from_ref(instance.ref_for_deployment(deployment_name))
+            )
 
-            if not instance.deployment_name:
-                self._logger.info(
-                    "Deployment name was not set - checking to see if it can be fetched from the server..."
-                )
-                # Fetch the deployment name from the server if it isn't set (only true
-                # for old agents, and only will work if there's a single deployment in the org)
-                result = instance.graphql_client.execute(DEPLOYMENT_INFO_QUERY)
-                deployment_name = result["data"]["deploymentInfo"]["deploymentName"]
-                instance = self._exit_stack.enter_context(
-                    DagsterInstance.from_ref(instance.ref_for_deployment(deployment_name))
-                )
-
-            self._check_update_workspace(instance, user_code_launcher)
+        self._check_update_workspace(instance, user_code_launcher)
 
         self._logger.info("Started polling for requests from {}".format(instance.dagster_cloud_url))
 
@@ -236,36 +251,42 @@ class DagsterCloudAgent:
             for (error, timestamp) in self._errors
         ]
 
-        run_worker_statuses = instance.user_code_launcher.get_cloud_run_worker_statuses()
-
-        self._last_heartbeat_time = curr_time
-        heartbeat = AgentHeartbeat(
-            timestamp=curr_time.float_timestamp,
-            agent_id=agent_uuid,
-            agent_label=instance.dagster_cloud_api_agent_label,
-            agent_type=type(instance.user_code_launcher).__name__
-            if instance.user_code_launcher
-            else None,
-            errors=errors,
-            metadata={"version": __version__},
-            run_worker_statuses=run_worker_statuses,
+        # Get a run worker status object for every deployment since AgentHeartbeat requires one
+        # - it will just always be empty for branch deployments since those didn't even check for
+        # run worker statuses
+        run_worker_statuses_dict = instance.user_code_launcher.get_cloud_run_worker_statuses(
+            self._active_deployment_names
         )
 
-        if instance.for_branch_deployments:
-            res = instance.graphql_client.execute(
-                ADD_AGENT_HEARTBEATS_MUTATION,
-                variable_values={
-                    "serializedAgentHeartbeat": serialize_dagster_namedtuple(heartbeat),
-                    "deploymentNames": list(self._active_deployments),
-                },
-            )
-        else:
-            res = instance.graphql_client.execute(
-                ADD_AGENT_HEARTBEAT_MUTATION,
-                variable_values={
-                    "serializedAgentHeartbeat": serialize_dagster_namedtuple(heartbeat)
-                },
-            )
+        serialized_agent_heartbeats = [
+            {
+                "deploymentName": deployment_name,
+                "serializedAgentHeartbeat": serialize_dagster_namedtuple(
+                    AgentHeartbeat(
+                        timestamp=curr_time.float_timestamp,
+                        agent_id=agent_uuid,
+                        agent_label=instance.dagster_cloud_api_agent_label,
+                        agent_type=type(instance.user_code_launcher).__name__
+                        if instance.user_code_launcher
+                        else None,
+                        errors=errors,
+                        metadata={"version": __version__},
+                        run_worker_statuses=run_worker_statuses,
+                    )
+                ),
+            }
+            for deployment_name, run_worker_statuses in run_worker_statuses_dict.items()
+        ]
+
+        self._last_heartbeat_time = curr_time
+
+        res = instance.organization_scoped_graphql_client().execute(
+            ADD_AGENT_HEARTBEATS_MUTATION,
+            variable_values={
+                "serializedAgentHeartbeats": serialized_agent_heartbeats,
+            },
+        )
+
         if "errors" in res:
             raise GraphQLStorageError(res)
 
@@ -281,11 +302,15 @@ class DagsterCloudAgent:
         self,
         instance: DagsterCloudAgentInstance,
         deployment_name: str,
+        is_branch_deployment: bool,
         user_code_launcher: DagsterCloudUserCodeLauncher,
     ):
         result = instance.graphql_client_for_deployment(deployment_name).execute(
             WORKSPACE_ENTRIES_QUERY,
-            variable_values={"deploymentNames": [deployment_name]},
+            variable_values={
+                "deploymentNames": [deployment_name],
+                "includeAllServerlessDeployments": False,
+            },
         )
         entries = result["data"]["deployments"][0]["workspaceEntries"]
         now = time.time()
@@ -300,7 +325,9 @@ class DagsterCloudAgent:
             if entry["hasOutdatedData"]:
                 # Spin up a server for this location and upload its metadata to Cloud
                 # (Bump the TTL counter as well to leave the server up)
-                self._location_query_times[(deployment_name, location_name)] = now
+                self._location_query_times[
+                    (deployment_name, location_name, is_branch_deployment)
+                ] = now
                 upload_metadata[(deployment_name, location_name)] = UserCodeLauncherEntry(
                     code_deployment_metadata=deployment_metadata,
                     update_timestamp=float(entry["metadataTimestamp"]),
@@ -308,50 +335,76 @@ class DagsterCloudAgent:
 
         user_code_launcher.add_upload_metadata(upload_metadata)
 
+    def _has_ttl(self, user_code_launcher, is_branch_deployment):
+        # branch deployments always have TTLs, other deployments only if you asked for it specifically
+        return is_branch_deployment or user_code_launcher.server_ttl_enabled
+
+    def _get_ttl_seconds(self, instance, is_branch_deployment):
+        return (
+            instance.branch_deployment_ttl_seconds
+            if is_branch_deployment
+            else instance.user_code_launcher.server_ttl_seconds
+        )
+
     def _query_for_workspace_updates(
         self,
         instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
     ):
-
         now = time.time()
 
-        if user_code_launcher.server_ttl_enabled:
-            # Include the location if:
-            # - There's a pending request in the queue for it
-            # - Its TTL hasn't expired since the last time somebody asked for it
-            locations_to_consider = {
-                deployment_and_location
-                for deployment_and_location in self._locations_with_pending_requests
-            }.union(
-                {
-                    deployment_and_location
-                    for deployment_and_location in self._location_query_times
-                    if (
-                        now - self._location_query_times[deployment_and_location]
-                        < user_code_launcher.server_ttl_seconds
+        # For the deployments with TTLs, decide which locations to consider
+        # Include the location if:
+        # - There's a pending request in the queue for it
+        # - It's TTL hasn't expired since the last time somebody asked for it
+        locations_with_ttl_to_consider = {
+            (deployment, location)
+            for deployment, location, is_branch_deployment in self._locations_with_pending_requests
+            if self._has_ttl(user_code_launcher, is_branch_deployment)
+        }.union(
+            {
+                (deployment_name, location)
+                for deployment_name, location, is_branch_deployment in self._location_query_times
+                if (
+                    self._has_ttl(user_code_launcher, is_branch_deployment)
+                    and (
+                        now
+                        - self._location_query_times[
+                            (deployment_name, location, is_branch_deployment)
+                        ]
+                        < self._get_ttl_seconds(instance, is_branch_deployment)
                     )
-                }
-            )
-            deployments_to_consider = {key[0] for key in locations_to_consider}
-        else:
-            deployments_to_consider = {cast(str, instance.deployment_name)}
-            locations_to_consider = None  # All locations from this deployment are loaded
-        self._active_deployments = deployments_to_consider
+                )
+            }
+        )
+
+        deployments_to_query = {key[0] for key in locations_with_ttl_to_consider}
+
+        # If you have specified a non-branch deployment and no TTL, always consider it
+        if instance.deployment_names:
+            deployments_to_query = deployments_to_query.union(set(instance.deployment_names))
 
         # Create mapping of
         # - location name => deployment metadata
         deployment_map: Dict[Tuple[str, str], UserCodeLauncherEntry] = {}
         all_locations: Set[Tuple[str, str]] = set()
 
-        if deployments_to_consider:
-            result = instance.graphql_client.execute(
+        self._active_deployments = set()
+
+        if deployments_to_query or instance.include_all_serverless_deployments:
+            result = instance.organization_scoped_graphql_client().execute(
                 WORKSPACE_ENTRIES_QUERY,
-                variable_values={"deploymentNames": list(deployments_to_consider)},
+                variable_values={
+                    "deploymentNames": list(deployments_to_query),
+                    "includeAllServerlessDeployments": instance.include_all_serverless_deployments,
+                },
             )
 
             for deployment_result in result["data"]["deployments"]:
                 deployment_name = deployment_result["deploymentName"]
+                is_branch_deployment = deployment_result["isBranchDeployment"]
+
+                self._active_deployments.add((deployment_name, is_branch_deployment))
 
                 entries = deployment_result["workspaceEntries"]
 
@@ -365,15 +418,20 @@ class DagsterCloudAgent:
                         entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
                     )
 
-                    if not user_code_launcher.server_ttl_enabled or location_key in cast(
-                        Set[Tuple[str, str]], locations_to_consider
-                    ):
+                    if not self._has_ttl(
+                        user_code_launcher, is_branch_deployment
+                    ) or location_key in cast(Set[Tuple[str, str]], locations_with_ttl_to_consider):
                         deployment_map[location_key] = UserCodeLauncherEntry(
                             code_deployment_metadata=deployment_metadata,
                             update_timestamp=float(entry["metadataTimestamp"]),
                         )
 
         user_code_launcher.update_grpc_metadata(deployment_map)
+
+        # Tell run worker monitoring which deployments it should care about
+        user_code_launcher.update_run_worker_monitoring_deployments(
+            self._active_production_deployment_names
+        )
 
         # In the rare event that there are pending requests that are no longer in the workspace at
         # all (if, say, a location is removed while requests are enqueued), they should be forcibly
@@ -430,6 +488,7 @@ class DagsterCloudAgent:
         self,
         request: DagsterCloudApiRequest,
         deployment_name: str,
+        is_branch_deployment: bool,
         instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
     ) -> Union[DagsterCloudApiSuccess, DagsterCloudApiGrpcResponse]:
@@ -446,7 +505,9 @@ class DagsterCloudAgent:
         elif api_name == DagsterCloudApi.CHECK_FOR_WORKSPACE_UPDATES:
             # Dagster Cloud has requested that we upload new metadata for any out of date locations in
             # the workspace
-            self._upload_outdated_workspace_entries(instance, deployment_name, user_code_launcher)
+            self._upload_outdated_workspace_entries(
+                instance, deployment_name, is_branch_deployment, user_code_launcher
+            )
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.GET_EXTERNAL_EXECUTION_PLAN:
             client = self._get_grpc_client(
@@ -611,6 +672,7 @@ class DagsterCloudAgent:
         request_api = json_request["requestApi"]
         request_body = json_request["requestBody"]
         deployment_name = json_request["deploymentName"]
+        is_branch_deployment = json_request["isBranchDeployment"]
 
         request: Union[str, DagsterCloudApiRequest] = DagsterCloudApiRequest.format_request(
             request_id, request_api
@@ -633,7 +695,7 @@ class DagsterCloudAgent:
                     )
                 )
                 api_result = self._handle_api_request(
-                    request, deployment_name, instance, user_code_launcher
+                    request, deployment_name, is_branch_deployment, instance, user_code_launcher
                 )
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
@@ -703,21 +765,40 @@ class DagsterCloudAgent:
         num_pending_requests = len(self._pending_requests)
 
         if num_pending_requests < self._pending_requests_limit:
-            result = instance.graphql_client.execute(
-                GET_USER_CLOUD_REQUESTS_QUERY,
-                {"forBranchDeployments": instance.for_branch_deployments},
-            )
-            json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
-
-            self._logger.debug(
-                "Iteration #{iteration}: Adding {num_requests} requests to be processed. Currently {num_pending_requests} waiting for server to be ready".format(
-                    iteration=self._iteration,
-                    num_requests=len(json_requests),
-                    num_pending_requests=num_pending_requests,
+            if instance.includes_branch_deployments:
+                result = instance.organization_scoped_graphql_client().execute(
+                    GET_USER_CLOUD_REQUESTS_QUERY,
+                    {"forBranchDeployments": True},
                 )
-            )
+                json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
 
-            self._pending_requests.extend(json_requests)
+                self._logger.debug(
+                    "Iteration #{iteration}: Adding {num_requests} branch deployment requests to be processed. Currently {num_pending_requests} waiting for server to be ready".format(
+                        iteration=self._iteration,
+                        num_requests=len(json_requests),
+                        num_pending_requests=num_pending_requests,
+                    )
+                )
+
+                self._pending_requests.extend(json_requests)
+
+            for deployment_name in self._active_deployment_names:
+                result = instance.graphql_client_for_deployment(deployment_name).execute(
+                    GET_USER_CLOUD_REQUESTS_QUERY,
+                    {"forBranchDeployments": False},
+                )
+                json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
+
+                self._logger.debug(
+                    "Iteration #{iteration}: Adding {num_requests} deployment requests to be processed. Currently {num_pending_requests} waiting for server to be ready".format(
+                        iteration=self._iteration,
+                        num_requests=len(json_requests),
+                        num_pending_requests=num_pending_requests,
+                    )
+                )
+
+                self._pending_requests.extend(json_requests)
+
         else:
             self._logger.warning(
                 "Iteration #{iteration}: Waiting to pull requests from the queue since there are already {num_pending_requests} in the queue".format(
@@ -733,15 +814,20 @@ class DagsterCloudAgent:
         # request does not correspond to a particular location)
         for json_request in self._pending_requests:
             deployment_name = json_request["deploymentName"]
+            is_branch_deployment = json_request["isBranchDeployment"]
             location_name = self._get_location_from_request(json_request)
             if location_name:
-                self._location_query_times[(deployment_name, location_name)] = time.time()
+                self._location_query_times[
+                    (deployment_name, location_name, is_branch_deployment)
+                ] = time.time()
 
                 if not user_code_launcher.has_grpc_endpoint(deployment_name, location_name):
                     # Next completed periodic workspace update will make the location up to date
                     # - keep this in the queue until then
                     invalid_requests.append(json_request)
-                    self._locations_with_pending_requests.add((deployment_name, location_name))
+                    self._locations_with_pending_requests.add(
+                        (deployment_name, location_name, is_branch_deployment)
+                    )
                     continue
 
             self._ready_requests.append(json_request)

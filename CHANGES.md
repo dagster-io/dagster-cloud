@@ -1,5 +1,12 @@
 # Dagster Cloud Changelog
 
+# 0.15.7
+
+### Bugfixes
+
+* Fixed an issue where launching a run with just whitespace in the Launchpad would create an error.
+* Fixed an issue where creating a code location that started with a numeric character failed to load when using the Kubernetes agent.
+
 # 0.15.6
 
 ### New

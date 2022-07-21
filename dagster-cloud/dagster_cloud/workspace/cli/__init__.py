@@ -17,8 +17,8 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadWorkspaceEntry,
 )
 from dagster_cloud_cli import gql, ui
-from dagster_cloud_cli.commands.workspace import _DEPLOYMENT_METADATA_OPTIONS
-from dagster_cloud_cli.config_utils import dagster_cloud_options
+from dagster_cloud_cli.config_utils import DEPLOYMENT_METADATA_OPTIONS, dagster_cloud_options
+from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from dagster_cloud_cli.core.headers.impl import get_dagster_cloud_api_headers
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_cloud_cli.utils import add_options
@@ -45,7 +45,7 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
 
 
 @dagster_cloud_options(allow_empty=True, requires_url=True)
-@add_options(_DEPLOYMENT_METADATA_OPTIONS)
+@add_options(DEPLOYMENT_METADATA_OPTIONS)
 def snapshot_command(
     api_token: str,
     url: str,
@@ -117,7 +117,9 @@ def snapshot_command(
                 with open(dst, "rb") as f:
                     response = requests.post(
                         url=f"{url}/upload_code_preview_workspace_entry/{code_preview_uuid}",
-                        headers=get_dagster_cloud_api_headers(api_token),
+                        headers=get_dagster_cloud_api_headers(
+                            api_token, DagsterCloudInstanceScope.DEPLOYMENT
+                        ),
                         files={"workspace_entry.tmp": f},
                     )
                     response.raise_for_status()

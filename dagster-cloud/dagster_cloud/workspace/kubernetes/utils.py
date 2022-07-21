@@ -16,6 +16,20 @@ MANAGED_RESOURCES_LABEL = {"managed_by": "K8sUserCodeLauncher"}
 SERVICE_PORT = 4000
 
 
+def _sanitize_k8s_resource_name(name):
+    filtered_name = re.sub("[^a-z0-9-]", "", name.lower())
+
+    # ensure it doesn't start with a non-alpha character
+    while filtered_name and re.match("[^a-z].*", filtered_name):
+        filtered_name = filtered_name[1:]
+
+    filtered_name = filtered_name.strip("-")
+
+    # always return something that starts with a letter in the unlikely event that everything is
+    # filtered out (doesn't have to be unique)
+    return filtered_name or "k8s"
+
+
 def unique_k8s_resource_name(deployment_name, location_name):
     """
     https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
@@ -23,10 +37,7 @@ def unique_k8s_resource_name(deployment_name, location_name):
     K8s resource names are restricted, so we must sanitize the location name to not include disallowed characters.
     """
     return unique_resource_name(
-        deployment_name,
-        location_name,
-        length_limit=63,
-        sanitize_fn=lambda name: re.sub("[^a-z0-9-]", "", name).strip("-"),
+        deployment_name, location_name, length_limit=63, sanitize_fn=_sanitize_k8s_resource_name
     )
 
 

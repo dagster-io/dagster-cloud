@@ -15,6 +15,7 @@ from dagster.core.storage.local_compute_log_manager import LocalComputeLogManage
 from dagster.serdes import ConfigurableClass, ConfigurableClassData
 from dagster.utils import ensure_file
 from dagster_cloud_cli.core.errors import raise_http_error
+from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 
 
 class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
@@ -80,7 +81,9 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
                 with open(dst, "rb") as compressed:
                     resp = self._instance.requests_session.post(
                         self._instance.dagster_cloud_upload_logs_url,
-                        headers=self._instance.dagster_cloud_api_headers,
+                        headers=self._instance.dagster_cloud_api_headers(
+                            DagsterCloudInstanceScope.DEPLOYMENT
+                        ),
                         params={
                             "run_id": run_id,
                             "key": key,

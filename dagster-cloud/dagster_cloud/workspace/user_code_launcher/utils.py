@@ -8,7 +8,9 @@ def unique_resource_name(deployment_name, location_name, length_limit, sanitize_
     name = f"{location_name}-{deployment_name}"
     sanitized_location_name = sanitize_fn(name) if sanitize_fn else name
     truncated_location_name = sanitized_location_name[: (length_limit - 7)]
-    sanitized_unique_name = f"{truncated_location_name}-{hash_value}"
+    sanitized_unique_name = (
+        f"{truncated_location_name}-{hash_value}" if truncated_location_name else hash_value
+    )
     assert len(sanitized_unique_name) <= length_limit
     return sanitized_unique_name
 

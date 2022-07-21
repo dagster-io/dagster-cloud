@@ -6,6 +6,7 @@ from typing import Collection, Dict, NamedTuple, Optional, Set, Tuple
 
 from dagster import BoolSource, Field, IntSource
 from dagster import _check as check
+from dagster.core.errors import DagsterUserCodeUnreachableError
 from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
@@ -255,7 +256,11 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
             self._remove_pid(pid)
             if self._wait_for_processes:
-                process_entry.grpc_client.shutdown_server()
+                try:
+                    process_entry.grpc_client.shutdown_server()
+                except DagsterUserCodeUnreachableError:
+                    # Server already shutdown
+                    pass
                 process_entry.grpc_server_process.wait()
 
     def __exit__(self, exception_type, exception_value, traceback):

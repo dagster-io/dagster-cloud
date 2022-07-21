@@ -306,6 +306,7 @@ class DagsterCloudApiRequest(
             ("request_args", Any),
             ("deployment_name", str),
             ("expire_at", float),
+            ("is_branch_deployment", bool),
         ],
     )
 ):
@@ -316,6 +317,7 @@ class DagsterCloudApiRequest(
         request_args: Any,
         deployment_name: str,
         expire_at: Optional[float] = None,
+        is_branch_deployment: Optional[bool] = None,
     ):
         return super(cls, DagsterCloudApiRequest).__new__(
             cls,
@@ -330,6 +332,7 @@ class DagsterCloudApiRequest(
                     pendulum.now("UTC") + timedelta(milliseconds=DEFAULT_EXPIRATION_MILLISECONDS)
                 ).timestamp(),
             ),
+            check.opt_bool_param(is_branch_deployment, "is_branch_deployment", default=False),
         )
 
     @property
