@@ -3,10 +3,10 @@ from typing import Any, Collection, Dict, List, Optional
 import boto3
 from dagster import Array, Field, IntSource, Noneable, ScalarUnion, StringSource
 from dagster import _check as check
-from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
-from dagster.core.launcher import RunLauncher
-from dagster.serdes import ConfigurableClass, ConfigurableClassData
-from dagster.utils import merge_dicts
+from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
+from dagster._core.launcher import RunLauncher
+from dagster._serdes import ConfigurableClass, ConfigurableClassData
+from dagster._utils import merge_dicts
 from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
@@ -198,7 +198,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         container_context = EcsContainerContext(
             secrets=self.secrets,
             secrets_tags=[self.secrets_tag] if self.secrets_tag else [],
-            env_vars=self.env_vars,
+            env_vars=self.env_vars
+            + [f"{k}={v}" for k, v in (metadata.cloud_context_env or {}).items()],
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         environment = merge_dicts(

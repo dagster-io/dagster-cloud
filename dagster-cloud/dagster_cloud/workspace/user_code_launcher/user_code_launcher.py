@@ -11,28 +11,30 @@ from typing import Collection, Dict, Generic, List, NamedTuple, Optional, Set, T
 
 import dagster._check as check
 from dagster import BoolSource, Field, IntSource
-from dagster.api.get_server_id import sync_get_server_id
-from dagster.api.list_repositories import sync_list_repositories_grpc
-from dagster.core.errors import DagsterUserCodeUnreachableError
-from dagster.core.host_representation import ExternalRepositoryOrigin
-from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
-from dagster.core.host_representation.origin import (
+from dagster._api.get_server_id import sync_get_server_id
+from dagster._api.list_repositories import sync_list_repositories_grpc
+from dagster._core.errors import DagsterUserCodeUnreachableError
+from dagster._core.host_representation import ExternalRepositoryOrigin
+from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
+from dagster._core.host_representation.origin import (
     RegisteredRepositoryLocationOrigin,
     RepositoryLocationOrigin,
 )
-from dagster.core.instance import MayHaveInstanceWeakref
-from dagster.core.launcher import RunLauncher
-from dagster.grpc.client import DagsterGrpcClient
-from dagster.grpc.types import GetCurrentImageResult
-from dagster.serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
-from dagster.utils import merge_dicts
-from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
+from dagster._core.instance import MayHaveInstanceWeakref
+from dagster._core.launcher import RunLauncher
+from dagster._grpc.client import DagsterGrpcClient
+from dagster._grpc.types import GetCurrentImageResult
+from dagster._serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
+from dagster._utils import merge_dicts
+from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
 )
 from dagster_cloud.execution.monitoring import (
+    CloudCodeServerHeartbeat,
+    CloudCodeServerStatus,
     CloudRunWorkerStatuses,
     start_run_worker_monitoring_thread,
 )
@@ -694,6 +696,43 @@ class DagsterCloudUserCodeLauncher(
             )
 
         return endpoint
+
+    def get_grpc_server_heartbeats(self) -> Dict[str, List[CloudCodeServerHeartbeat]]:
+        endpoint_or_errors = self.get_grpc_endpoints()
+        with self._metadata_lock:
+            desired_entries = set(self._desired_entries.keys())
+
+        heartbeats: Dict[str, List[CloudCodeServerHeartbeat]] = {}
+        for entry_key in desired_entries:
+            deployment_name, location_name = entry_key
+            endpoint_or_error = endpoint_or_errors.get(entry_key)
+
+            error = (
+                endpoint_or_error if isinstance(endpoint_or_error, SerializableErrorInfo) else None
+            )
+
+            if error:
+                status = CloudCodeServerStatus.FAILED
+            elif endpoint_or_error:
+                status = CloudCodeServerStatus.RUNNING
+            else:
+                # no endpoint yet means it's still being created
+                status = CloudCodeServerStatus.STARTING
+
+            if deployment_name not in heartbeats:
+                heartbeats[deployment_name] = []
+
+            heartbeats[deployment_name].append(
+                CloudCodeServerHeartbeat(
+                    location_name,
+                    server_status=status,
+                    error=endpoint_or_error
+                    if isinstance(endpoint_or_error, SerializableErrorInfo)
+                    else None,
+                )
+            )
+
+        return heartbeats
 
     def get_grpc_endpoints(
         self,

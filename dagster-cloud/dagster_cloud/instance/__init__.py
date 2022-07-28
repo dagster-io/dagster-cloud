@@ -8,15 +8,15 @@ from typing import Any, Dict, List, Optional, Type
 import yaml
 from dagster import Field
 from dagster import _check as check
-from dagster.builtins import Bool
-from dagster.config.validate import process_config, resolve_to_config_type
-from dagster.core.errors import DagsterInvalidConfigError, DagsterInvariantViolationError
-from dagster.core.instance import DagsterInstance, InstanceType
-from dagster.core.instance.config import config_field_for_configurable_class
-from dagster.core.instance.ref import ConfigurableClassData, InstanceRef, configurable_class_data
-from dagster.core.launcher import RunLauncher
-from dagster.serdes import ConfigurableClass
-from dagster.utils import frozendict
+from dagster._builtins import Bool
+from dagster._config import process_config
+from dagster._core.errors import DagsterInvalidConfigError, DagsterInvariantViolationError
+from dagster._core.instance import DagsterInstance, InstanceType
+from dagster._core.instance.config import config_field_for_configurable_class
+from dagster._core.instance.ref import ConfigurableClassData, InstanceRef, configurable_class_data
+from dagster._core.launcher import RunLauncher
+from dagster._serdes import ConfigurableClass
+from dagster._utils import frozendict
 from dagster_cloud_cli.core.graphql_client import (
     create_cloud_requests_session,
     create_proxy_client,

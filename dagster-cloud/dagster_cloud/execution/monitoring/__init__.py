@@ -2,16 +2,49 @@ import logging
 import sys
 import threading
 from collections import namedtuple
+from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Set
 
 import dagster._check as check
-from dagster.core.errors import DagsterInvariantViolationError
-from dagster.core.launcher import CheckRunHealthResult, WorkerStatus
-from dagster.core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, PipelineRunsFilter
-from dagster.serdes import whitelist_for_serdes
-from dagster.utils.error import serializable_error_info_from_exc_info
+from dagster._core.errors import DagsterInvariantViolationError
+from dagster._core.launcher import CheckRunHealthResult, WorkerStatus
+from dagster._core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, PipelineRunsFilter
+from dagster._serdes import whitelist_for_serdes
+from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud.instance import DagsterCloudAgentInstance, InstanceRef
 from dagster_cloud.storage.runs import GraphQLRunStorage
+
+
+@whitelist_for_serdes
+class CloudCodeServerStatus(Enum):
+    STARTING = "STARTING"
+    RUNNING = "RUNNING"
+    FAILED = "FAILED"
+
+
+@whitelist_for_serdes
+class CloudCodeServerHeartbeat(
+    NamedTuple(
+        "_CloudRunWorkerStatus",
+        [
+            ("location_name", str),
+            ("server_status", CloudCodeServerStatus),
+            ("error", Optional[SerializableErrorInfo]),
+        ],
+    )
+):
+    def __new__(
+        cls,
+        location_name: str,
+        server_status: CloudCodeServerStatus,
+        error: Optional[SerializableErrorInfo] = None,
+    ):
+        return super(CloudCodeServerHeartbeat, cls).__new__(
+            cls,
+            location_name=check.str_param(location_name, "location_name"),
+            server_status=check.inst_param(server_status, "server_status", CloudCodeServerStatus),
+            error=check.opt_inst_param(error, "error", SerializableErrorInfo),
+        )
 
 
 @whitelist_for_serdes

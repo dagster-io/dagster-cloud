@@ -2,7 +2,7 @@ import os
 import sys
 from typing import List
 
-from dagster.serdes.ipc import interrupt_ipc_subprocess_pid, open_ipc_subprocess
+from dagster._serdes.ipc import interrupt_ipc_subprocess_pid, open_ipc_subprocess
 
 from . import TaskStatus
 

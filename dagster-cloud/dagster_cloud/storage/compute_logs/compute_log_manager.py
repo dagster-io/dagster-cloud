@@ -3,17 +3,17 @@ import tempfile
 import zlib
 from contextlib import contextmanager
 
-import dagster.seven as seven
+import dagster._seven as _seven
 from dagster import Field, StringSource
 from dagster import _check as check
-from dagster.core.storage.compute_log_manager import (
+from dagster._core.storage.compute_log_manager import (
     MAX_BYTES_FILE_READ,
     ComputeIOType,
     ComputeLogManager,
 )
-from dagster.core.storage.local_compute_log_manager import LocalComputeLogManager
-from dagster.serdes import ConfigurableClass, ConfigurableClassData
-from dagster.utils import ensure_file
+from dagster._core.storage.local_compute_log_manager import LocalComputeLogManager
+from dagster._serdes import ConfigurableClass, ConfigurableClassData
+from dagster._utils import ensure_file
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 
@@ -27,7 +27,7 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
 
         # proxy calls to local compute log manager (for subscriptions, etc)
         if not local_dir:
-            local_dir = seven.get_system_temp_directory()
+            local_dir = _seven.get_system_temp_directory()
 
         self.local_manager = LocalComputeLogManager(local_dir)
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)

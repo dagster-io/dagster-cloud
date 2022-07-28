@@ -6,10 +6,10 @@ from typing import Any, Collection, Dict, List, Optional
 import docker
 from dagster import Field, IntSource
 from dagster import _check as check
-from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
-from dagster.core.utils import parse_env_var
-from dagster.serdes import ConfigurableClass
-from dagster.utils import find_free_port, merge_dicts
+from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
+from dagster._core.utils import parse_env_var
+from dagster._serdes import ConfigurableClass
+from dagster._utils import find_free_port, merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
@@ -151,7 +151,8 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
         container_context = DockerContainerContext(
             registry=None,
-            env_vars=self.env_vars,
+            env_vars=self.env_vars
+            + [f"{k}={v}" for k, v in (metadata.cloud_context_env or {}).items()],
             networks=self._networks,
             container_kwargs=self._container_kwargs,
         ).merge(DockerContainerContext.create_from_config(metadata.container_context))

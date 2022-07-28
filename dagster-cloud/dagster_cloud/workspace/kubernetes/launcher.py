@@ -7,9 +7,9 @@ import kubernetes
 import kubernetes.client as client
 from dagster import Field, IntSource, Noneable, StringSource
 from dagster import _check as check
-from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
-from dagster.serdes import ConfigurableClass
-from dagster.utils import merge_dicts
+from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
+from dagster._serdes import ConfigurableClass
+from dagster._utils import merge_dicts
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
@@ -215,7 +215,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             service_account_name=self._service_account_name,
             env_config_maps=self._env_config_maps,
             env_secrets=self._env_secrets,
-            env_vars=self._env_vars,
+            env_vars=self._env_vars
+            + [f"{k}={v}" for k, v in (metadata.cloud_context_env or {}).items()],
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
             labels=self._labels,

@@ -1,6 +1,6 @@
 from os import environ
 
-from dagster.core.events.log import EventLogEntry
+from dagster._core.events.log import EventLogEntry
 
 MAXIMUM_EVENT_MESSAGE_CHARACTERS = environ.get(
     "DAGSTER_CLOUD_MAXIMUM_EVENT_MESSAGE_CHARACTERS", 50000

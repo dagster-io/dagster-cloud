@@ -2,21 +2,21 @@ import json
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import dagster._check as check
-from dagster.core.errors import (
+from dagster._core.errors import (
     DagsterInvariantViolationError,
     DagsterRunAlreadyExists,
     DagsterRunNotFoundError,
     DagsterSnapshotDoesNotExist,
 )
-from dagster.core.events import DagsterEvent
-from dagster.core.execution.backfill import BulkActionStatus, PartitionBackfill
-from dagster.core.snap import (
+from dagster._core.events import DagsterEvent
+from dagster._core.execution.backfill import BulkActionStatus, PartitionBackfill
+from dagster._core.snap import (
     ExecutionPlanSnapshot,
     PipelineSnapshot,
     create_execution_plan_snapshot_id,
     create_pipeline_snapshot_id,
 )
-from dagster.core.storage.pipeline_run import (
+from dagster._core.storage.pipeline_run import (
     JobBucket,
     PipelineRun,
     PipelineRunsFilter,
@@ -25,16 +25,16 @@ from dagster.core.storage.pipeline_run import (
     RunsFilter,
     TagBucket,
 )
-from dagster.core.storage.runs.base import RunStorage
-from dagster.daemon.types import DaemonHeartbeat
-from dagster.serdes import (
+from dagster._core.storage.runs.base import RunStorage
+from dagster._daemon.types import DaemonHeartbeat
+from dagster._serdes import (
     ConfigurableClass,
     ConfigurableClassData,
     deserialize_as,
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster.utils import merge_dicts, utc_datetime_from_timestamp
+from dagster._utils import merge_dicts, utc_datetime_from_timestamp
 from dagster_cloud_cli.core.errors import GraphQLStorageError
 
 from .queries import (

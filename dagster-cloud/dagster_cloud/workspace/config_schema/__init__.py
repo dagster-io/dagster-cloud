@@ -1,12 +1,9 @@
 from typing import Any, Dict, List, Optional, cast
 
-from dagster import Noneable
+from dagster import Field, Map, Noneable, Selector, Shape
 from dagster import _check as check
-from dagster.config import Field, Map, Selector, Shape
-from dagster.config.errors import EvaluationError
-from dagster.config.source import StringSource
-from dagster.config.validate import validate_config
-from dagster.utils import frozendict
+from dagster._config import EvaluationError, StringSource, validate_config
+from dagster._utils import frozendict
 
 from .docker import SHARED_DOCKER_CONFIG
 from .ecs import SHARED_ECS_CONFIG

@@ -6,11 +6,11 @@ from contextlib import contextmanager
 from typing import Any, Dict
 
 import requests
-from dagster.core.host_representation import InProcessRepositoryLocation
-from dagster.core.host_representation.origin import InProcessRepositoryLocationOrigin
-from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
-from dagster.serdes import serialize_dagster_namedtuple
-from dagster.utils.error import serializable_error_info_from_exc_info
+from dagster._core.host_representation import InProcessRepositoryLocation
+from dagster._core.host_representation.origin import InProcessRepositoryLocationOrigin
+from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
+from dagster._serdes import serialize_dagster_namedtuple
+from dagster._utils.error import serializable_error_info_from_exc_info
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,

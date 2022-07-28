@@ -2,7 +2,7 @@ import re
 import time
 
 import kubernetes
-from dagster.utils import merge_dicts
+from dagster._utils import merge_dicts
 from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
 

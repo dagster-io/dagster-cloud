@@ -14,12 +14,12 @@ from typing import (
 )
 
 import dagster._check as check
-from dagster.core.assets import AssetDetails
-from dagster.core.definitions.events import AssetKey, ExpectationResult
-from dagster.core.events import DagsterEvent, DagsterEventType
-from dagster.core.events.log import EventLogEntry
-from dagster.core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
-from dagster.core.storage.event_log.base import (
+from dagster._core.assets import AssetDetails
+from dagster._core.definitions.events import AssetKey, ExpectationResult
+from dagster._core.events import DagsterEvent, DagsterEventType
+from dagster._core.events.log import EventLogEntry
+from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
+from dagster._core.storage.event_log.base import (
     AssetEntry,
     AssetRecord,
     EventLogConnection,
@@ -28,16 +28,16 @@ from dagster.core.storage.event_log.base import (
     EventRecordsFilter,
     RunShardedEventsCursor,
 )
-from dagster.core.storage.pipeline_run import PipelineRunStatsSnapshot
-from dagster.serdes import (
+from dagster._core.storage.pipeline_run import PipelineRunStatsSnapshot
+from dagster._serdes import (
     ConfigurableClass,
     ConfigurableClassData,
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster.serdes.serdes import deserialize_as
-from dagster.utils import datetime_as_float
-from dagster.utils.error import SerializableErrorInfo
+from dagster._serdes.serdes import deserialize_as
+from dagster._utils import datetime_as_float
+from dagster._utils.error import SerializableErrorInfo
 from dagster_cloud.storage.event_logs.utils import truncate_event
 from dagster_cloud_cli.core.errors import GraphQLStorageError
 

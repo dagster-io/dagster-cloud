@@ -12,18 +12,18 @@ from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple, 
 import dagster._check as check
 import pendulum
 from dagster import DagsterInstance
-from dagster.core.host_representation import RepositoryLocationOrigin
-from dagster.core.host_representation.origin import RegisteredRepositoryLocationOrigin
-from dagster.core.launcher.base import LaunchRunContext
-from dagster.grpc.client import DagsterGrpcClient
-from dagster.serdes import (
+from dagster._core.host_representation import RepositoryLocationOrigin
+from dagster._core.host_representation.origin import RegisteredRepositoryLocationOrigin
+from dagster._core.launcher.base import LaunchRunContext
+from dagster._grpc.client import DagsterGrpcClient
+from dagster._serdes import (
     deserialize_as,
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster.utils import merge_dicts
-from dagster.utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
-from dagster.utils.interrupts import raise_interrupts_as
+from dagster._utils import merge_dicts
+from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
+from dagster._utils.interrupts import raise_interrupts_as
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
     DagsterCloudApi,
@@ -258,6 +258,8 @@ class DagsterCloudAgent:
             self._active_deployment_names
         )
 
+        code_server_heartbeats_dict = instance.user_code_launcher.get_grpc_server_heartbeats()
+
         serialized_agent_heartbeats = [
             {
                 "deploymentName": deployment_name,
@@ -271,11 +273,12 @@ class DagsterCloudAgent:
                         else None,
                         errors=errors,
                         metadata={"version": __version__},
-                        run_worker_statuses=run_worker_statuses,
+                        run_worker_statuses=run_worker_statuses_dict[deployment_name],
+                        code_server_heartbeats=code_server_heartbeats_dict.get(deployment_name, []),
                     )
                 ),
             }
-            for deployment_name, run_worker_statuses in run_worker_statuses_dict.items()
+            for deployment_name in self._active_deployment_names
         ]
 
         self._last_heartbeat_time = curr_time

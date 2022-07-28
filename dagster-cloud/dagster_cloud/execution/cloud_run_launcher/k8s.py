@@ -1,8 +1,8 @@
 import sys
 
 from dagster import PipelineRun
-from dagster.core.launcher.base import CheckRunHealthResult, WorkerStatus
-from dagster.utils.error import serializable_error_info_from_exc_info
+from dagster._core.launcher.base import CheckRunHealthResult, WorkerStatus
+from dagster._utils.error import serializable_error_info_from_exc_info
 from dagster_k8s import K8sRunLauncher
 from dagster_k8s.job import get_job_name_from_run_id
 

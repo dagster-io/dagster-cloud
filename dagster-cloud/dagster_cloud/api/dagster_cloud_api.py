@@ -5,12 +5,12 @@ from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, Union
 
 import dagster._check as check
 import pendulum
-from dagster.core.code_pointer import CodePointer
-from dagster.core.host_representation import ExternalRepositoryData, RepositoryLocationOrigin
-from dagster.core.storage.pipeline_run import PipelineRun
-from dagster.serdes import whitelist_for_serdes
-from dagster.utils.error import SerializableErrorInfo
-from dagster_cloud.execution.monitoring import CloudRunWorkerStatuses
+from dagster._core.code_pointer import CodePointer
+from dagster._core.host_representation import ExternalRepositoryData, RepositoryLocationOrigin
+from dagster._core.storage.pipeline_run import PipelineRun
+from dagster._serdes import whitelist_for_serdes
+from dagster._utils.error import SerializableErrorInfo
+from dagster_cloud.execution.monitoring import CloudCodeServerHeartbeat, CloudRunWorkerStatuses
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
@@ -392,6 +392,7 @@ class AgentHeartbeat(
             ("errors", Optional[Sequence[TimestampedError]]),
             ("metadata", Optional[Mapping[str, str]]),
             ("run_worker_statuses", Optional[CloudRunWorkerStatuses]),
+            ("code_server_heartbeats", Optional[Sequence[CloudCodeServerHeartbeat]]),
         ],
     )
 ):
@@ -404,6 +405,7 @@ class AgentHeartbeat(
         errors: Optional[Sequence[TimestampedError]] = None,
         metadata: Optional[Mapping[str, str]] = None,
         run_worker_statuses: Optional[CloudRunWorkerStatuses] = None,
+        code_server_heartbeats: Optional[Sequence[CloudCodeServerHeartbeat]] = None,
     ):
         return super(AgentHeartbeat, cls).__new__(
             cls,
@@ -415,6 +417,9 @@ class AgentHeartbeat(
             metadata=check.opt_dict_param(metadata, "metadata", str),
             run_worker_statuses=check.opt_inst_param(
                 run_worker_statuses, "run_worker_statuses", CloudRunWorkerStatuses
+            ),
+            code_server_heartbeats=check.opt_list_param(
+                code_server_heartbeats, "code_server_heartbeats", of_type=CloudCodeServerHeartbeat
             ),
         )
 

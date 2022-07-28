@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import boto3
 import dagster._check as check
-from dagster.utils import merge_dicts
+from dagster._utils import merge_dicts
 
 from .service import Service
 

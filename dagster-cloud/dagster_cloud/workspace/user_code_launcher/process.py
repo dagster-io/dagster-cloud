@@ -6,13 +6,13 @@ from typing import Collection, Dict, NamedTuple, Optional, Set, Tuple
 
 from dagster import BoolSource, Field, IntSource
 from dagster import _check as check
-from dagster.core.errors import DagsterUserCodeUnreachableError
-from dagster.core.host_representation.grpc_server_registry import GrpcServerEndpoint
-from dagster.core.types.loadable_target_origin import LoadableTargetOrigin
-from dagster.grpc.client import DagsterGrpcClient, client_heartbeat_thread
-from dagster.grpc.server import GrpcServerProcess
-from dagster.serdes import ConfigurableClass, ConfigurableClassData
-from dagster.utils import merge_dicts
+from dagster._core.errors import DagsterUserCodeUnreachableError
+from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
+from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
+from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
+from dagster._grpc.server import GrpcServerProcess
+from dagster._serdes import ConfigurableClass, ConfigurableClassData
+from dagster._utils import merge_dicts
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 

@@ -1,9 +1,9 @@
 import time
 
 import dagster._check as check
-from dagster.core.launcher import RunLauncher
-from dagster.core.launcher.base import LaunchRunContext
-from dagster.grpc.types import ExecuteRunArgs
+from dagster._core.launcher import RunLauncher
+from dagster._core.launcher.base import LaunchRunContext
+from dagster._grpc.types import ExecuteRunArgs
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process, launch_process
 

@@ -1,6 +1,6 @@
 from typing import Optional
 
-from dagster.core.errors import DagsterInvariantViolationError
+from dagster._core.errors import DagsterInvariantViolationError
 
 
 def get_hardcoded_test_agent_token(organization_name) -> str:

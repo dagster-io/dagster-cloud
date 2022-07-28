@@ -6,9 +6,9 @@ from tempfile import TemporaryDirectory
 from typing import Optional
 
 import yaml
-from dagster.core.errors import DagsterHomeNotSetError
-from dagster.utils.interrupts import capture_interrupts
-from dagster.utils.log import default_date_format_string, default_format_string
+from dagster._core.errors import DagsterHomeNotSetError
+from dagster._utils.interrupts import capture_interrupts
+from dagster._utils.log import default_date_format_string, default_format_string
 from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud_cli import ui
