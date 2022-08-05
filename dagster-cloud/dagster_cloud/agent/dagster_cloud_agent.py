@@ -104,7 +104,7 @@ class DagsterCloudAgent:
     MAX_THREADS_PER_CORE = 10
 
     def __init__(self, pending_requests_limit: int = DEFAULT_PENDING_REQUESTS_LIMIT):
-        self._logger = logging.getLogger("dagster_cloud")
+        self._logger = logging.getLogger("dagster_cloud.agent")
 
         self._logger.info("Starting Dagster Cloud agent...")
 
@@ -340,48 +340,90 @@ class DagsterCloudAgent:
 
     def _has_ttl(self, user_code_launcher, is_branch_deployment):
         # branch deployments always have TTLs, other deployments only if you asked for it specifically
-        return is_branch_deployment or user_code_launcher.server_ttl_enabled
+        return is_branch_deployment or user_code_launcher.server_ttl_enabled_for_full_deployments
 
     def _get_ttl_seconds(self, instance, is_branch_deployment):
         return (
-            instance.branch_deployment_ttl_seconds
+            instance.user_code_launcher.branch_deployment_ttl_seconds
             if is_branch_deployment
-            else instance.user_code_launcher.server_ttl_seconds
+            else instance.user_code_launcher.full_deployment_ttl_seconds
         )
+
+    def _get_locations_with_ttl_to_query(
+        self, instance, user_code_launcher
+    ) -> List[Tuple[str, str]]:
+        now = time.time()
+
+        # For the deployments with TTLs, decide which locations to consider
+        # Include the location if:
+        # - a) There's a pending request in the queue for it
+        # - b) It's TTL hasn't expired since the last time somebody asked for it
+        # Always include locations in a), and add locations from b) until you hit a limit
+        location_candidates: Set[Tuple[str, str, float]] = {
+            (deployment, location, -1.0)  # Score below 0 so that they're at the front of the list
+            for deployment, location, is_branch_deployment in self._locations_with_pending_requests
+            if self._has_ttl(user_code_launcher, is_branch_deployment)
+        }
+
+        num_locations_to_query = instance.user_code_launcher.server_ttl_max_servers
+
+        if len(location_candidates) > num_locations_to_query:
+            self._logger.warning(
+                f"Temporarily keeping {len(location_candidates)} servers with pending requests "
+                f"running, which is more than the configured {num_locations_to_query} servers."
+            )
+            return [(deployment, location) for deployment, location, _score in location_candidates]
+
+        for location_entry, query_time in self._location_query_times.items():
+            if location_entry in self._locations_with_pending_requests:
+                # Skip locations that are already in location_candidates due to having
+                # pending requests
+                continue
+
+            deployment_name, location, is_branch_deployment = location_entry
+
+            if not self._has_ttl(user_code_launcher, is_branch_deployment):
+                continue
+
+            time_since_last_query = now - query_time
+
+            if time_since_last_query >= self._get_ttl_seconds(instance, is_branch_deployment):
+                continue
+
+            location_candidates.add((deployment_name, location, time_since_last_query))
+
+        sorted_results = sorted(location_candidates, key=lambda x: x[2])
+
+        # sort by time since last query asending and return the first N
+        filtered_results = sorted_results[:num_locations_to_query]
+
+        num_left_out = len(sorted_results) - num_locations_to_query
+
+        if num_left_out > 0:
+            self._logger.warning(
+                f"{len(sorted_results)} locations have been queried within TTL, but "
+                f"filtering out {num_left_out} to stay within {num_locations_to_query}"
+            )
+
+        return [(deployment, location) for deployment, location, _score in filtered_results]
 
     def _query_for_workspace_updates(
         self,
         instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
     ):
-        now = time.time()
 
-        # For the deployments with TTLs, decide which locations to consider
-        # Include the location if:
-        # - There's a pending request in the queue for it
-        # - It's TTL hasn't expired since the last time somebody asked for it
-        locations_with_ttl_to_consider = {
-            (deployment, location)
-            for deployment, location, is_branch_deployment in self._locations_with_pending_requests
-            if self._has_ttl(user_code_launcher, is_branch_deployment)
-        }.union(
-            {
-                (deployment_name, location)
-                for deployment_name, location, is_branch_deployment in self._location_query_times
-                if (
-                    self._has_ttl(user_code_launcher, is_branch_deployment)
-                    and (
-                        now
-                        - self._location_query_times[
-                            (deployment_name, location, is_branch_deployment)
-                        ]
-                        < self._get_ttl_seconds(instance, is_branch_deployment)
-                    )
-                )
-            }
+        locations_with_ttl_to_query = self._get_locations_with_ttl_to_query(
+            instance, user_code_launcher
         )
 
-        deployments_to_query = {key[0] for key in locations_with_ttl_to_consider}
+        deployments_to_query = {key[0] for key in locations_with_ttl_to_query}
+
+        if locations_with_ttl_to_query:
+            locations_str = ", ".join(
+                f"{deployment}:{location}" for deployment, location in locations_with_ttl_to_query
+            )
+            self._logger.debug(f"Querying for the following locations with TTL: {locations_str}")
 
         # If you have specified a non-branch deployment and no TTL, always consider it
         if instance.deployment_names:
@@ -421,13 +463,26 @@ class DagsterCloudAgent:
                         entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
                     )
 
+                    # The GraphQL can return a mix of deployments with TTLs (for example, all
+                    # branch deployments, and also full deployments if you have that configured)
+                    # and locations without TTLs (for example, full deployments). Deployments
+                    # without TTLs always include all of their locations. Deployments with TTLs
+                    # only include the locations within locations_with_ttl_to_query.
                     if not self._has_ttl(
                         user_code_launcher, is_branch_deployment
-                    ) or location_key in cast(Set[Tuple[str, str]], locations_with_ttl_to_consider):
+                    ) or location_key in cast(Set[Tuple[str, str]], locations_with_ttl_to_query):
                         deployment_map[location_key] = UserCodeLauncherEntry(
                             code_deployment_metadata=deployment_metadata,
                             update_timestamp=float(entry["metadataTimestamp"]),
                         )
+
+        if len(deployment_map):
+            update_str = ", ".join(
+                f"{deployment}:{location}" for deployment, location in deployment_map.keys()
+            )
+            self._logger.debug(f"Reconciling with the following locations: {update_str}")
+        else:
+            self._logger.debug("Reconciling with no locations")
 
         user_code_launcher.update_grpc_metadata(deployment_map)
 

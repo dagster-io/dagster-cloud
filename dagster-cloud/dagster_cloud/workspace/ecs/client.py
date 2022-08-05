@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 import uuid
 from typing import List, Optional
@@ -29,7 +30,6 @@ class Client:
         subnet_ids: Optional[List[str]] = None,
         security_group_ids: Optional[List[str]] = None,
         ecs_client=None,
-        wait_for_service: bool = True,
         timeout: int = DEFAULT_ECS_TIMEOUT,
         grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
     ):
@@ -46,7 +46,6 @@ class Client:
         )
         self.log_group = check.str_param(log_group, "log_group")
         self.execution_role_arn = check.str_param(execution_role_arn, "execution_role_arn")
-        self.wait_for_service = check.bool_param(wait_for_service, "wait_for_service")
         self.timeout = check.int_param(timeout, "timeout")
         self.grace_period = check.int_param(grace_period, "grace_period")
 
@@ -84,7 +83,14 @@ class Client:
         return network_configuration
 
     def register_task_definition(
-        self, name, image, command, task_role_arn=None, env=None, secrets=None
+        self,
+        name,
+        image,
+        command,
+        task_role_arn=None,
+        env=None,
+        secrets=None,
+        sidecars=None,
     ):
         if not env:
             env = {}
@@ -122,7 +128,8 @@ class Client:
                     },
                     secrets_dict,
                 )
-            ],
+            ]
+            + (sidecars if sidecars else []),
             executionRoleArn=self.execution_role_arn,
             # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
             cpu="256",
@@ -151,10 +158,16 @@ class Client:
         register_service_discovery=True,
         secrets=None,
         append_unique_suffix=True,
+        sidecars=None,
+        logger=None,
     ):
         # Append a unique suffix to the service name so we can do blue/green
         # deploys without setting up a load balancer.
         service_name = f"{name}_{uuid.uuid4().hex[:7]}" if append_unique_suffix else name
+
+        logger = logger or logging.getLogger("dagster_cloud.EcsClient")
+
+        logger.info(f"Registering task definition {name} for {service_name}...")
 
         # Register a task definition
         task_definition_arn = self.register_task_definition(
@@ -164,29 +177,27 @@ class Client:
             command=command,
             env=merge_dicts(env or {}, {"DAGSTER_SERVER_NAME": service_name}),
             secrets=secrets,
+            sidecars=sidecars,
         )
 
         service_registry_arn = None
         # Configure service discovery
         if register_service_discovery:
+            logger.info(f"Creating service registry for {service_name}...")
             service_registry_arn = self._create_service_registry(
                 service_name=service_name,
                 tags=tags,
             )
 
+        logger.info(f"Creating ECS service {service_name}...")
+
         # Create the service
-        service = self._create_service(
+        return self._create_service(
             service_name=service_name,
             service_registry_arn=service_registry_arn,
             task_definition_arn=task_definition_arn,
             tags=tags,
         )
-
-        if self.wait_for_service:
-            # Poll until the service is available
-            self._wait_for_service(service)
-
-        return service
 
     def delete_service(self, service):
         # Reduce running tasks to 0
@@ -312,8 +323,10 @@ class Client:
 
         return Service(client=self, arn=arn)
 
-    def _wait_for_service(self, service):
+    def wait_for_service(self, service, logger=None):
+        logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         service_name = service.name
+        logger.info(f"Waiting for service {service_name} to be ready...")
         messages = []
         start_time = time.time()
         while start_time + self.timeout > time.time():
@@ -331,7 +344,7 @@ class Client:
                 # resolve itself with enough time:
                 # https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency
                 if any(["has started 1 tasks" in message for message in messages]):
-                    return self._wait_for_task(service_name)
+                    return self._wait_for_task(service_name, logger=logger)
             elif response.get("failures"):
                 failures = response.get("failures")
                 # Even if we fail, check a few more times in case it's just the ECS API
@@ -350,8 +363,10 @@ class Client:
             time.sleep(1)
         raise Exception(messages)
 
-    def _wait_for_task(self, service_name):
+    def _wait_for_task(self, service_name, logger=None):
         # Check if a task can start
+        logger = logger or logging.getLogger("dagster_cloud.EcsClient")
+        logger.info(f"Waiting for task to start for service {service_name}")
         start_time = time.time()
         while start_time + 300 > time.time():
             running = self.ecs.list_tasks(
@@ -393,8 +408,26 @@ class Client:
                     "tasks"
                 )[0]
 
+                task_definition = self.ecs.describe_task_definition(
+                    taskDefinition=task.get("taskDefinitionArn"),
+                ).get("taskDefinition")
+
+                essential_containers = {
+                    container["name"]
+                    for container in task_definition["containerDefinitions"]
+                    if container["essential"]
+                }
+
                 if task.get("lastStatus") == "RUNNING":
-                    return True
+                    # Just because the task is RUNNING doesn't mean everything has started up correctly -
+                    # sometimes it briefly thinks it is RUNNING even though individual containers have STOPPED.
+                    # Wait for all essential containers to be running too before declaring victory.
+                    if all(
+                        container["name"] not in essential_containers
+                        or container["lastStatus"] == "RUNNING"
+                        for container in task["containers"]
+                    ):
+                        return True
 
             time.sleep(1)
         raise Exception(f"Timed out waiting for tasks to start for service: {service_name}")

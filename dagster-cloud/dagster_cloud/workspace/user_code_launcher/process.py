@@ -7,7 +7,6 @@ from typing import Collection, Dict, NamedTuple, Optional, Set, Tuple
 from dagster import BoolSource, Field, IntSource
 from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._grpc.server import GrpcServerProcess
@@ -20,6 +19,7 @@ from .user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudUserCodeLauncher,
+    ServerEndpoint,
 )
 
 CLEANUP_ZOMBIE_PROCESSES_INTERVAL = 5
@@ -155,20 +155,14 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     ) -> "ProcessUserCodeLauncher":
         return ProcessUserCodeLauncher(inst_data=inst_data, **config_value)
 
-    def _create_new_server_endpoint(
+    def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
-    ) -> GrpcServerEndpoint:
+    ) -> Tuple[int, ServerEndpoint]:
         loadable_target_origin = self._get_loadable_target_origin(metadata)
         server_process = GrpcServerProcess(
             loadable_target_origin=loadable_target_origin,
             heartbeat=True,
             heartbeat_timeout=self._heartbeat_ttl,
-        )
-        server_id = self._wait_for_server(
-            host="localhost",
-            port=server_process.port,
-            socket=server_process.socket,
-            timeout=self._server_process_startup_timeout,
         )
 
         client = DagsterGrpcClient(
@@ -202,14 +196,28 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         self._active_pids[key].add(pid)
 
-        endpoint = GrpcServerEndpoint(
-            server_id=server_id,
+        endpoint = ServerEndpoint(
             host="localhost",
             port=server_process.port,
             socket=server_process.socket,
         )
 
-        return endpoint
+        return (pid, endpoint)
+
+    def _wait_for_new_server_ready(
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        server_handle: int,
+        server_endpoint: ServerEndpoint,
+    ) -> None:
+        self._wait_for_server_process(
+            host=server_endpoint.host,
+            port=server_endpoint.port,
+            socket=server_endpoint.socket,
+            timeout=self._server_process_startup_timeout,
+        )
 
     def _get_loadable_target_origin(self, metadata: CodeDeploymentMetadata) -> LoadableTargetOrigin:
         return LoadableTargetOrigin(

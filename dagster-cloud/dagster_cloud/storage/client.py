@@ -32,20 +32,6 @@ def dagster_cloud_api_config():
         # Handle requests for multiple non-branch deployments
         "deployments": Field(Array(StringSource), is_required=False),
         # Handle requests for all branch deployments (can be combined with `deployment`)`
-        "branch_deployments": Field(
-            ScalarUnion(
-                scalar_type=bool,
-                non_scalar_schema={
-                    "enabled": Field(BoolSource, default_value=True, is_required=False),
-                    "ttl_seconds": Field(
-                        IntSource,
-                        is_required=False,
-                        default_value=3600,
-                        description="How long branch deployments should leave a server running once it has been launched.",
-                    ),
-                },
-            ),
-            default_value=False,
-        ),
+        "branch_deployments": Field(BoolSource, default_value=False, is_required=False),
         "all_serverless_deployments": Field(BoolSource, default_value=False, is_required=False),
     }

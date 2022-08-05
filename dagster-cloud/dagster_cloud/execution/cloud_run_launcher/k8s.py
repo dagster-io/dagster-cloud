@@ -1,7 +1,7 @@
 import sys
 
-from dagster import PipelineRun
 from dagster._core.launcher.base import CheckRunHealthResult, WorkerStatus
+from dagster._legacy import PipelineRun
 from dagster._utils.error import serializable_error_info_from_exc_info
 from dagster_k8s import K8sRunLauncher
 from dagster_k8s.job import get_job_name_from_run_id
@@ -23,7 +23,8 @@ class CloudK8sRunLauncher(K8sRunLauncher):
             )
         except Exception:
             return CheckRunHealthResult(
-                WorkerStatus.UNKNOWN, str(serializable_error_info_from_exc_info(sys.exc_info()))
+                WorkerStatus.UNKNOWN,
+                str(serializable_error_info_from_exc_info(sys.exc_info())),
             )
         if job.status.failed:
             return CheckRunHealthResult(WorkerStatus.FAILED, "K8s job failed")

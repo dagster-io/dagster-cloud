@@ -250,20 +250,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
     @property
     def includes_branch_deployments(self) -> bool:
-        branch_deployments = self._dagster_cloud_api_config.get("branch_deployments")
-        return (
-            branch_deployments.get("enabled")
-            if isinstance(branch_deployments, (frozendict, dict))
-            else branch_deployments
-        )
-
-    @property
-    def branch_deployment_ttl_seconds(self) -> int:
-        branch_deployments = self._dagster_cloud_api_config.get("branch_deployments")
-        branch_deployments_config = (
-            branch_deployments if isinstance(branch_deployments, (frozendict, dict)) else {}
-        )
-        return branch_deployments_config.get("ttl_seconds", 3600)
+        return self._dagster_cloud_api_config.get("branch_deployments", False)
 
     @property
     def instance_uuid(self) -> str:

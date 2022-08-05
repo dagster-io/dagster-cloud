@@ -1,12 +1,11 @@
 import logging
 import sys
 import time
-from typing import Any, Collection, Dict, List, Optional
+from typing import Any, Collection, Dict, List, Optional, Tuple
 
 import docker
 from dagster import Field, IntSource
 from dagster import _check as check
-from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster._core.utils import parse_env_var
 from dagster._serdes import ConfigurableClass
 from dagster._utils import find_free_port, merge_dicts
@@ -20,6 +19,7 @@ from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudUserCodeLauncher,
+    ServerEndpoint,
 )
 from ..user_code_launcher.utils import deterministic_label_for_location
 from .utils import unique_docker_resource_name
@@ -129,24 +129,10 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             filters={"label": deterministic_label_for_location(deployment_name, location_name)},
         )
 
-    def _create_new_server_endpoint(
+    def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
-    ) -> GrpcServerEndpoint:
-        return self._launch(
-            deployment_name=deployment_name,
-            location_name=location_name,
-            metadata=metadata,
-            command=metadata.get_grpc_server_command(),
-        )
-
-    def _launch(
-        self,
-        deployment_name: str,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        command: List[str],
-        additional_environment: Optional[Dict[str, str]] = None,
-    ) -> GrpcServerEndpoint:
+    ) -> Tuple[Container, ServerEndpoint]:
+        command = metadata.get_grpc_server_command()
         client = docker.client.from_env()
 
         container_context = DockerContainerContext(
@@ -182,7 +168,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         environment = merge_dicts(
             (dict([parse_env_var(env_var) for env_var in container_context.env_vars])),
             metadata.get_grpc_server_env(grpc_port),
-            additional_environment or {},
             {"DAGSTER_SERVER_NAME": container_name},
         )
 
@@ -227,20 +212,30 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
         container.start()
 
-        self._logger.info("Started container {container_id}".format(container_id=container.id))
-
-        server_id = self._wait_for_server(
-            host=hostname, port=grpc_port, timeout=self._server_process_startup_timeout
-        )
-
-        endpoint = GrpcServerEndpoint(
-            server_id=server_id,
+        endpoint = ServerEndpoint(
             host=hostname,
             port=grpc_port,
             socket=None,
         )
 
-        return endpoint
+        self._logger.info("Started container {container_id}".format(container_id=container.id))
+
+        return (container, endpoint)
+
+    def _wait_for_new_server_ready(
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        server_handle: Container,
+        server_endpoint: ServerEndpoint,
+    ) -> None:
+        self._wait_for_server_process(
+            host=server_endpoint.host,
+            port=server_endpoint.port,
+            timeout=self._server_process_startup_timeout,
+            socket=server_endpoint.socket,
+        )
 
     def _remove_server_handle(self, server_handle: Container) -> None:
         container = server_handle

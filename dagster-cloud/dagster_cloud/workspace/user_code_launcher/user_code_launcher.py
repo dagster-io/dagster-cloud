@@ -7,7 +7,19 @@ import time
 import zlib
 from abc import abstractmethod
 from contextlib import AbstractContextManager
-from typing import Collection, Dict, Generic, List, NamedTuple, Optional, Set, Tuple, TypeVar, Union
+from typing import (
+    Callable,
+    Collection,
+    Dict,
+    Generic,
+    List,
+    NamedTuple,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import dagster._check as check
 from dagster import BoolSource, Field, IntSource
@@ -15,7 +27,6 @@ from dagster._api.get_server_id import sync_get_server_id
 from dagster._api.list_repositories import sync_list_repositories_grpc
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.host_representation import ExternalRepositoryOrigin
-from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster._core.host_representation.origin import (
     RegisteredRepositoryLocationOrigin,
     RepositoryLocationOrigin,
@@ -44,6 +55,7 @@ from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
+DEFAULT_MAX_TTL_SERVERS = 25
 
 
 USER_CODE_LAUNCHER_RECONCILE_INTERVAL = 1
@@ -67,6 +79,8 @@ INIT_UPLOAD_LOCATIONS_QUERY = """
         }
     }
 """
+
+DEFAULT_SERVER_TTL_SECONDS = 60 * 60 * 24
 
 
 @whitelist_for_serdes
@@ -99,19 +113,57 @@ class UserCodeLauncherEntry(
 SHARED_USER_CODE_LAUNCHER_CONFIG = {
     "server_ttl": Field(
         {
+            "full_deployments": Field(
+                {
+                    "enabled": Field(
+                        BoolSource,
+                        is_required=True,
+                        description="Whether to shut down servers created by the agent for full deployments when they are not serving requests",
+                    ),
+                    "ttl_seconds": Field(
+                        IntSource,
+                        is_required=False,
+                        default_value=DEFAULT_SERVER_TTL_SECONDS,
+                        description="If the `enabled` flag is set , how long to leave a server "
+                        "running for a once it has been launched. Decreasing this value will cause "
+                        "fewer servers to be running at once, but request latency may increase "
+                        "if more requests need to wait for a server to launch",
+                    ),
+                },
+                is_required=False,
+            ),
+            "branch_deployments": Field(
+                {
+                    # No enabled flag, because branch deployments always have a TTL
+                    "ttl_seconds": Field(
+                        IntSource,
+                        is_required=False,
+                        default_value=DEFAULT_SERVER_TTL_SECONDS,
+                        description="How long to leave a server for a branch deployment running "
+                        "once it has been launched. Decreasing this value will cause fewer servers "
+                        "to be running at once, but request latency may increase if more requests "
+                        "need to wait for a server to launch",
+                    ),
+                },
+                is_required=False,
+            ),
+            "max_servers": Field(
+                IntSource,
+                is_required=False,
+                default_value=DEFAULT_MAX_TTL_SERVERS,
+                description="In addition to the TTL, ensure that the maximum number of "
+                "servers that are up at any given time and not currently serving requests stays "
+                "below this number.",
+            ),
             "enabled": Field(
                 BoolSource,
                 is_required=False,
-                default_value=False,
-                description="Whether to shut down servers created by the agent when they are not serving requests",
+                description="Deprecated - use `full_deployments.enabled` instead",
             ),
             "ttl_seconds": Field(
                 IntSource,
                 is_required=False,
-                default_value=3600,
-                description="If enabled, how long to leave a server running once it has been launched. "
-                "Decreasing this value will cause fewer servers to be running at once, but "
-                "request latency may increase if more requests need to wait for a server to launch",
+                description="Deprecated - use `full_deployments.ttl_seconds` instead",
             ),
         },
         is_required=False,
@@ -121,12 +173,34 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
 DeploymentAndLocation = Tuple[str, str]
 
 
+class ServerEndpoint(
+    NamedTuple(
+        "_ServerEndpoint",
+        [
+            ("host", str),
+            ("port", Optional[int]),
+            ("socket", Optional[str]),
+        ],
+    )
+):
+    def __new__(cls, host, port, socket):
+        return super(ServerEndpoint, cls).__new__(
+            cls,
+            check.str_param(host, "host"),
+            check.opt_int_param(port, "port"),
+            check.opt_str_param(socket, "socket"),
+        )
+
+    def create_client(self) -> DagsterGrpcClient:
+        return DagsterGrpcClient(port=self.port, socket=self.socket, host=self.host)
+
+
 class DagsterCloudUserCodeLauncher(
     AbstractContextManager, MayHaveInstanceWeakref[DagsterCloudAgentInstance], Generic[ServerHandle]
 ):
     def __init__(self, server_ttl):
         self._grpc_endpoints: Dict[
-            DeploymentAndLocation, Union[GrpcServerEndpoint, SerializableErrorInfo]
+            DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]
         ] = {}
         self._grpc_endpoints_lock = threading.Lock()
 
@@ -139,7 +213,7 @@ class DagsterCloudUserCodeLauncher(
 
         self._upload_locations: Set[DeploymentAndLocation] = set()
 
-        self._logger = logging.getLogger("dagster_cloud")
+        self._logger = logging.getLogger("dagster_cloud.user_code_launcher")
         self._started: bool = False
         self._run_worker_monitoring_thread = None
         self._run_worker_monitoring_thread_shutdown_event = None
@@ -154,12 +228,33 @@ class DagsterCloudUserCodeLauncher(
         super().__init__()
 
     @property
-    def server_ttl_enabled(self) -> bool:
-        return self._server_ttl_config.get("enabled", False)
+    def server_ttl_enabled_for_full_deployments(self) -> bool:
+        if "enabled" in self._server_ttl_config:
+            return self._server_ttl_config["enabled"]
+
+        if "full_deployments" not in self._server_ttl_config:
+            return False
+
+        return self._server_ttl_config["full_deployments"].get("enabled", True)
 
     @property
-    def server_ttl_seconds(self) -> int:
-        return self._server_ttl_config.get("ttl_seconds", 3600)
+    def full_deployment_ttl_seconds(self) -> int:
+        if "ttl_seconds" in self._server_ttl_config:
+            return self._server_ttl_config["ttl_seconds"]
+
+        return self._server_ttl_config.get("full_deployments", {}).get(
+            "ttl_seconds", DEFAULT_SERVER_TTL_SECONDS
+        )
+
+    @property
+    def branch_deployment_ttl_seconds(self) -> int:
+        return self._server_ttl_config.get("branch_deployments", {}).get(
+            "ttl_seconds", DEFAULT_SERVER_TTL_SECONDS
+        )
+
+    @property
+    def server_ttl_max_servers(self) -> int:
+        return self._server_ttl_config.get("max_servers", DEFAULT_MAX_TTL_SERVERS)
 
     def start(self, run_reconcile_thread=True):
         # Initialize
@@ -426,15 +521,26 @@ class DagsterCloudUserCodeLauncher(
         _remove_server_handle to remove the service."""
 
     @abstractmethod
-    def _create_new_server_endpoint(
+    def _start_new_server_spinup(
         self,
         deployment_name: str,
         location_name: str,
         metadata: CodeDeploymentMetadata,
-    ) -> GrpcServerEndpoint:
+    ) -> Tuple[ServerHandle, ServerEndpoint]:
         """Create a new server for the given location using the given metadata as configuration
-        and return a GrpcServerEndpoint indicating a hostname/port that can be used to access
-        the server. Should result in an additional handle being returned from _get_server_handles_for_location."""
+        and return a ServerHandle indicating where it can be found. Any waiting for the server
+        to happen should happen in _wait_for_new_server_endpoint."""
+
+    @abstractmethod
+    def _wait_for_new_server_ready(
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        server_handle: ServerHandle,
+        server_endpoint: ServerEndpoint,
+    ) -> None:
+        """Wait for a newly-created server to be ready."""
 
     @abstractmethod
     def _remove_server_handle(self, server_handle: ServerHandle) -> None:
@@ -540,15 +646,58 @@ class DagsterCloudUserCodeLauncher(
                 "field in your agent's `dagster.yaml` file to a launcher that can load Docker images. "
             )
 
+    def _deployments_and_locations_to_string(
+        self,
+        deployments_and_locations: Set[DeploymentAndLocation],
+        entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
+    ):
+        return (
+            "{"
+            + ", ".join(
+                sorted(
+                    [
+                        f"({dep}, {loc}, {entries[(dep,loc)].update_timestamp})"
+                        for dep, loc in deployments_and_locations
+                    ]
+                )
+            )
+            + "}"
+        )
+
     def _reconcile(
         self,
         desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
         upload_locations: Set[DeploymentAndLocation],
     ):
         diff = diff_serializable_namedtuple_map(desired_entries, self._actual_entries)
+        has_changes = diff.to_add or diff.to_update or diff.to_remove or upload_locations
+
+        if not has_changes:
+            return
+
+        goal_str = self._deployments_and_locations_to_string(
+            set(desired_entries.keys()), desired_entries
+        )
+        to_add_str = self._deployments_and_locations_to_string(diff.to_add, desired_entries)
+        to_update_str = self._deployments_and_locations_to_string(diff.to_update, desired_entries)
+        to_remove_str = self._deployments_and_locations_to_string(
+            diff.to_remove, self._actual_entries
+        )
+        to_upload_str = self._deployments_and_locations_to_string(upload_locations, desired_entries)
+
+        start_time = time.time()
+
+        self._logger.info(
+            f"Reconciling to reach {goal_str}. To add: {to_add_str}. To update: {to_update_str}. To remove: {to_remove_str}. To upload: {to_upload_str}."
+        )
 
         to_update_keys = diff.to_add.union(diff.to_update)
         existing_server_handles: Dict[DeploymentAndLocation, Collection[ServerHandle]] = {}
+
+        new_server_handles: Dict[
+            str, Union[Tuple[ServerHandle, ServerEndpoint], SerializableErrorInfo]
+        ] = {}
+
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
 
@@ -567,21 +716,16 @@ class DagsterCloudUserCodeLauncher(
 
                 self._check_for_image(code_deployment_metadata)
 
-                new_updated_endpoint: Union[
-                    GrpcServerEndpoint, SerializableErrorInfo
-                ] = self._create_new_server_endpoint(
+                new_server_handles[to_update_key] = self._start_new_server_spinup(
                     deployment_name,
                     location_name,
                     code_deployment_metadata,
                 )
 
                 self._logger.info(
-                    "Created a new server for location {location_name}".format(
-                        location_name=to_update_key
-                    )
+                    "Created a new server for {location_name}".format(location_name=to_update_key)
                 )
             except Exception:
-                deployment_name, location_name = to_update_key
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 self._logger.error(
                     "Error while updating server for {deployment_name}:{location_name}: {error_info}".format(
@@ -590,13 +734,44 @@ class DagsterCloudUserCodeLauncher(
                         error_info=error_info,
                     )
                 )
-                new_updated_endpoint = error_info
+                new_server_handles[to_update_key] = error_info
+
+        for to_update_key in to_update_keys:
+            deployment_name, location_name = to_update_key
+            code_deployment_metadata = desired_entries[to_update_key].code_deployment_metadata
+            server_handle_or_error = new_server_handles[to_update_key]
+
+            new_updated_endpoint: Union[ServerEndpoint, SerializableErrorInfo]
+
+            if isinstance(server_handle_or_error, SerializableErrorInfo):
+                # Failed spinning up the endpoint - no need to wait
+                new_updated_endpoint = server_handle_or_error
+            else:
+                server_handle, server_endpoint = server_handle_or_error
+                try:
+                    self._wait_for_new_server_ready(
+                        deployment_name,
+                        location_name,
+                        code_deployment_metadata,
+                        server_handle,
+                        server_endpoint,
+                    )
+                    new_updated_endpoint = server_endpoint
+                except:
+                    error_info = serializable_error_info_from_exc_info(sys.exc_info())
+                    self._logger.error(
+                        "Error while waiting for server for {deployment_name}:{location_name} to be ready: {error_info}".format(
+                            deployment_name=deployment_name,
+                            location_name=location_name,
+                            error_info=error_info,
+                        )
+                    )
+                    new_updated_endpoint = error_info
 
             with self._grpc_endpoints_lock:
                 self._grpc_endpoints[to_update_key] = new_updated_endpoint
 
             if to_update_key in upload_locations:
-                deployment_name, location_name = to_update_key
                 upload_locations.remove(to_update_key)
                 self._update_location_data(
                     deployment_name,
@@ -672,6 +847,8 @@ class DagsterCloudUserCodeLauncher(
                 self._actual_entries[location].code_deployment_metadata,
             )
 
+        self._logger.info(f"Finished reconciling in {time.time() - start_time} seconds.")
+
     def has_grpc_endpoint(self, deployment_name: str, location_name: str) -> bool:
         with self._grpc_endpoints_lock:
             return (deployment_name, location_name) in self._grpc_endpoints
@@ -680,7 +857,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-    ) -> GrpcServerEndpoint:
+    ) -> ServerEndpoint:
         with self._grpc_endpoints_lock:
             endpoint = self._grpc_endpoints.get((deployment_name, location_name))
 
@@ -736,7 +913,7 @@ class DagsterCloudUserCodeLauncher(
 
     def get_grpc_endpoints(
         self,
-    ) -> Dict[DeploymentAndLocation, Union[GrpcServerEndpoint, SerializableErrorInfo]]:
+    ) -> Dict[DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]]:
         with self._grpc_endpoints_lock:
             return self._grpc_endpoints.copy()
 
@@ -752,7 +929,14 @@ class DagsterCloudUserCodeLauncher(
         for server_handle in existing_server_handles:
             self._remove_server_handle(server_handle)
 
-    def _wait_for_server(self, host: str, port: int, timeout, socket: Optional[str] = None) -> str:
+    def _wait_for_server_process(
+        self,
+        host: str,
+        port: Optional[int],
+        timeout,
+        socket: Optional[str] = None,
+        additional_check: Optional[Callable[[], None]] = None,
+    ) -> str:
         # Wait for the server to be ready (while also loading the server ID)
         server_id = None
         start_time = time.time()
@@ -773,4 +957,8 @@ class DagsterCloudUserCodeLauncher(
                 )
 
             time.sleep(1)
+
+            if additional_check:
+                additional_check()
+
         return server_id

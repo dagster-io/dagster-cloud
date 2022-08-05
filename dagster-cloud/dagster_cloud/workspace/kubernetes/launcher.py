@@ -1,13 +1,12 @@
 import logging
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Collection, Dict, List, NamedTuple, Optional, Set, Tuple
+from typing import Collection, Dict, NamedTuple, Set, Tuple
 
 import kubernetes
 import kubernetes.client as client
 from dagster import Field, IntSource, Noneable, StringSource
 from dagster import _check as check
-from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster._serdes import ConfigurableClass
 from dagster._utils import merge_dicts
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
@@ -20,6 +19,7 @@ from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudUserCodeLauncher,
+    ServerEndpoint,
 )
 from ..user_code_launcher.utils import deterministic_label_for_location
 from .utils import (
@@ -198,16 +198,6 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         with client.ApiClient() as api_client:  # pylint: disable=not-context-manager
             yield client.AppsV1Api(api_client)
 
-    def _create_new_server_endpoint(
-        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
-    ) -> GrpcServerEndpoint:
-        return self._launch(
-            deployment_name,
-            location_name,
-            metadata,
-            command=metadata.get_grpc_server_command(),
-        )
-
     def _resolve_container_context(self, metadata: CodeDeploymentMetadata) -> K8sContainerContext:
         return K8sContainerContext(
             image_pull_policy=self._pull_policy,
@@ -224,14 +214,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             resources=self._resources,
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
 
-    def _launch(
-        self,
-        deployment_name: str,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        command: List[str],
-        additional_environment: Optional[Dict[str, str]] = None,
-    ) -> GrpcServerEndpoint:
+    def _start_new_server_spinup(
+        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
+    ) -> Tuple[K8sHandle, ServerEndpoint]:
+        command = metadata.get_grpc_server_command()
+
         resource_name = unique_k8s_resource_name(deployment_name, location_name)
 
         container_context = self._resolve_container_context(metadata)
@@ -255,10 +242,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                         container_context.labels,
                         container_context.resources,
                         command=command,
-                        env=merge_dicts(
-                            container_context.get_environment_dict(),
-                            (additional_environment or {}),
-                        ),
+                        env=container_context.get_environment_dict(),
                     ),
                 )
             self._logger.info(
@@ -273,19 +257,19 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             )
             raise e
 
-        self._used_namespaces[(deployment_name, location_name)].add(
-            check.not_none(container_context.namespace)
-        )
+        namespace = check.not_none(container_context.namespace)
+
+        self._used_namespaces[(deployment_name, location_name)].add(namespace)
 
         try:
             api_response = client.CoreV1Api().create_namespaced_service(
-                container_context.namespace,
+                namespace,
                 construct_repo_location_service(deployment_name, location_name, resource_name),
             )
             self._logger.info(
                 "Created service {} in namespace {}".format(
                     api_response.metadata.name,
-                    container_context.namespace,
+                    namespace,
                 )
             )
         except ApiException as e:
@@ -294,9 +278,28 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             )
             raise e
 
+        # use namespace scoped host name
+        host = f"{resource_name}.{namespace}"
+
+        endpoint = ServerEndpoint(
+            host=host,
+            port=SERVICE_PORT,
+            socket=None,
+        )
+
+        return (K8sHandle(namespace=namespace, name=resource_name), endpoint)
+
+    def _wait_for_new_server_ready(
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        server_handle: K8sHandle,
+        server_endpoint: ServerEndpoint,
+    ) -> None:
         wait_for_deployment_complete(
-            resource_name,
-            container_context.namespace,
+            server_handle.name,
+            server_handle.namespace,
             self._logger,
             location_name,
             metadata,
@@ -305,23 +308,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             image_pull_grace_period=self._image_pull_grace_period,
         )
 
-        # use namespace scoped host name
-        host = f"{resource_name}.{container_context.namespace}"
-
-        server_id = self._wait_for_server(
-            host=host,
-            port=SERVICE_PORT,
+        self._wait_for_server_process(
+            host=server_endpoint.host,
+            port=server_endpoint.port,
             timeout=self._server_process_startup_timeout,
         )
-
-        endpoint = GrpcServerEndpoint(
-            server_id=server_id,
-            host=host,
-            port=SERVICE_PORT,
-            socket=None,
-        )
-
-        return endpoint
 
     def _get_server_handles_for_location(
         self,

@@ -1,18 +1,25 @@
 # Dagster Cloud Changelog
 
+# 1.0.0
+
+### New
+
+- Performance improvements when the Dagster Cloud agent is deploying more than one code location at the same time.
+- The default timeout for runs to start has been increased from 5 minutes to 10 minutes. We had observed that ECS tasks often would exceed timeout when pulling a large image.
+
 # 0.15.8
 
 ### New
 
-* Branch Deployments are now ordered by their most recent commit time on the Deployments tab.
-* You can now access the name of the current Dagster Cloud deployment within your Dagster code by checking the `DAGSTER_CLOUD_DEPLOYMENT_NAME` environment variable. You can use this to change the behavior of your code depending on the deployment in which it is running.
+- Branch Deployments are now ordered by their most recent commit time on the Deployments tab.
+- You can now access the name of the current Dagster Cloud deployment within your Dagster code by checking the `DAGSTER_CLOUD_DEPLOYMENT_NAME` environment variable. You can use this to change the behavior of your code depending on the deployment in which it is running.
 
 # 0.15.7
 
 ### Bugfixes
 
-* Fixed an issue where launching a run with just whitespace in the Launchpad would create an error.
-* Fixed an issue where creating a code location that started with a numeric character failed to load when using the Kubernetes agent.
+- Fixed an issue where launching a run with just whitespace in the Launchpad would create an error.
+- Fixed an issue where creating a code location that started with a numeric character failed to load when using the Kubernetes agent.
 
 # 0.15.6
 

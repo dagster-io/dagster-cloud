@@ -1,9 +1,8 @@
-from typing import Any, Collection, Dict, List, Optional
+from typing import Any, Collection, Dict, List, Optional, Tuple
 
 import boto3
 from dagster import Array, Field, IntSource, Noneable, ScalarUnion, StringSource
 from dagster import _check as check
-from dagster._core.host_representation.grpc_server_registry import GrpcServerEndpoint
 from dagster._core.launcher import RunLauncher
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils import merge_dicts
@@ -16,6 +15,7 @@ from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudUserCodeLauncher,
+    ServerEndpoint,
 )
 from ..user_code_launcher.utils import deterministic_label_for_location
 from .client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
@@ -175,24 +175,15 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def inst_data(self) -> Optional[ConfigurableClassData]:
         return self._inst_data
 
-    def _create_new_server_endpoint(
-        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
-    ) -> GrpcServerEndpoint:
-        return self._launch(
-            deployment_name,
-            location_name,
-            metadata,
-            command=metadata.get_grpc_server_command(),
-        )
+    def _get_grpc_server_sidecars(self) -> Optional[List[Dict[str, Any]]]:
+        return None
 
-    def _launch(
-        self,
-        deployment_name: str,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
-        command: List[str],
-        additional_environment: Dict[str, Any] = None,
-    ) -> GrpcServerEndpoint:
+    def _start_new_server_spinup(
+        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
+    ) -> Tuple[EcsServerHandleType, ServerEndpoint]:
+
+        command = metadata.get_grpc_server_command()
+
         port = 4000
 
         container_context = EcsContainerContext(
@@ -204,8 +195,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         environment = merge_dicts(
             container_context.get_environment_dict(),
-            (additional_environment or {}),
             metadata.get_grpc_server_env(port),
+        )
+
+        self._logger.info(
+            "Creating a new service for {}:{}...".format(deployment_name, location_name)
         )
 
         service = self.client.create_service(
@@ -225,23 +219,38 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             task_role_arn=self.task_role_arn,
             secrets=container_context.get_secrets_dict(self.secrets_manager),
             append_unique_suffix=False,  # already covered by unique_resource_name
+            sidecars=self._get_grpc_server_sidecars(),
+            logger=self._logger,
         )
         self._logger.info(
-            "Created a new service at hostname {} for {}:{}, waiting for it to be ready...".format(
+            "Created a new service at hostname {} for {}:{}, waiting for server to be ready...".format(
                 service.hostname, deployment_name, location_name
             )
         )
-        server_id = self._wait_for_server(
-            host=service.hostname, port=port, timeout=self._server_process_startup_timeout
-        )
 
-        endpoint = GrpcServerEndpoint(
-            server_id=server_id,
+        endpoint = ServerEndpoint(
             host=service.hostname,
             port=port,
             socket=None,
         )
-        return endpoint
+
+        return (service, endpoint)
+
+    def _wait_for_new_server_ready(
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+        server_handle: Service,
+        server_endpoint: ServerEndpoint,
+    ) -> None:
+        self.client.wait_for_service(server_handle, self._logger)
+        self._wait_for_server_process(
+            host=server_endpoint.host,
+            port=server_endpoint.port,
+            timeout=self._server_process_startup_timeout,
+            additional_check=lambda: self.client.wait_for_service(server_handle, self._logger),
+        )
 
     def _remove_server_handle(self, server_handle: EcsServerHandleType) -> None:
         self._logger.info(
@@ -250,6 +259,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             )
         )
         self.client.delete_service(server_handle)
+        self._logger.info(
+            "Deleted service {} at hostname {}.".format(server_handle.name, server_handle.hostname)
+        )
 
     def _get_server_handles_for_location(
         self, deployment_name, location_name: str

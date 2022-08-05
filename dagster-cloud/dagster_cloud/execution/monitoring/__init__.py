@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Set
 
 import dagster._check as check
+from dagster import DagsterInstance
 from dagster._core.errors import DagsterInvariantViolationError
 from dagster._core.launcher import CheckRunHealthResult, WorkerStatus
 from dagster._core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, PipelineRunsFilter
@@ -98,21 +99,22 @@ class CloudRunWorkerStatuses(
 
 
 def get_cloud_run_worker_statuses(instance, deployment_names):
-    launcher = instance.run_launcher
-    check.invariant(launcher.supports_check_run_worker_health)
 
     statuses = {}
 
     for deployment_name in deployment_names:
-        runs = GraphQLRunStorage(
-            override_graphql_client=instance.graphql_client_for_deployment(deployment_name)
-        ).get_runs(PipelineRunsFilter(statuses=IN_PROGRESS_RUN_STATUSES))
-        statuses[deployment_name] = [
-            CloudRunWorkerStatus.from_check_run_health_result(
-                run.run_id, launcher.check_run_worker_health(run)
-            )
-            for run in runs
-        ]
+        with DagsterInstance.from_ref(
+            instance.ref_for_deployment(deployment_name)
+        ) as scoped_instance:
+            launcher = scoped_instance.run_launcher
+            check.invariant(launcher.supports_check_run_worker_health)
+            runs = scoped_instance.get_runs(PipelineRunsFilter(statuses=IN_PROGRESS_RUN_STATUSES))
+            statuses[deployment_name] = [
+                CloudRunWorkerStatus.from_check_run_health_result(
+                    run.run_id, launcher.check_run_worker_health(run)
+                )
+                for run in runs
+            ]
 
     return statuses
 
