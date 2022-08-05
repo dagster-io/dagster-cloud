@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 1.0.1
+
+### Documentation
+
+- The [Dagster Cloud docs](https://docs.dagster.io/dagster-cloud) now live alongside all the other Dagster docs! Check them out by nagivating to Deployment > Cloud.
+
 # 1.0.0
 
 ### New
