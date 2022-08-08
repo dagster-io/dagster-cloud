@@ -1,5 +1,21 @@
 # Dagster Cloud Changelog
 
+# 1.0.2
+### New
+
+* The `dagster-cloud workspace` CLI now has a configurable Agent heartbeat timeout. The CLI will logspew every few seconds while waiting for the Agent to sync a code location.
+* When a code location is added or updated, a notification will appear in Dagit, and the Workspace tab will automatically refresh.
+* Added additional retries when the ECS agent encounters a problem spinning up a new service.
+
+### Bugfixes
+
+* Trying to add a code location with an empty name now throws an error message.
+* Fixed an issue where the alert policy UI would not allow creating an alert policy with no tags, which targets all jobs.
+
+### Documentation
+
+* The docs have moved! All Dagster docs now live at `docs.dagster.io.` [Click here to check out the new and improved Cloud docs](https://docs.dagster.io/dagster-cloud).
+
 # 1.0.1
 
 ### Documentation

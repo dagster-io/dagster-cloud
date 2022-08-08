@@ -6,12 +6,15 @@ from typing import List, Optional
 
 import boto3
 import dagster._check as check
+from botocore.config import Config
 from dagster._utils import merge_dicts
 
 from .service import Service
 
 DEFAULT_ECS_TIMEOUT = 300
 DEFAULT_ECS_GRACE_PERIOD = 10
+
+config = Config(retries={"max_attempts": 10, "mode": "standard"})
 
 
 class EcsServiceError(Exception):
@@ -33,10 +36,10 @@ class Client:
         timeout: int = DEFAULT_ECS_TIMEOUT,
         grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
     ):
-        self.ecs = ecs_client if ecs_client else boto3.client("ecs")
-        self.logs = boto3.client("logs")
-        self.service_discovery = boto3.client("servicediscovery")
-        self.ec2 = boto3.resource("ec2")
+        self.ecs = ecs_client if ecs_client else boto3.client("ecs", config=config)
+        self.logs = boto3.client("logs", config=config)
+        self.service_discovery = boto3.client("servicediscovery", config=config)
+        self.ec2 = boto3.resource("ec2", config=config)
 
         self.cluster_name = cluster_name.split("/")[-1]
         self.subnet_ids = check.opt_list_param(subnet_ids, "subnet_ids")
@@ -278,7 +281,7 @@ class Client:
         )
 
         if exit_code:
-            raise Exception(self._get_logs(task_arn))
+            raise Exception(self.get_task_logs(task_arn))
 
         return True
 
@@ -360,7 +363,7 @@ class Client:
                 raise Exception(
                     f"ECS DescribeServices API returned an empty response for service {service.arn}."
                 )
-            time.sleep(1)
+            time.sleep(10)
         raise Exception(messages)
 
     def _wait_for_task(self, service_name, logger=None):
@@ -386,9 +389,13 @@ class Client:
                 task_arn = stopped[0]
 
                 try:
-                    logs = self._get_logs(task_arn)
+                    logs = self.get_task_logs(task_arn, container_name=service_name)
                 except:
-                    pass
+                    logger.exception(
+                        "Error trying to get logs for failed task {task_arn}".format(
+                            task_arn=task_arn
+                        )
+                    )
 
                 if logs:
                     raise EcsServiceError(task_arn=task_arn, logs=logs)
@@ -429,7 +436,7 @@ class Client:
                     ):
                         return True
 
-            time.sleep(1)
+            time.sleep(10)
         raise Exception(f"Timed out waiting for tasks to start for service: {service_name}")
 
     def _get_service_discovery_id(self, hostname):
@@ -467,7 +474,7 @@ class Client:
                 return "DISABLED"
         return "ENABLED"
 
-    def _get_logs(self, task_arn):
+    def get_task_logs(self, task_arn, container_name, limit=100):
         task = self.ecs.describe_tasks(cluster=self.cluster_name, tasks=[task_arn]).get("tasks")[0]
 
         task_definition_arn = task.get("taskDefinitionArn")
@@ -475,7 +482,16 @@ class Client:
             "taskDefinition"
         )
 
-        container_definition = task_definition.get("containerDefinitions")[0]
+        matching_container_definitions = [
+            container_definition
+            for container_definition in task_definition.get("containerDefinitions", [])
+            if container_definition["name"] == container_name
+        ]
+        if not matching_container_definitions:
+            raise Exception(f"Could not find container with name {container_name}")
+
+        container_definition = matching_container_definitions[0]
+
         log_stream_prefix = (
             container_definition.get("logConfiguration").get("options").get("awslogs-stream-prefix")
         )
@@ -485,8 +501,7 @@ class Client:
         log_stream = f"{log_stream_prefix}/{container_name}/{task_id}"
 
         events = self.logs.get_log_events(
-            logGroupName=self.log_group,
-            logStreamName=log_stream,
+            logGroupName=self.log_group, logStreamName=log_stream, limit=limit
         ).get("events")
 
         return [event.get("message") for event in events]
