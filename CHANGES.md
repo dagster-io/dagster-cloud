@@ -1,5 +1,10 @@
 # Dagster Cloud Changelog
 
+# 1.0.3
+### New
+
+* Introduced various UI improvements to the new organization onboarding flow.
+
 # 1.0.2
 ### New
 
