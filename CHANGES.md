@@ -1,5 +1,19 @@
 # Dagster Cloud Changelog
 
+# 1.0.4
+
+### New
+
+* The top navigation of the Dagster Cloud UI now has a help menu with links to documentation and support.
+* Added more user feedback to GitHub setup in Serverless new user experience.
+* The Dagster Cloud usage page is now clarified to be in UTC time.
+* Values have been added to the user-cloud helm chart for setting TTL (time to live) on user code servers managed by the agent. 
+
+### Bugfixes
+
+* The `dagster-cloud serverless` command is no longer erroneously hidden from the help command list.
+* Fixed an issue where inspecting asset groups in Code Previews did not lead to the correct link.
+
 # 1.0.3
 ### New
 

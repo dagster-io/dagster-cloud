@@ -16,6 +16,7 @@ from typing import (
 import dagster._check as check
 from dagster._core.assets import AssetDetails
 from dagster._core.definitions.events import AssetKey, ExpectationResult
+from dagster._core.event_api import RunShardedEventsCursor
 from dagster._core.events import DagsterEvent, DagsterEventType
 from dagster._core.events.log import EventLogEntry
 from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
@@ -26,7 +27,6 @@ from dagster._core.storage.event_log.base import (
     EventLogRecord,
     EventLogStorage,
     EventRecordsFilter,
-    RunShardedEventsCursor,
 )
 from dagster._core.storage.pipeline_run import PipelineRunStatsSnapshot
 from dagster._serdes import (
