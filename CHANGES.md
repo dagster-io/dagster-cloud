@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 1.0.5
+
+### Bugfixes
+
+* Fixed an issue where login emails would not work for certain orgs
+
 # 1.0.4
 
 ### New

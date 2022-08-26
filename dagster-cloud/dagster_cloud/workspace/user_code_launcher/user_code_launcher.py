@@ -953,7 +953,8 @@ class DagsterCloudUserCodeLauncher(
 
             if time.time() - start_time > timeout:
                 raise Exception(
-                    f"Timed out waiting for server {host}:{port}. Most recent connection error: {str(last_error)}"
+                    f"Timed out after waiting {timeout}s for server {host}:{port}. "
+                    f"Most recent connection error: {str(last_error)}"
                 )
 
             time.sleep(1)

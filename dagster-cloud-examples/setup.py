@@ -19,7 +19,7 @@ if __name__ == "__main__":
         name="dagster_cloud_examples",
         version=ver,
         packages=find_packages(exclude=["dagster_cloud_examples_tests*"]),
-        install_requires=["dagster_cloud==1.0.4"],
+        install_requires=["dagster_cloud==1.0.6"],
         extras_require={"tests": ["mypy", "pylint", "pytest"]},
         author="Elementl",
         author_email="hello@elementl.com",

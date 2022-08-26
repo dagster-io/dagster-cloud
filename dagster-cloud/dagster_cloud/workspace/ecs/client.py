@@ -8,8 +8,7 @@ import boto3
 import dagster._check as check
 from botocore.config import Config
 from dagster._utils import merge_dicts
-
-from .service import Service
+from dagster_cloud.workspace.ecs.service import Service
 
 DEFAULT_ECS_TIMEOUT = 300
 DEFAULT_ECS_GRACE_PERIOD = 10
@@ -209,28 +208,27 @@ class Client:
             service=service.name,
             desiredCount=0,
         )
-        self.ecs.get_waiter("services_stable").wait(
-            cluster=self.cluster_name,
-            services=[service.name],
-            WaiterConfig={"Delay": 1, "MaxAttempts": self.timeout},
-        )
-
         # Delete the ECS service
         self.ecs.delete_service(
             cluster=self.cluster_name,
             service=service.name,
+            force=True,
         )
-        self.ecs.get_waiter("services_inactive").wait(
-            cluster=self.cluster_name,
-            services=[service.name],
-            WaiterConfig={"Delay": 1, "MaxAttempts": self.timeout},
-        )
-
-        # Delete service discovery
+        # get service discovery id
         service_discovery_id = self._get_service_discovery_id(
             service.hostname,
         )
         if service_discovery_id:
+            # Unregister dangling ecs tasks from service discovery
+            instances_paginator = self.service_discovery.get_paginator("list_instances")
+            instances = instances_paginator.paginate(
+                ServiceId=service_discovery_id,
+            ).build_full_result()["Instances"]
+            for instance in instances:
+                self.service_discovery.deregister_instance(
+                    ServiceId=service_discovery_id, InstanceId=instance["Id"]
+                )
+            # delete service discovery
             self.service_discovery.delete_service(
                 Id=service_discovery_id,
             )
