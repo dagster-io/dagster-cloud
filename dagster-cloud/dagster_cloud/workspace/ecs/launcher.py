@@ -9,18 +9,17 @@ from dagster._utils import merge_dicts
 from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
-
-from ..user_code_launcher import (
+from dagster_cloud.workspace.ecs.client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
+from dagster_cloud.workspace.ecs.service import Service
+from dagster_cloud.workspace.ecs.utils import get_ecs_human_readable_label, unique_ecs_resource_name
+from dagster_cloud.workspace.user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
 )
-from ..user_code_launcher.utils import deterministic_label_for_location
-from .client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
-from .service import Service
-from .utils import get_ecs_human_readable_label, unique_ecs_resource_name
+from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 EcsServerHandleType = Service
 
@@ -281,6 +280,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         for service in self.client.list_services():
             if "dagster/location_name" in service.tags.keys():
                 self._remove_server_handle(service)
+        self._logger.info("Finished cleaning up servers.")
 
     def run_launcher(self) -> RunLauncher:
         launcher = EcsRunLauncher(

@@ -91,6 +91,7 @@ def construct_repo_location_deployment(
     resources,
     command=None,
     env=None,
+    scheduler_name=None,
 ):
     env = merge_dicts(
         metadata.get_grpc_server_env(SERVICE_PORT),
@@ -161,6 +162,7 @@ def construct_repo_location_deployment(
                         k8s_model_from_dict(kubernetes.client.models.V1Volume, volume)
                         for volume in volumes
                     ],
+                    scheduler_name=scheduler_name,
                 ),
             ),
         ),

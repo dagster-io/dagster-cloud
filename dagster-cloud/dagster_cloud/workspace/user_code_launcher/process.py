@@ -163,6 +163,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             loadable_target_origin=loadable_target_origin,
             heartbeat=True,
             heartbeat_timeout=self._heartbeat_ttl,
+            startup_timeout=self._server_process_startup_timeout,
         )
 
         client = DagsterGrpcClient(

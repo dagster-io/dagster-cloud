@@ -1,5 +1,17 @@
 # Dagster Cloud Changelog
 
+# 1.0.7
+
+### New
+
+* [Kubernetes] The Agent Helm chart now supports `dagsterCloudAgent.schedulerName` and `workspace.schedulerName` for specifying a [custom Kubernetes scheduler](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/) for the Agent pod and workspace pods, respectively.
+* [Kubernetes] The Agent Helm chart now supports pointing an agent at a list of deployments using the `dagsterCloud.deployments` field.
+
+### Bugfixes
+
+* Fixed an issue where GitHub Actions runs would trigger in an incorrect order during Serverless setup.
+
+
 # 1.0.5
 
 ### Bugfixes
@@ -13,7 +25,7 @@
 * The top navigation of the Dagster Cloud UI now has a help menu with links to documentation and support.
 * Added more user feedback to GitHub setup in Serverless new user experience.
 * The Dagster Cloud usage page is now clarified to be in UTC time.
-* Values have been added to the user-cloud helm chart for setting TTL (time to live) on user code servers managed by the agent. 
+* Values have been added to the user-cloud helm chart for setting TTL (time to live) on user code servers managed by the agent.
 
 ### Bugfixes
 

@@ -201,7 +201,10 @@ class Client:
             tags=tags,
         )
 
-    def delete_service(self, service):
+    def delete_service(
+        self,
+        service,
+    ):
         # Reduce running tasks to 0
         self.ecs.update_service(
             cluster=self.cluster_name,
@@ -224,10 +227,24 @@ class Client:
             instances = instances_paginator.paginate(
                 ServiceId=service_discovery_id,
             ).build_full_result()["Instances"]
+            deregister_operation_ids = []
             for instance in instances:
-                self.service_discovery.deregister_instance(
+                resp = self.service_discovery.deregister_instance(
                     ServiceId=service_discovery_id, InstanceId=instance["Id"]
                 )
+                deregister_operation_ids.append(resp["OperationId"])
+
+            # wait for instances to complete deregistering
+            for operation_id in deregister_operation_ids:
+                status = ""
+                while status != "SUCCESS":
+                    status = self.service_discovery.get_operation(OperationId=operation_id)[
+                        "Operation"
+                    ]["Status"]
+                    if status == "FAIL":
+                        raise Exception("deregister operation failed")
+                    time.sleep(2)
+
             # delete service discovery
             self.service_discovery.delete_service(
                 Id=service_discovery_id,

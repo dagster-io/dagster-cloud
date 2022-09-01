@@ -63,6 +63,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         labels=None,
         resources=None,
         server_ttl=None,
+        scheduler_name=None,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("K8sUserCodeLauncher")
@@ -105,6 +106,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         )
         self._labels = check.opt_dict_param(labels, "labels", key_type=str, value_type=str)
         self._resources = check.opt_dict_param(resources, "resources", key_type=str)
+
+        self._scheduler_name = check.opt_str_param(scheduler_name, "scheduler_name")
 
         if kubeconfig_file:
             kubernetes.config.load_kube_config(kubeconfig_file)
@@ -182,6 +185,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     description="Image pull policy to set on launched Pods.",
                 ),
                 "namespace": Field(StringSource, is_required=False, default_value="default"),
+                "scheduler_name": Field(StringSource, is_required=False),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
@@ -243,6 +247,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                         container_context.resources,
                         command=command,
                         env=container_context.get_environment_dict(),
+                        scheduler_name=self._scheduler_name,
                     ),
                 )
             self._logger.info(
