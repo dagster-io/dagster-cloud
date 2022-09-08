@@ -97,4 +97,10 @@ SHARED_K8S_CONFIG = {
         description="Compute resource requirements for the container. See: "
         "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
     ),
+    "scheduler_name": Field(
+        Noneable(StringSource),
+        is_required=False,
+        description="Use a custom Kubernetes scheduler for launched Pods. See:"
+        "https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/",
+    ),
 }

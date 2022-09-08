@@ -110,7 +110,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
         return new_api_config
 
-    def ref_for_deployment(self, deployment_name: Optional[str]):
+    def ref_for_deployment(self, deployment_name: str):
         my_ref = self.get_ref()
         my_custom_instance_class_data = my_ref.custom_instance_class_data
         new_class_data = _cached_inject_deployment(my_custom_instance_class_data, deployment_name)
@@ -388,18 +388,16 @@ instance_class:
 @lru_cache(maxsize=100)  # Scales on order of active branch deployments
 def _cached_inject_deployment(
     custom_instance_class_data: ConfigurableClassData,
-    deployment_name: Optional[str],
+    deployment_name: str,
 ) -> ConfigurableClassData:
     # incurs costly yaml parse
     config_dict = custom_instance_class_data.config_dict
 
-    if deployment_name:
-        config_dict["dagster_cloud_api"]["deployment"] = deployment_name
-        if config_dict["dagster_cloud_api"].get("branch_deployments"):
-            del config_dict["dagster_cloud_api"]["branch_deployments"]
-    else:
-        # Add whatever header you had in mind to indicate that it's organization-scoped instead
-        del config_dict["dagster_cloud_api"]["deployment"]
+    config_dict["dagster_cloud_api"]["deployment"] = deployment_name
+    if config_dict["dagster_cloud_api"].get("branch_deployments"):
+        del config_dict["dagster_cloud_api"]["branch_deployments"]
+    if config_dict["dagster_cloud_api"].get("deployments"):
+        del config_dict["dagster_cloud_api"]["deployments"]
 
     return ConfigurableClassData(
         "dagster_cloud.instance",

@@ -1,4 +1,3 @@
-from collections import namedtuple
 from datetime import timedelta
 from enum import Enum
 from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, Union
@@ -223,7 +222,9 @@ class DagsterCloudApiGrpcResponse(
 
 
 @whitelist_for_serdes
-class LoadRepositoriesArgs(namedtuple("_LoadRepositoryArgs", "location_origin")):
+class LoadRepositoriesArgs(
+    NamedTuple("_LoadRepositoryArgs", [("location_origin", RepositoryLocationOrigin)])
+):
     def __new__(cls, location_origin):
         return super(cls, LoadRepositoriesArgs).__new__(
             cls,
@@ -233,7 +234,14 @@ class LoadRepositoriesArgs(namedtuple("_LoadRepositoryArgs", "location_origin"))
 
 @whitelist_for_serdes
 class DagsterCloudRepositoryData(
-    namedtuple("_DagsterCloudRepositoryData", "repo_name code_pointer external_repository_data")
+    NamedTuple(
+        "_DagsterCloudRepositoryData",
+        [
+            ("repo_name", str),
+            ("code_pointer", CodePointer),
+            ("external_repository_data", ExternalRepositoryData),
+        ],
+    )
 ):
     def __new__(cls, repo_name, code_pointer, external_repository_data):
         return super(cls, DagsterCloudRepositoryData).__new__(
@@ -250,9 +258,14 @@ class DagsterCloudRepositoryData(
 
 @whitelist_for_serdes
 class LoadRepositoriesResponse(
-    namedtuple(
+    NamedTuple(
         "_LoadRepositoriesResponse",
-        "repository_datas container_image executable_path code_deployment_metadata",
+        [
+            ("repository_datas", Sequence[DagsterCloudRepositoryData]),
+            ("container_image", Optional[str]),
+            ("executable_path", Optional[str]),
+            ("code_deployment_metadata", Optional[CodeDeploymentMetadata]),
+        ],
     )
 ):
     def __new__(
@@ -279,7 +292,7 @@ class PingLocationArgs(NamedTuple("_PingLocationArgs", [("location_name", str)])
 
 
 @whitelist_for_serdes
-class LaunchRunArgs(namedtuple("_LaunchRunArgs", "pipeline_run")):
+class LaunchRunArgs(NamedTuple("_LaunchRunArgs", [("pipeline_run", PipelineRun)])):
     def __new__(cls, pipeline_run):
         return super(cls, LaunchRunArgs).__new__(
             cls,
@@ -288,7 +301,7 @@ class LaunchRunArgs(namedtuple("_LaunchRunArgs", "pipeline_run")):
 
 
 @whitelist_for_serdes
-class TerminateRunArgs(namedtuple("_TerminateRunArgs", "pipeline_run")):
+class TerminateRunArgs(NamedTuple("_TerminateRunArgs", [("pipeline_run", PipelineRun)])):
     def __new__(cls, pipeline_run):
         return super(cls, TerminateRunArgs).__new__(
             cls,
@@ -370,7 +383,15 @@ class DagsterCloudUploadApiResponse(
 
 
 @whitelist_for_serdes
-class TimestampedError(namedtuple("_TimestampedError", "timestamp error")):
+class TimestampedError(
+    NamedTuple(
+        "_TimestampedError",
+        [
+            ("timestamp", Optional[float]),
+            ("error", SerializableErrorInfo),
+        ],
+    )
+):
     def __new__(cls, timestamp, error):
 
         return super(TimestampedError, cls).__new__(

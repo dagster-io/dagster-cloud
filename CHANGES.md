@@ -1,5 +1,27 @@
 # Dagster Cloud Changelog
 
+# 1.0.8
+### New
+
+
+* [Kubernetes] Custom Kubernetes schedulers can now be applied to pods launched by the Dagster Cloud agent. To change the scheduler for all pods created by the agent, set `workspace.schedulerName` in the agent Helm chart. To set it for only the pods created as part of a particular code location, set the following configuration for the code location on the Workspace tab:
+
+  ```
+  container_context:
+    k8s:
+      scheduler_name: your-custom-schedule-name
+  ```
+
+  To change it for the agent, you'll still need to set `dagsterCloudAgent.schedulerName` in the agent Helm chart.
+
+
+### Bugfixes
+
+* Fixed an issue where the “Latest run” column on the Instance Status page sometimes displayed an older run instead of the most recent run.
+* Added a pin to grpcio to address an issue with the recent 0.48.1 grpcio release that was sometimes causing Dagster code servers to hang.
+
+
+
 # 1.0.7
 
 ### New

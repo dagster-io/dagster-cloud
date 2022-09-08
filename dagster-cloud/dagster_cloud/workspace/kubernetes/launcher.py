@@ -132,6 +132,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             volumes=self._volumes,
             labels=self._labels,
             resources=self._resources,
+            scheduler_name=self._scheduler_name,
         )
 
         # mutable set of observed namespaces to assist with cleanup
@@ -216,6 +217,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             labels=self._labels,
             namespace=self._namespace,
             resources=self._resources,
+            scheduler_name=self._scheduler_name,
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
 
     def _start_new_server_spinup(
@@ -247,7 +249,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                         container_context.resources,
                         command=command,
                         env=container_context.get_environment_dict(),
-                        scheduler_name=self._scheduler_name,
+                        scheduler_name=container_context.scheduler_name,
                     ),
                 )
             self._logger.info(
