@@ -37,7 +37,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         env_vars=None,
         container_kwargs=None,
         server_process_startup_timeout=None,
-        server_ttl=None,
+        **kwargs,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("dagster_cloud")
@@ -54,7 +54,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
 
-        super(DockerUserCodeLauncher, self).__init__(server_ttl)
+        super(DockerUserCodeLauncher, self).__init__(**kwargs)
 
     @property
     def requires_images(self):

@@ -39,9 +39,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         secrets=None,
         secrets_tag=None,
         env_vars=None,
-        server_ttl=None,
         ecs_timeout=None,
         ecs_grace_period=None,
+        **kwargs,
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
@@ -97,7 +97,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             timeout=self._ecs_timeout,
             grace_period=self._ecs_grace_period,
         )
-        super(EcsUserCodeLauncher, self).__init__(server_ttl=server_ttl)
+        super(EcsUserCodeLauncher, self).__init__(**kwargs)
 
     @property
     def requires_images(self):

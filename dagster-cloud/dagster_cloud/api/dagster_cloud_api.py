@@ -5,7 +5,11 @@ from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, Union
 import dagster._check as check
 import pendulum
 from dagster._core.code_pointer import CodePointer
-from dagster._core.host_representation import ExternalRepositoryData, RepositoryLocationOrigin
+from dagster._core.host_representation import (
+    ExternalRepositoryData,
+    JobSelector,
+    RepositoryLocationOrigin,
+)
 from dagster._core.storage.pipeline_run import PipelineRun
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo
@@ -56,6 +60,13 @@ class DagsterCloudUploadWorkspaceEntry(NamedTuple):
     deployment_metadata: CodeDeploymentMetadata
     upload_location_data: Optional[DagsterCloudUploadLocationData]
     serialized_error_info: Optional[SerializableErrorInfo]
+
+
+@whitelist_for_serdes
+class DagsterCloudUploadWorkspaceResponse(NamedTuple):
+    updated: bool
+    message: str
+    missing_job_snapshots: Optional[Sequence[JobSelector]]
 
 
 @whitelist_for_serdes

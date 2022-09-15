@@ -62,8 +62,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         image_pull_grace_period=None,
         labels=None,
         resources=None,
-        server_ttl=None,
         scheduler_name=None,
+        **kwargs,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("K8sUserCodeLauncher")
@@ -114,7 +114,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         else:
             kubernetes.config.load_incluster_config()
 
-        super(K8sUserCodeLauncher, self).__init__(server_ttl=server_ttl)
+        super(K8sUserCodeLauncher, self).__init__(**kwargs)
 
         self._launcher = CloudK8sRunLauncher(
             dagster_home=self._dagster_home,

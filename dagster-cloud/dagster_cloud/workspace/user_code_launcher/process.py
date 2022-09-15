@@ -58,7 +58,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         server_process_startup_timeout=None,
         inst_data: Optional[ConfigurableClassData] = None,
         wait_for_processes: bool = False,
-        server_ttl=None,
+        **kwargs,
     ):
         self._inst_data = inst_data
         self._logger = logging.getLogger("dagster_cloud")
@@ -86,7 +86,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         self._run_launcher: Optional[CloudProcessRunLauncher] = None
 
-        super(ProcessUserCodeLauncher, self).__init__(server_ttl=server_ttl)
+        super(ProcessUserCodeLauncher, self).__init__(**kwargs)
 
     @property
     def requires_images(self) -> bool:

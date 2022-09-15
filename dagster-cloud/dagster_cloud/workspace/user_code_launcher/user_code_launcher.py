@@ -26,7 +26,7 @@ from dagster import BoolSource, Field, IntSource
 from dagster._api.get_server_id import sync_get_server_id
 from dagster._api.list_repositories import sync_list_repositories_grpc
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._core.host_representation import ExternalRepositoryOrigin
+from dagster._core.host_representation import ExternalRepositoryOrigin, JobSelector
 from dagster._core.host_representation.origin import (
     RegisteredRepositoryLocationOrigin,
     RepositoryLocationOrigin,
@@ -42,10 +42,12 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
+    DagsterCloudUploadWorkspaceResponse,
 )
 from dagster_cloud.execution.monitoring import (
     CloudCodeServerHeartbeat,
     CloudCodeServerStatus,
+    CloudRunWorkerStatus,
     CloudRunWorkerStatuses,
     start_run_worker_monitoring_thread,
 )
@@ -167,7 +169,14 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
             ),
         },
         is_required=False,
-    )
+    ),
+    "defer_job_snapshots": Field(
+        BoolSource,
+        is_required=False,
+        default_value=False,
+        description="When enabled,  job snapshots will not be included in the workspace "
+        "snapshot and will be uploaded separately if not previously uploaded.",
+    ),
 }
 
 DeploymentAndLocation = Tuple[str, str]
@@ -198,17 +207,22 @@ class ServerEndpoint(
 class DagsterCloudUserCodeLauncher(
     AbstractContextManager, MayHaveInstanceWeakref[DagsterCloudAgentInstance], Generic[ServerHandle]
 ):
-    def __init__(self, server_ttl):
+    def __init__(
+        self,
+        server_ttl: Optional[dict] = None,
+        defer_job_snapshots: bool = False,
+    ):
         self._grpc_endpoints: Dict[
             DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]
         ] = {}
         self._grpc_endpoints_lock = threading.Lock()
 
         self._server_ttl_config = check.opt_dict_param(server_ttl, "server_ttl")
+        self._defer_job_snapshots = defer_job_snapshots
 
         # periodically reconciles to make desired = actual
         self._desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
-        self._actual_entries = {}
+        self._actual_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
         self._metadata_lock = threading.Lock()
 
         self._upload_locations: Set[DeploymentAndLocation] = set()
@@ -217,8 +231,8 @@ class DagsterCloudUserCodeLauncher(
         self._started: bool = False
         self._run_worker_monitoring_thread = None
         self._run_worker_monitoring_thread_shutdown_event = None
-        self._run_worker_deployments_to_check = set()
-        self._run_worker_statuses_dict = {}
+        self._run_worker_deployments_to_check: Set[str] = set()
+        self._run_worker_statuses_dict: Dict[str, List[CloudRunWorkerStatus]] = {}
         self._run_worker_monitoring_lock = threading.Lock()
 
         self._reconcile_count = 0
@@ -371,16 +385,47 @@ class DagsterCloudUserCodeLauncher(
                 )
                 raise_http_error(resp)
 
-                self._logger.info(
-                    "Successfully uploaded workspace entry for {deployment_name}:{location_name}".format(
-                        deployment_name=deployment_name, location_name=workspace_entry.location_name
-                    )
+            response = deserialize_as(resp.text, DagsterCloudUploadWorkspaceResponse)
+            self._logger.info(
+                f"Workspace entry for {deployment_name}:{workspace_entry.location_name} {response.message}"
+            )
+
+            # if the update took we are all done
+            if response.updated:
+                return
+
+            # if not there must be missing job snapshots, upload them and then try again
+            missing = response.missing_job_snapshots
+            if missing is None:
+                check.failed(
+                    "Unexpected state: workspace was not updated but no required job snapshots were returned."
                 )
 
-    def _get_upload_location_data(
-        self, deployment_name: str, location_name: str
-    ) -> DagsterCloudUploadLocationData:
+            self._logger.info(f"Uploading {len(missing)} job snapshots.")
+            for job_selector in missing:
+                self.upload_job_snapshot(deployment_name, job_selector)
 
+            with open(dst, "rb") as f:
+                resp = self._instance.requests_session.post(
+                    self._instance.dagster_cloud_upload_workspace_entry_url,
+                    headers=self._instance.headers_for_deployment(deployment_name),
+                    data={},
+                    files={"workspace_entry.tmp": f},
+                    timeout=self._instance.dagster_cloud_api_timeout,
+                )
+                raise_http_error(resp)
+
+            response = deserialize_as(resp.text, DagsterCloudUploadWorkspaceResponse)
+            check.invariant(response.updated, "update failed after job snapshots uploaded")
+            self._logger.info(
+                f"Workspace entry for {deployment_name}:{workspace_entry.location_name} {response.message}"
+            )
+
+    def _get_upload_location_data(
+        self,
+        deployment_name: str,
+        location_name: str,
+    ) -> DagsterCloudUploadLocationData:
         location_origin = self._get_repository_location_origin(location_name)
         client = self.get_grpc_endpoint(deployment_name, location_name).create_client()
 
@@ -397,7 +442,8 @@ class DagsterCloudUserCodeLauncher(
                     external_repository_origin=ExternalRepositoryOrigin(
                         location_origin,
                         repository_name,
-                    )
+                    ),
+                    defer_snapshots=self._defer_job_snapshots,
                 )
             )
 
@@ -407,6 +453,7 @@ class DagsterCloudUserCodeLauncher(
                     for chunk in external_repository_chunks
                 ]
             )
+
             # Don't deserialize in case there are breaking changes - let the server do it
             upload_repo_datas.append(
                 DagsterCloudUploadRepositoryData(
@@ -432,7 +479,7 @@ class DagsterCloudUserCodeLauncher(
         metadata: CodeDeploymentMetadata,
     ):
         self._logger.error(
-            "Unable to load {deployment_name}:{location_name}. Updating location with error data: {error_info}.".format(
+            "Unable to update {deployment_name}:{location_name}. Updating location with error data: {error_info}.".format(
                 deployment_name=deployment_name,
                 location_name=location_name,
                 error_info=str(error_info),
@@ -457,7 +504,7 @@ class DagsterCloudUserCodeLauncher(
         metadata: CodeDeploymentMetadata,
     ):
         self._logger.info(
-            "Uploading metadata for {deployment_name}:{location_name}".format(
+            "Fetching metadata for {deployment_name}:{location_name}".format(
                 deployment_name=deployment_name, location_name=location_name
             )
         )
@@ -478,7 +525,18 @@ class DagsterCloudUserCodeLauncher(
                     ),
                     serialized_error_info=None,
                 )
+
+                self._logger.info(
+                    "Updating {deployment_name}:{location_name} with repository load data".format(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
+                    )
+                )
+
+                self._update_workspace_entry(deployment_name, loaded_workspace_entry)
             except Exception:
+                # Try to write the error to cloud. If this doesn't work the outer try block
+                # prevents this from blocking the agent loop.
                 self._update_location_error(
                     deployment_name,
                     location_name,
@@ -487,13 +545,6 @@ class DagsterCloudUserCodeLauncher(
                 )
                 return
 
-            self._logger.info(
-                "Updating {deployment_name}:{location_name} with repository load data".format(
-                    deployment_name=deployment_name,
-                    location_name=location_name,
-                )
-            )
-            self._update_workspace_entry(deployment_name, loaded_workspace_entry)
         except Exception:
             # Don't let a failure uploading the serialized data keep other locations
             # from being updated or continue reconciling in a loop
@@ -963,3 +1014,43 @@ class DagsterCloudUserCodeLauncher(
                 additional_check()
 
         return server_id
+
+    def upload_job_snapshot(
+        self,
+        deployment_name: str,
+        job_selector: JobSelector,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self.get_grpc_endpoint(
+                deployment_name, job_selector.location_name
+            ).create_client()
+            location_origin = self._get_repository_location_origin(job_selector.location_name)
+            response = client.external_job(
+                ExternalRepositoryOrigin(location_origin, job_selector.repository_name),
+                job_selector.job_name,
+            )
+            if not response.serialized_job_data:
+                error = (
+                    deserialize_as(response.serialized_error, SerializableErrorInfo)
+                    if response.serialized_error
+                    else "no captured error"
+                )
+                raise Exception(f"Error fetching job data in code server:\n{error}")
+
+            dst = os.path.join(temp_dir, "job.tmp")
+            with open(dst, "wb") as f:
+                f.write(zlib.compress(response.serialized_job_data.encode("utf-8")))
+
+            with open(dst, "rb") as f:
+                resp = self._instance.requests_session.post(
+                    self._instance.dagster_cloud_upload_job_snap_url,
+                    headers=self._instance.headers_for_deployment(deployment_name),
+                    data={},
+                    files={"job.tmp": f},
+                    timeout=self._instance.dagster_cloud_api_timeout,
+                )
+                raise_http_error(resp)
+                self._logger.info(
+                    f"Successfully uploaded job snapshot for {job_selector.job_name}@{job_selector.repository_name} ({os.path.getsize(dst)} bytes)"
+                )
+                return response
