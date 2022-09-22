@@ -1,22 +1,35 @@
 # Dagster Cloud Changelog
 
+# 1.0.10
+
+### New
+
+- When alerts are configured in Dagster Cloud on a job that also has automatic retries , the alert will now only fire if the final retry fails.
+- Performance improvements to the Overview page.
+- Job snapshot uploads now use a thread pool for parallelism.
+
+### Bugfixes
+
+- Fixed an issue where links to the compute logs in Dagit would sometimes fail to load.
+- Improved user-facing error messages for Serverless GitHub setup.
+
 # 1.0.9
 
 ### New
 
-* Performance improvements for the Partitions page.
-* A new scheme for workspaces updates has been added that improves performance in deployments with a large number of jobs. This is currently opt-in via the `defer_job_snapshots` setting in `user_code_launcher` config in dagster.yaml, or via `deferJobSnapshots` in the `workspace` section of the Dagster Cloud helm chart.
+- Performance improvements for the Partitions page.
+- A new scheme for workspaces updates has been added that improves performance in deployments with a large number of jobs. This is currently opt-in via the `defer_job_snapshots` setting in `user_code_launcher` config in dagster.yaml, or via `deferJobSnapshots` in the `workspace` section of the Dagster Cloud helm chart.
 
 ### Bugfixes
 
-* Fixed an issue where assets sometimes didn’t appear in the Asset Catalog while in Folder view.
-* Fixed an issue where the Create Token button would erroneously appear when revoking other users’ tokens.
+- Fixed an issue where assets sometimes didn’t appear in the Asset Catalog while in Folder view.
+- Fixed an issue where the Create Token button would erroneously appear when revoking other users’ tokens.
 
 # 1.0.8
 
 ### New
 
-* [Kubernetes] Custom Kubernetes schedulers can now be applied to pods launched by the Dagster Cloud agent. To change the scheduler for all pods created by the agent, set `workspace.schedulerName` in the agent Helm chart. To set it for only the pods created as part of a particular code location, set the following configuration for the code location on the Workspace tab:
+- [Kubernetes] Custom Kubernetes schedulers can now be applied to pods launched by the Dagster Cloud agent. To change the scheduler for all pods created by the agent, set `workspace.schedulerName` in the agent Helm chart. To set it for only the pods created as part of a particular code location, set the following configuration for the code location on the Workspace tab:
 
   ```
   container_context:
@@ -28,60 +41,62 @@
 
 ### Bugfixes
 
-* Fixed an issue where the “Latest run” column on the Instance Status page sometimes displayed an older run instead of the most recent run.
-* Added a pin to grpcio to address an issue with the recent 0.48.1 grpcio release that was sometimes causing Dagster code servers to hang.
+- Fixed an issue where the “Latest run” column on the Instance Status page sometimes displayed an older run instead of the most recent run.
+- Added a pin to grpcio to address an issue with the recent 0.48.1 grpcio release that was sometimes causing Dagster code servers to hang.
 
 # 1.0.7
 
 ### New
 
-* [Kubernetes] The Agent Helm chart now supports `dagsterCloudAgent.schedulerName` and `workspace.schedulerName` for specifying a [custom Kubernetes scheduler](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/) for the Agent pod and workspace pods, respectively.
-* [Kubernetes] The Agent Helm chart now supports pointing an agent at a list of deployments using the `dagsterCloud.deployments` field.
+- [Kubernetes] The Agent Helm chart now supports `dagsterCloudAgent.schedulerName` and `workspace.schedulerName` for specifying a [custom Kubernetes scheduler](https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/) for the Agent pod and workspace pods, respectively.
+- [Kubernetes] The Agent Helm chart now supports pointing an agent at a list of deployments using the `dagsterCloud.deployments` field.
 
 ### Bugfixes
 
-* Fixed an issue where GitHub Actions runs would trigger in an incorrect order during Serverless setup.
+- Fixed an issue where GitHub Actions runs would trigger in an incorrect order during Serverless setup.
 
 # 1.0.5
 
 ### Bugfixes
 
-* Fixed an issue where login emails would not work for certain orgs
+- Fixed an issue where login emails would not work for certain orgs
 
 # 1.0.4
 
 ### New
 
-* The top navigation of the Dagster Cloud UI now has a help menu with links to documentation and support.
-* Added more user feedback to GitHub setup in Serverless new user experience.
-* The Dagster Cloud usage page is now clarified to be in UTC time.
-* Values have been added to the user-cloud helm chart for setting TTL (time to live) on user code servers managed by the agent.
+- The top navigation of the Dagster Cloud UI now has a help menu with links to documentation and support.
+- Added more user feedback to GitHub setup in Serverless new user experience.
+- The Dagster Cloud usage page is now clarified to be in UTC time.
+- Values have been added to the user-cloud helm chart for setting TTL (time to live) on user code servers managed by the agent.
 
 ### Bugfixes
 
-* The `dagster-cloud serverless` command is no longer erroneously hidden from the help command list.
-* Fixed an issue where inspecting asset groups in Code Previews did not lead to the correct link.
+- The `dagster-cloud serverless` command is no longer erroneously hidden from the help command list.
+- Fixed an issue where inspecting asset groups in Code Previews did not lead to the correct link.
 
 # 1.0.3
+
 ### New
 
-* Introduced various UI improvements to the new organization onboarding flow.
+- Introduced various UI improvements to the new organization onboarding flow.
 
 # 1.0.2
+
 ### New
 
-* The `dagster-cloud workspace` CLI now has a configurable Agent heartbeat timeout. The CLI will logspew every few seconds while waiting for the Agent to sync a code location.
-* When a code location is added or updated, a notification will appear in Dagit, and the Workspace tab will automatically refresh.
-* Added additional retries when the ECS agent encounters a problem spinning up a new service.
+- The `dagster-cloud workspace` CLI now has a configurable Agent heartbeat timeout. The CLI will logspew every few seconds while waiting for the Agent to sync a code location.
+- When a code location is added or updated, a notification will appear in Dagit, and the Workspace tab will automatically refresh.
+- Added additional retries when the ECS agent encounters a problem spinning up a new service.
 
 ### Bugfixes
 
-* Trying to add a code location with an empty name now throws an error message.
-* Fixed an issue where the alert policy UI would not allow creating an alert policy with no tags, which targets all jobs.
+- Trying to add a code location with an empty name now throws an error message.
+- Fixed an issue where the alert policy UI would not allow creating an alert policy with no tags, which targets all jobs.
 
 ### Documentation
 
-* The docs have moved! All Dagster docs now live at `docs.dagster.io.` [Click here to check out the new and improved Cloud docs](https://docs.dagster.io/dagster-cloud).
+- The docs have moved! All Dagster docs now live at `docs.dagster.io.` [Click here to check out the new and improved Cloud docs](https://docs.dagster.io/dagster-cloud).
 
 # 1.0.1
 

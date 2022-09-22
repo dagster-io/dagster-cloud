@@ -217,7 +217,6 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             },
             task_role_arn=self.task_role_arn,
             secrets=container_context.get_secrets_dict(self.secrets_manager),
-            append_unique_suffix=False,  # already covered by unique_resource_name
             sidecars=self._get_grpc_server_sidecars(),
             logger=self._logger,
         )
@@ -237,18 +236,22 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _wait_for_new_server_ready(
         self,
-        deployment_name: str,
-        location_name: str,
-        metadata: CodeDeploymentMetadata,
+        _deployment_name: str,
+        _location_name: str,
+        _metadata: CodeDeploymentMetadata,
         server_handle: Service,
         server_endpoint: ServerEndpoint,
     ) -> None:
-        self.client.wait_for_service(server_handle, self._logger)
+        self.client.wait_for_service(
+            server_handle, container_name=server_handle.name, logger=self._logger
+        )
         self._wait_for_server_process(
             host=server_endpoint.host,
             port=server_endpoint.port,
             timeout=self._server_process_startup_timeout,
-            additional_check=lambda: self.client.wait_for_service(server_handle, self._logger),
+            additional_check=lambda: self.client.wait_for_service(
+                server_handle, server_handle.name, self._logger
+            ),
         )
 
     def _remove_server_handle(self, server_handle: EcsServerHandleType) -> None:

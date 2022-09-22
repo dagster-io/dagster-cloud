@@ -6,6 +6,7 @@ import threading
 import time
 import zlib
 from abc import abstractmethod
+from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager
 from typing import (
     Callable,
@@ -402,8 +403,14 @@ class DagsterCloudUserCodeLauncher(
                 )
 
             self._logger.info(f"Uploading {len(missing)} job snapshots.")
-            for job_selector in missing:
-                self.upload_job_snapshot(deployment_name, job_selector)
+            with ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(self.upload_job_snapshot, deployment_name, job_selector)
+                    for job_selector in missing
+                ]
+                wait(futures)
+                # trigger any exceptions to throw
+                _ = [f.result() for f in futures]
 
             with open(dst, "rb") as f:
                 resp = self._instance.requests_session.post(
@@ -1013,6 +1020,8 @@ class DagsterCloudUserCodeLauncher(
             if additional_check:
                 additional_check()
 
+        # Call a method that raises an exception if there was an error importing the code
+        sync_list_repositories_grpc(client)
         return server_id
 
     def upload_job_snapshot(

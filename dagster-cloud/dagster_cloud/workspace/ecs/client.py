@@ -1,7 +1,6 @@
 import json
 import logging
 import time
-import uuid
 from typing import List, Optional
 
 import boto3
@@ -159,14 +158,10 @@ class Client:
         tags=None,
         register_service_discovery=True,
         secrets=None,
-        append_unique_suffix=True,
         sidecars=None,
         logger=None,
     ):
-        # Append a unique suffix to the service name so we can do blue/green
-        # deploys without setting up a load balancer.
-        service_name = f"{name}_{uuid.uuid4().hex[:7]}" if append_unique_suffix else name
-
+        service_name = name
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
 
         logger.info(f"Registering task definition {name} for {service_name}...")
@@ -341,7 +336,7 @@ class Client:
 
         return Service(client=self, arn=arn)
 
-    def wait_for_service(self, service, logger=None):
+    def wait_for_service(self, service, container_name, logger=None):
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         service_name = service.name
         logger.info(f"Waiting for service {service_name} to be ready...")
@@ -362,7 +357,7 @@ class Client:
                 # resolve itself with enough time:
                 # https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency
                 if any(["has started 1 tasks" in message for message in messages]):
-                    return self._wait_for_task(service_name, logger=logger)
+                    return self._wait_for_task(service_name, container_name, logger=logger)
             elif response.get("failures"):
                 failures = response.get("failures")
                 # Even if we fail, check a few more times in case it's just the ECS API
@@ -381,7 +376,7 @@ class Client:
             time.sleep(10)
         raise Exception(messages)
 
-    def _wait_for_task(self, service_name, logger=None):
+    def _wait_for_task(self, service_name, container_name, logger=None):
         # Check if a task can start
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         logger.info(f"Waiting for task to start for service {service_name}")
@@ -404,7 +399,7 @@ class Client:
                 task_arn = stopped[0]
 
                 try:
-                    logs = self.get_task_logs(task_arn, container_name=service_name)
+                    logs = self.get_task_logs(task_arn, container_name=container_name)
                 except:
                     logger.exception(
                         "Error trying to get logs for failed task {task_arn}".format(
