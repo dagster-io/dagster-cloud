@@ -12,7 +12,7 @@ from dagster_cloud.workspace.ecs.service import Service
 DEFAULT_ECS_TIMEOUT = 300
 DEFAULT_ECS_GRACE_PERIOD = 10
 
-config = Config(retries={"max_attempts": 10, "mode": "standard"})
+config = Config(retries={"max_attempts": 50, "mode": "standard"})
 
 
 class EcsServiceError(Exception):

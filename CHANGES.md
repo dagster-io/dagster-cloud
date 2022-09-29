@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 1.0.11
+
+### Bugfixes
+
+- The GitHub setup flow for Serverless will now display an error if Actions builds are blocked from starting due to GitHub permissions.
+
 # 1.0.10
 
 ### New
