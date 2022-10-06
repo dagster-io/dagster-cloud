@@ -1,5 +1,18 @@
 # Dagster Cloud Changelog
 
+# 1.0.12
+
+### New
+
+- The ECS agent can now run in ECS clusters using EC2 capacity providers. See the [ECS agent docs](https://docs.dagster.io/dagster-cloud/deployment/agents/amazon-ecs/creating-ecs-agent-existing-vpc) for more information.
+- The CloudFormation template for the ECS agent now configures multi-AZ support for the containers it launches.
+- The default amount of time that a Dagster Cloud agent waits for user code to import being timing out has been increased from 60 seconds to 180 seconds, to avoid false positives when loading code with heavy imports or large numbers of assets.
+- Added a deployment setting to configure the default role for SAML-provisioned users.
+
+### Bugfixes
+
+- The dagster-cloud CLI no longer lists branch deployments in the list of default deployments during setup.
+
 # 1.0.11
 
 ### Bugfixes

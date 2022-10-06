@@ -249,6 +249,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._dagster_cloud_api_config["timeout"]
 
     @property
+    def dagster_cloud_api_proxies(self) -> Optional[Dict[str, str]]:
+        return self._dagster_cloud_api_config.get("proxies")
+
+    @property
     def dagster_cloud_api_agent_label(self) -> Optional[str]:
         return self._dagster_cloud_api_config.get("agent_label")
 

@@ -1,7 +1,7 @@
 from typing import Any, Collection, Dict, List, Optional, Tuple
 
 import boto3
-from dagster import Array, Field, IntSource, Noneable, ScalarUnion, StringSource
+from dagster import Array, Enum, EnumValue, Field, IntSource, Noneable, ScalarUnion, StringSource
 from dagster import _check as check
 from dagster._core.launcher import RunLauncher
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
@@ -41,6 +41,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         env_vars=None,
         ecs_timeout=None,
         ecs_grace_period=None,
+        launch_type: Optional[str] = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -87,6 +88,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             DEFAULT_ECS_GRACE_PERIOD,
         )
 
+        self.launch_type = check.opt_str_param(launch_type, "launch_type", default="FARGATE")
+
         self.client = Client(
             cluster_name=self.cluster,
             subnet_ids=self.subnets,
@@ -96,6 +99,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             execution_role_arn=self.execution_role_arn,
             timeout=self._ecs_timeout,
             grace_period=self._ecs_grace_period,
+            launch_type=self.launch_type,
         )
         super(EcsUserCodeLauncher, self).__init__(**kwargs)
 
@@ -161,6 +165,21 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     default_value=DEFAULT_ECS_GRACE_PERIOD,
                     description="How long (in seconds) to continue polling if an ECS API endpoint fails "
                     "(because the ECS API is eventually consistent)",
+                ),
+                "launch_type": Field(
+                    Enum(
+                        "EcsLaunchType",
+                        [
+                            EnumValue("FARGATE"),
+                            EnumValue("EC2"),
+                        ],
+                    ),
+                    is_required=False,
+                    default_value="FARGATE",
+                    description=(
+                        "What type of ECS infrastructure to launch the run task in. "
+                        "See https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_types.html"
+                    ),
                 ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -287,7 +306,15 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def run_launcher(self) -> RunLauncher:
         launcher = EcsRunLauncher(
-            secrets=self.secrets, secrets_tag=self.secrets_tag, env_vars=self.env_vars
+            secrets=self.secrets,
+            secrets_tag=self.secrets_tag,
+            env_vars=self.env_vars,
+            use_current_ecs_task_config=False,
+            run_task_kwargs={
+                "cluster": self.cluster,
+                "networkConfiguration": self.client.network_configuration,
+                "launchType": self.launch_type,
+            },
         )
         launcher.register_instance(self._instance)
 

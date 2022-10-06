@@ -951,5 +951,6 @@ def upload_api_response(
                 headers=instance.headers_for_deployment(deployment_name),
                 files={"api_response.tmp": f},
                 timeout=instance.dagster_cloud_api_timeout,
+                proxies=instance.dagster_cloud_api_proxies,
             )
             raise_http_error(resp)

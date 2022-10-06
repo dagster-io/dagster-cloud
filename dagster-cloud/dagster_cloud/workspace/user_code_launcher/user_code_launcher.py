@@ -57,7 +57,7 @@ from dagster_cloud.util import diff_serializable_namedtuple_map
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
-DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 60
+DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25
 
 
@@ -383,6 +383,7 @@ class DagsterCloudUserCodeLauncher(
                     data={},
                     files={"workspace_entry.tmp": f},
                     timeout=self._instance.dagster_cloud_api_timeout,
+                    proxies=self._instance.dagster_cloud_api_proxies,
                 )
                 raise_http_error(resp)
 
@@ -419,6 +420,7 @@ class DagsterCloudUserCodeLauncher(
                     data={},
                     files={"workspace_entry.tmp": f},
                     timeout=self._instance.dagster_cloud_api_timeout,
+                    proxies=self._instance.dagster_cloud_api_proxies,
                 )
                 raise_http_error(resp)
 
@@ -1057,6 +1059,7 @@ class DagsterCloudUserCodeLauncher(
                     data={},
                     files={"job.tmp": f},
                     timeout=self._instance.dagster_cloud_api_timeout,
+                    proxies=self._instance.dagster_cloud_api_proxies,
                 )
                 raise_http_error(resp)
                 self._logger.info(

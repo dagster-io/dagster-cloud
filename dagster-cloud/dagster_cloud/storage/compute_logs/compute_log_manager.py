@@ -92,6 +92,7 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
                         },
                         files={"compute_log.tmp": compressed},
                         timeout=self._instance.dagster_cloud_api_timeout,
+                        proxies=self._instance.dagster_cloud_api_proxies,
                     )
         raise_http_error(resp)
 

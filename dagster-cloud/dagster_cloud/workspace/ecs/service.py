@@ -1,3 +1,6 @@
+import logging
+
+
 class Service:
     def __init__(self, client, arn):
         self.client = client
@@ -14,9 +17,18 @@ class Service:
         if not self.service_discovery_arn:
             return {}
 
-        tags = self.client.service_discovery.list_tags_for_resource(
-            ResourceARN=self.service_discovery_arn
-        ).get("Tags")
+        try:
+            tags = self.client.service_discovery.list_tags_for_resource(
+                ResourceARN=self.service_discovery_arn
+            ).get("Tags")
+        except self.client.service_discovery.exceptions.ResourceNotFoundException:
+            logging.warning(
+                "Could not find service discovery ARN {service_discovery_arn}".format(
+                    service_discovery_arn=self.service_discovery_arn
+                )
+            )
+            return {}
+
         return dict([(tag["Key"], tag["Value"]) for tag in tags])
 
     @property

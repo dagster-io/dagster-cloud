@@ -3,6 +3,7 @@ from dagster import (
     BoolSource,
     Field,
     IntSource,
+    Map,
     Noneable,
     Permissive,
     ScalarUnion,
@@ -19,11 +20,9 @@ def dagster_cloud_api_config():
         "cookies": Field(Permissive(), default_value={}),
         "timeout": Field(Noneable(IntSource), default_value=DEFAULT_TIMEOUT),
         "verify": Field(bool, default_value=True),
-        # This may be how we want to implement our retry policy, but it may be too restrictive:
-        # we may want to put this logic into the storage itself so that we can do some kind of
-        # logging
         "retries": Field(IntSource, default_value=DEFAULT_RETRIES),
         "method": Field(StringSource, default_value="POST"),
+        "proxies": Field(Map(str, str), is_required=False),
         "agent_label": Field(StringSource, is_required=False),
         # Handle requests for a single non-branch deployment
         "deployment": Field(

@@ -33,6 +33,7 @@ class Client:
         ecs_client=None,
         timeout: int = DEFAULT_ECS_TIMEOUT,
         grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
+        launch_type: str = "FARGATE",
     ):
         self.ecs = ecs_client if ecs_client else boto3.client("ecs", config=config)
         self.logs = boto3.client("logs", config=config)
@@ -49,6 +50,7 @@ class Client:
         self.execution_role_arn = check.str_param(execution_role_arn, "execution_role_arn")
         self.timeout = check.int_param(timeout, "timeout")
         self.grace_period = check.int_param(grace_period, "grace_period")
+        self.launch_type = check.str_param(launch_type, "launch_type")
 
     @property
     def namespace(self):
@@ -74,7 +76,11 @@ class Client:
         network_configuration = {
             "awsvpcConfiguration": {
                 "subnets": self.subnet_ids,
-                "assignPublicIp": self._assign_public_ip(),
+                **(
+                    {"assignPublicIp": self._assign_public_ip()}
+                    if self.launch_type == "FARGATE"
+                    else {}
+                ),
             },
         }
 
@@ -107,7 +113,7 @@ class Client:
 
         kwargs = dict(
             family=family,
-            requiresCompatibilities=["FARGATE"],
+            requiresCompatibilities=[self.launch_type],
             networkMode="awsvpc",
             containerDefinitions=[
                 merge_dicts(
@@ -267,7 +273,7 @@ class Client:
             self.ecs.run_task(
                 taskDefinition=task_definition_arn,
                 cluster=self.cluster_name,
-                launchType="FARGATE",
+                launchType=self.launch_type,
                 networkConfiguration=self.network_configuration,
             )
             .get("tasks", [{}])[0]
@@ -321,10 +327,10 @@ class Client:
             cluster=self.cluster_name,
             serviceName=service_name,
             taskDefinition=task_definition_arn,
-            launchType="FARGATE",
+            launchType=self.launch_type,
             desiredCount=1,
-            networkConfiguration=self.network_configuration,
         )
+        params["networkConfiguration"] = self.network_configuration
 
         if service_registry_arn:
             params["serviceRegistries"] = [{"registryArn": service_registry_arn}]
