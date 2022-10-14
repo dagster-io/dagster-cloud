@@ -1,5 +1,17 @@
 # Dagster Cloud Changelog
 
+# 1.0.13
+
+### New
+
+- The ECS Agent now shares a single task definition for every code location (instead of one task definition for the code location and another for any runs originating from that code location)
+- `dagster-cloud serverless deploy` now blocks until the code location loads instead of returning immediately. This brings its behavior in line with other commands in the CLI and makes it safer to chain together multiple commands in a row (like launching a job after you deploy) without first needing to check if the deploy was successful.
+- The deferred job snapshots option for workspace updates is now defaulted to on.
+
+### Bugfixes
+
+- [dagit] For users with the “New workspace page” feature flag enabled, code locations could not be added from the Deployment page. This has been fixed.
+
 # 1.0.12
 
 ### New

@@ -262,3 +262,13 @@ GET_RUN_PARTITION_DATA_QUERY = """
         }
     }
 """
+
+MUTATE_JOB_ORIGIN = """
+    mutation mutateJobOrigin($runId: String!, $serializedJobOrigin: String!) {
+        runs {
+            mutateJobOrigin(runId: $runId, serializedJobOrigin: $serializedJobOrigin) {
+                ok
+            }
+        }
+    }
+"""

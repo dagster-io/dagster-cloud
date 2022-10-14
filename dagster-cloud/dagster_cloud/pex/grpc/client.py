@@ -1,0 +1,94 @@
+import os
+from contextlib import contextmanager
+
+import dagster._check as check
+import grpc
+from dagster._core.errors import DagsterUserCodeProcessError, DagsterUserCodeUnreachableError
+from dagster._grpc.client import DEFAULT_GRPC_TIMEOUT
+from dagster._grpc.utils import max_rx_bytes, max_send_bytes
+from dagster._serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
+from dagster._utils.error import SerializableErrorInfo
+
+from .__generated__ import MultiPexApiStub, multi_pex_api_pb2
+from .types import (
+    CreatePexServerArgs,
+    CreatePexServerResponse,
+    GetPexServersArgs,
+    GetPexServersResponse,
+    ShutdownPexServerArgs,
+    ShutdownPexServerResponse,
+)
+
+
+class MultiPexGrpcClient:
+    def __init__(self, port=None, socket=None, host="localhost"):
+        self.port = check.opt_int_param(port, "port")
+        self.socket = check.opt_str_param(socket, "socket")
+        self.host = check.opt_str_param(host, "host")
+        if port:
+            self._server_address = host + ":" + str(port)
+        else:
+            self._server_address = "unix:" + os.path.abspath(socket)
+
+    def create_pex_server(self, create_pex_server_args: CreatePexServerArgs):
+        check.inst_param(create_pex_server_args, "create_pex_server_args", CreatePexServerArgs)
+        res = self._query(
+            "CreatePexServer",
+            multi_pex_api_pb2.CreatePexServerRequest,
+            create_pex_server_args=serialize_dagster_namedtuple(create_pex_server_args),
+        )
+        return self._response_or_error(res.create_pex_server_response, CreatePexServerResponse)
+
+    def get_pex_servers(self, get_pex_servers_args: GetPexServersArgs):
+        check.inst_param(get_pex_servers_args, "get_pex_servers_args", GetPexServersArgs)
+        res = self._query(
+            "GetPexServers",
+            multi_pex_api_pb2.GetPexServersRequest,
+            get_pex_servers_args=serialize_dagster_namedtuple(get_pex_servers_args),
+        )
+        return self._response_or_error(res.get_pex_servers_response, GetPexServersResponse)
+
+    def shutdown_pex_server(self, shutdown_pex_server_args: ShutdownPexServerArgs):
+        check.inst_param(
+            shutdown_pex_server_args, "shutdown_pex_server_args", ShutdownPexServerArgs
+        )
+        res = self._query(
+            "ShutdownPexServer",
+            multi_pex_api_pb2.ShutdownPexServerRequest,
+            shutdown_pex_server_args=serialize_dagster_namedtuple(shutdown_pex_server_args),
+        )
+        return self._response_or_error(res.shutdown_pex_server_response, ShutdownPexServerResponse)
+
+    @contextmanager
+    def _channel(self):
+        options = [
+            ("grpc.max_receive_message_length", max_rx_bytes()),
+            ("grpc.max_send_message_length", max_send_bytes()),
+        ]
+        with grpc.insecure_channel(
+            self._server_address,
+            options=options,
+            compression=grpc.Compression.Gzip,
+        ) as channel:
+            yield channel
+
+    def _response_or_error(self, response, response_type):
+        deserialized_response = deserialize_json_to_dagster_namedtuple(response)
+        if isinstance(deserialized_response, SerializableErrorInfo):
+            raise DagsterUserCodeProcessError.from_error_info(deserialized_response)
+        check.invariant(isinstance(deserialized_response, response_type))
+        return deserialized_response
+
+    def _query(self, method, request_type, timeout=DEFAULT_GRPC_TIMEOUT, **kwargs):
+        try:
+            with self._channel() as channel:
+                stub = MultiPexApiStub(channel)
+                response = getattr(stub, method)(request_type(**kwargs), timeout=timeout)
+            return response
+        except Exception as e:
+            raise DagsterUserCodeUnreachableError("Could not reach user code server") from e
+
+    def ping(self, echo):
+        check.str_param(echo, "echo")
+        res = self._query("Ping", multi_pex_api_pb2.PingRequest, echo=echo)
+        return res.echo

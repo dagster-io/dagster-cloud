@@ -378,6 +378,13 @@ DagsterCloudApiResponse = Union[
     DagsterCloudApiUnknownCommandResponse,
 ]
 
+DagsterCloudApiResponseTypesTuple = (
+    DagsterCloudApiSuccess,
+    DagsterCloudApiGrpcResponse,
+    DagsterCloudApiErrorResponse,
+    DagsterCloudApiUnknownCommandResponse,
+)
+
 
 @whitelist_for_serdes
 class DagsterCloudUploadApiResponse(
@@ -385,12 +392,23 @@ class DagsterCloudUploadApiResponse(
         "_DagsterCloudUploadApiResponse",
         [
             ("request_id", str),
-            ("request_api", DagsterCloudApi),
+            ("request_api", str),
             ("response", DagsterCloudApiResponse),
         ],
     )
 ):
-    pass
+    def __new__(
+        cls,
+        request_id: str,
+        request_api: str,
+        response: DagsterCloudApiResponse,
+    ):
+        return super().__new__(
+            cls,
+            request_id=check.str_param(request_id, "request_id"),
+            request_api=check.str_param(request_api, "request_api"),
+            response=check.inst_param(response, "response", DagsterCloudApiResponseTypesTuple),
+        )
 
 
 @whitelist_for_serdes

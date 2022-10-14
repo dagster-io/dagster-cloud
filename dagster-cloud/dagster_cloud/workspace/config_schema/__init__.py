@@ -91,6 +91,18 @@ CONFIG_SCHEMA_FIELDS = {
         is_required=False,
         description="Docker image, for use with containerized agents.",
     ),
+    "pex_metadata": Field(
+        Shape(
+            fields={
+                "pex_tag": Field(
+                    config=str,
+                    is_required=True,
+                    description="Identifies which Pex files to use (internal only).",
+                ),
+            }
+        ),
+        is_required=False,
+    ),
     "code_source": Field(
         Selector(
             {

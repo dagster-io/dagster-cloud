@@ -174,9 +174,9 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
     "defer_job_snapshots": Field(
         BoolSource,
         is_required=False,
-        default_value=False,
-        description="When enabled,  job snapshots will not be included in the workspace "
-        "snapshot and will be uploaded separately if not previously uploaded.",
+        default_value=True,
+        description="Do not include full job snapshots in the workspace "
+        "snapshot, upload them separately if they have not been previously uploaded.",
     ),
 }
 
@@ -211,7 +211,7 @@ class DagsterCloudUserCodeLauncher(
     def __init__(
         self,
         server_ttl: Optional[dict] = None,
-        defer_job_snapshots: bool = False,
+        defer_job_snapshots: bool = True,
     ):
         self._grpc_endpoints: Dict[
             DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]

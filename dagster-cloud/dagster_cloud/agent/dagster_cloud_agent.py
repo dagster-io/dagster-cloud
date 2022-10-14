@@ -784,7 +784,9 @@ class DagsterCloudAgent:
         assert api_result
 
         upload_response = DagsterCloudUploadApiResponse(
-            request_id=request_id, request_api=request_api, response=api_result
+            request_id=request_id,
+            request_api=request_api,
+            response=api_result,
         )
 
         self._logger.info(

@@ -10,6 +10,7 @@ from dagster._core.errors import (
 )
 from dagster._core.events import DagsterEvent
 from dagster._core.execution.backfill import BulkActionStatus, PartitionBackfill
+from dagster._core.host_representation.origin import ExternalPipelineOrigin
 from dagster._core.snap import (
     ExecutionPlanSnapshot,
     PipelineSnapshot,
@@ -61,6 +62,7 @@ from .queries import (
     HAS_EXECUTION_PLAN_SNAPSHOT_QUERY,
     HAS_PIPELINE_SNAPSHOT_QUERY,
     HAS_RUN_QUERY,
+    MUTATE_JOB_ORIGIN,
     UPDATE_BACKFILL_MUTATION,
 )
 
@@ -480,3 +482,13 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def kvs_set(self, pairs: Dict[str, str]):
         return NotImplementedError("KVS is not supported from the user cloud")
+
+    # Migrating run history
+    def replace_job_origin(self, run: PipelineRun, job_origin: ExternalPipelineOrigin):
+        self._execute_query(
+            MUTATE_JOB_ORIGIN,
+            variables={
+                "runId": run.run_id,
+                "serializedJobOrigin": serialize_dagster_namedtuple(job_origin),
+            },
+        )

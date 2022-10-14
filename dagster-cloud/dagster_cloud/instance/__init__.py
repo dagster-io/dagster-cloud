@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional, Type
 import yaml
 from dagster import Field
 from dagster import _check as check
-from dagster._builtins import Bool
 from dagster._config import process_config
 from dagster._core.errors import DagsterInvalidConfigError, DagsterInvariantViolationError
 from dagster._core.instance import DagsterInstance, InstanceType
@@ -319,7 +318,7 @@ instance_class:
 
     @classmethod
     def _agent_replicas_config_schema(cls):
-        return {"enabled": Field(Bool, is_required=False, default_value=False)}
+        return {"enabled": Field(bool, is_required=False, default_value=False)}
 
     def get_required_daemon_types(self):
         return []
