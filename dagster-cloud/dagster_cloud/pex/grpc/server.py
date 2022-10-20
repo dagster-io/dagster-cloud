@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
 
 import grpc
 from dagster._grpc.__generated__.api_pb2_grpc import (
@@ -186,7 +187,13 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         return self._query("StartRun", request, context)
 
 
-def run_multipex_server(port, print_fn, host="localhost", max_workers=None):
+def run_multipex_server(
+    port,
+    print_fn,
+    host="localhost",
+    max_workers=None,
+    local_pex_files_dir: Optional[str] = "/tmp/pex-files",
+):
     server = grpc.server(
         ThreadPoolExecutor(max_workers=max_workers),
         compression=grpc.Compression.Gzip,
@@ -196,7 +203,7 @@ def run_multipex_server(port, print_fn, host="localhost", max_workers=None):
         ],
     )
 
-    with MultiPexManager() as pex_manager:
+    with MultiPexManager(local_pex_files_dir=local_pex_files_dir) as pex_manager:
         pex_api_servicer = MultiPexApiServer(
             pex_manager=pex_manager,
         )
@@ -236,8 +243,6 @@ def run_multipex_server(port, print_fn, host="localhost", max_workers=None):
 
         print_fn(f"Shutting down {server_desc}")
         server_termination_thread.join()
-        pex_api_servicer.cleanup()
-        dagster_api_servicer.cleanup()
 
     print_fn("Server shut down.")
 

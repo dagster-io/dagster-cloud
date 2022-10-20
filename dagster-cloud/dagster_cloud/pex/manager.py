@@ -1,15 +1,16 @@
 import os
 import threading
 from contextlib import AbstractContextManager
-from typing import Dict, List, NamedTuple
+from typing import Dict, List, NamedTuple, Optional
 
 from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._grpc.server import GrpcServerProcess
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata, PexMetadata
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
+from . import registry
 from .grpc.types import PexServerHandle
 
 
@@ -46,15 +47,13 @@ class PexProcessEntry(
 class MultiPexManager(AbstractContextManager):
     def __init__(
         self,
+        local_pex_files_dir: Optional[str] = None,
     ):
         # Keyed by hash of PexServerHandle
         self._pex_servers: Dict[str, PexProcessEntry] = {}
         self._pex_servers_lock = threading.Lock()
         self._heartbeat_ttl = 60
-
-    def download_pex_from_s3(self, _pex_metadata: PexMetadata):
-        # TODO Implement for real
-        return "./source.pex"
+        self._registry = registry.PexS3Registry(local_pex_files_dir)
 
     def get_pex_grpc_client(self, server_handle: PexServerHandle):
         handle_id = server_handle.get_id()
@@ -82,14 +81,14 @@ class MultiPexManager(AbstractContextManager):
             f"Creating new pex server for {server_handle.deployment_name}:{server_handle.location_name}"
         )
 
-        executable_path = self.download_pex_from_s3(
+        pex_executable = self._registry.get_pex_executable(
             check.not_none(code_deployment_metadata.pex_metadata)
         )
 
         metadata = code_deployment_metadata
 
         loadable_target_origin = LoadableTargetOrigin(
-            executable_path=executable_path,
+            executable_path=pex_executable.source_path,
             python_file=metadata.python_file,
             package_name=metadata.package_name,
             module_name=metadata.module_name,
@@ -104,7 +103,7 @@ class MultiPexManager(AbstractContextManager):
             startup_timeout=0,  # don't wait for startup, agent will poll for status
             log_level="INFO",
             # Temporary for testing
-            env={**os.environ.copy(), "PEX_PATH": os.path.join(os.getcwd(), "deps.pex")},
+            env={**os.environ.copy(), **pex_executable.environ},
         )
 
         client = DagsterGrpcClient(

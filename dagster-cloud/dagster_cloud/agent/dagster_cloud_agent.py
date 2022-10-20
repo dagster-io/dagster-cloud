@@ -260,6 +260,7 @@ class DagsterCloudAgent:
 
         code_server_heartbeats_dict = instance.user_code_launcher.get_grpc_server_heartbeats()
 
+        agent_image_tag = os.getenv("DAGSTER_CLOUD_AGENT_IMAGE_TAG")
         serialized_agent_heartbeats = [
             {
                 "deploymentName": deployment_name,
@@ -272,7 +273,10 @@ class DagsterCloudAgent:
                         if instance.user_code_launcher
                         else None,
                         errors=errors,
-                        metadata={"version": __version__},
+                        metadata=merge_dicts(
+                            {"version": __version__},
+                            {"image_tag": agent_image_tag} if agent_image_tag else {},
+                        ),
                         run_worker_statuses=run_worker_statuses_dict[deployment_name],
                         code_server_heartbeats=code_server_heartbeats_dict.get(deployment_name, []),
                     )

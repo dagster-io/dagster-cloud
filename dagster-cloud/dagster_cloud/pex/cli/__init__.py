@@ -15,5 +15,12 @@ def grpc(
     host: str = Option(default="localhost"),
     port: int = Option(default=...),
     max_workers: Optional[int] = Option(default=None),
+    local_pex_files_dir: Optional[str] = Option(default="/tmp/pex-files"),
 ):
-    run_multipex_server(port=port, host=host, print_fn=echo, max_workers=max_workers)
+    run_multipex_server(
+        port=port,
+        host=host,
+        print_fn=echo,
+        max_workers=max_workers,
+        local_pex_files_dir=local_pex_files_dir,
+    )

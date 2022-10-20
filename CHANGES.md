@@ -1,5 +1,15 @@
 # Dagster Cloud Changelog
 
+# 1.0.14
+
+### New
+
+- The Amazon ECS agent will now re-use existing task definitions for the services that it spins up for each code location when the configuration for the service’s task definition has not changed. Previously, it would register a new task definition every time the service was re-deployed.
+
+### Bugfixes
+
+- Fixed an issue where Serverless images would error on the absence of a script `dagster_cloud_pre_install.sh` inside of the source folder.
+
 # 1.0.13
 
 ### New

@@ -6,7 +6,9 @@ from typing import List, Optional
 import boto3
 import dagster._check as check
 from botocore.config import Config
-from dagster._utils import merge_dicts
+from botocore.exceptions import ClientError
+from dagster_aws.ecs.tasks import DagsterEcsTaskDefinitionConfig
+from dagster_aws.ecs.utils import task_definitions_match
 from dagster_cloud.workspace.ecs.service import Service
 
 DEFAULT_ECS_TIMEOUT = 300
@@ -91,66 +93,80 @@ class Client:
 
     def register_task_definition(
         self,
-        name,
+        family,
         image,
         command,
+        container_name=None,
         task_role_arn=None,
         env=None,
         secrets=None,
         sidecars=None,
+        logger=None,
     ):
-        if not env:
-            env = {}
 
-        family = name
-        container_name = name
+        container_name = container_name or family
 
-        secrets_dict = (
-            {"secrets": [{"name": key, "valueFrom": value} for key, value in secrets.items()]}
-            if secrets
-            else {}
+        logger = logger or logging.getLogger("dagster_cloud.EcsClient")
+
+        env = env or {}
+        environment = [{"name": key, "value": value} for key, value in env.items()]
+
+        secrets = (
+            [{"name": key, "valueFrom": value} for key, value in secrets.items()] if secrets else []
         )
 
-        kwargs = dict(
+        task_definition_config = DagsterEcsTaskDefinitionConfig(
             family=family,
-            requiresCompatibilities=[self.launch_type],
-            networkMode="awsvpc",
-            containerDefinitions=[
-                merge_dicts(
-                    {
-                        "name": container_name,
-                        "image": image,
-                        "environment": [
-                            {"name": key, "value": value} for key, value in env.items()
-                        ],
-                        "command": command,
-                        "logConfiguration": {
-                            "logDriver": "awslogs",
-                            "options": {
-                                "awslogs-group": self.log_group,
-                                "awslogs-region": self.ecs.meta.region_name,
-                                "awslogs-stream-prefix": family,
-                            },
-                        },
-                    },
-                    secrets_dict,
-                )
+            image=image,
+            container_name=container_name,
+            command=command,
+            log_configuration={
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": self.log_group,
+                    "awslogs-region": self.ecs.meta.region_name,
+                    "awslogs-stream-prefix": family,
+                },
+            },
+            secrets=secrets,
+            environment=environment,
+            execution_role_arn=self.execution_role_arn,
+            task_role_arn=task_role_arn,
+            sidecars=sidecars,
+            requires_compatibilities=[self.launch_type],
+        )
+
+        try:
+            existing_task_definition = self.ecs.describe_task_definition(taskDefinition=family)[
+                "taskDefinition"
             ]
-            + (sidecars if sidecars else []),
-            executionRoleArn=self.execution_role_arn,
-            # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-cpu-memory-error.html
-            cpu="256",
-            memory="512",
-        )
+        except ClientError:
+            logger.info("No existing task definition")
+            # task definition does not exist, do not reuse
+            existing_task_definition = None
 
-        if task_role_arn:
-            kwargs.update(dict(taskRoleArn=task_role_arn))
-
-        task_definition_arn = (
-            self.ecs.register_task_definition(**kwargs)
-            .get("taskDefinition")
-            .get("taskDefinitionArn")
-        )
+        if not existing_task_definition or not task_definitions_match(
+            task_definition_config,
+            existing_task_definition,
+            container_name=container_name,
+        ):
+            task_definition_arn = (
+                self.ecs.register_task_definition(**task_definition_config.task_definition_dict())
+                .get("taskDefinition")
+                .get("taskDefinitionArn")
+            )
+            logger.info(
+                "Created new task definition {task_definition_arn}".format(
+                    task_definition_arn=task_definition_arn
+                )
+            )
+        else:
+            task_definition_arn = existing_task_definition["taskDefinitionArn"]
+            logger.info(
+                "Re-using existing task definition {task_definition_arn}".format(
+                    task_definition_arn=task_definition_arn
+                )
+            )
 
         return task_definition_arn
 
@@ -159,6 +175,8 @@ class Client:
         name,
         image,
         command,
+        family=None,
+        container_name=None,
         task_role_arn=None,
         env=None,
         tags=None,
@@ -167,20 +185,23 @@ class Client:
         sidecars=None,
         logger=None,
     ):
-        service_name = name
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
 
-        logger.info(f"Registering task definition {name} for {service_name}...")
+        service_name = name
+        family = family or name
 
-        # Register a task definition
+        logger.info(f"Checking if task definition {family} for {name} can be re-used...")
+
         task_definition_arn = self.register_task_definition(
-            name=name,
+            family=family,
             image=image,
+            container_name=container_name,
             task_role_arn=task_role_arn,
             command=command,
-            env=merge_dicts(env or {}, {"DAGSTER_SERVER_NAME": service_name}),
+            env=env or {},
             secrets=secrets,
             sidecars=sidecars,
+            logger=logger,
         )
 
         service_registry_arn = None
@@ -264,7 +285,7 @@ class Client:
 
     def run_task(self, name, image, command):
         task_definition_arn = self.register_task_definition(
-            name=name,
+            family=name,
             image=image,
             command=command,
         )

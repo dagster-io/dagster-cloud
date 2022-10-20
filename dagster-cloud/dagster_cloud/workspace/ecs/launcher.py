@@ -6,7 +6,6 @@ from dagster import _check as check
 from dagster._core.launcher import RunLauncher
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils import merge_dicts
-from dagster_aws.ecs import EcsRunLauncher
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
 from dagster_cloud.workspace.ecs.client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
@@ -21,7 +20,12 @@ from dagster_cloud.workspace.user_code_launcher import (
 from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
+from .run_launcher import CloudEcsRunLauncher
+from .utils import get_task_definition_family
+
 EcsServerHandleType = Service
+
+CONTAINER_NAME = "dagster"
 
 
 class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], ConfigurableClass):
@@ -220,9 +224,15 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             "Creating a new service for {}:{}...".format(deployment_name, location_name)
         )
 
+        family = get_task_definition_family(
+            "server", self._instance.organization_name, deployment_name, location_name
+        )
+
         service = self.client.create_service(
             name=unique_ecs_resource_name(deployment_name, location_name),
+            family=family,
             image=metadata.image,
+            container_name=CONTAINER_NAME,
             command=command,
             env=environment,
             tags={
@@ -304,8 +314,17 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 self._remove_server_handle(service)
         self._logger.info("Finished cleaning up servers.")
 
-    def run_launcher(self) -> RunLauncher:
-        launcher = EcsRunLauncher(
+    def _run_launcher_kwargs(self) -> Dict[str, Any]:
+        sidecars = self._get_grpc_server_sidecars()
+
+        return dict(
+            task_definition={
+                "log_group": self.log_group,
+                "execution_role_arn": self.execution_role_arn,
+                "requires_compatibilities": [self.launch_type],
+                **({"task_role_arn": self.task_role_arn} if self.task_role_arn else {}),
+                **({"sidecars": sidecars} if sidecars else {}),
+            },
             secrets=self.secrets,
             secrets_tag=self.secrets_tag,
             env_vars=self.env_vars,
@@ -315,7 +334,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "networkConfiguration": self.client.network_configuration,
                 "launchType": self.launch_type,
             },
+            container_name=CONTAINER_NAME,
         )
+
+    def run_launcher(self) -> RunLauncher:
+        launcher = CloudEcsRunLauncher(**self._run_launcher_kwargs())
         launcher.register_instance(self._instance)
 
         return launcher

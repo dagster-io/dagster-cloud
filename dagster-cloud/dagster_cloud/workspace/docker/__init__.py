@@ -168,7 +168,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         environment = merge_dicts(
             (dict([parse_env_var(env_var) for env_var in container_context.env_vars])),
             metadata.get_grpc_server_env(grpc_port),
-            {"DAGSTER_SERVER_NAME": container_name},
         )
 
         try:

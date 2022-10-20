@@ -180,6 +180,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return f"https://{organization}.agent.dagster.cloud"
 
     @property
+    def organization_name(self) -> Optional[str]:
+        return get_organization_name_from_agent_token(self.dagster_cloud_agent_token)
+
+    @property
     def deployment_name(self) -> Optional[str]:
         deployment_names = self.deployment_names
         check.invariant(

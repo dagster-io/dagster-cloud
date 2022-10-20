@@ -96,7 +96,6 @@ def construct_repo_location_deployment(
     env = merge_dicts(
         metadata.get_grpc_server_env(SERVICE_PORT),
         env or {},
-        {"DAGSTER_SERVER_NAME": k8s_deployment_name},
     )
     # TODO: enable liveness probes
     return client.V1Deployment(
