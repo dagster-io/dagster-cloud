@@ -1,7 +1,6 @@
 import os
 import sys
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -16,13 +15,12 @@ from dagster._serdes import deserialize_as, serialize_dagster_namedtuple
 from dagster._utils.error import serializable_error_info_from_exc_info
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
-from ..manager import MultiPexManager
-from .__generated__ import multi_pex_api_pb2
-from .__generated__.multi_pex_api_pb2_grpc import (
+from ..__generated__ import multi_pex_api_pb2
+from ..__generated__.multi_pex_api_pb2_grpc import (
     MultiPexApiServicer,
     add_MultiPexApiServicer_to_server,
 )
-from .types import (
+from ..types import (
     CreatePexServerArgs,
     CreatePexServerResponse,
     GetPexServersArgs,
@@ -31,6 +29,7 @@ from .types import (
     ShutdownPexServerArgs,
     ShutdownPexServerResponse,
 )
+from .manager import MultiPexManager
 
 
 class MultiPexApiServer(MultiPexApiServicer):
@@ -189,6 +188,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
 
 def run_multipex_server(
     port,
+    socket,
     print_fn,
     host="localhost",
     max_workers=None,
@@ -218,9 +218,13 @@ def run_multipex_server(
         add_MultiPexApiServicer_to_server(pex_api_servicer, server)
         add_DagsterApiServicer_to_server(dagster_api_servicer, server)
 
-        server_address = host + ":" + str(port)
+        if port:
+            server_address = host + ":" + str(port)
+        else:
+            server_address = "unix:" + os.path.abspath(socket)
+
         res = server.add_insecure_port(server_address)
-        if res != port:
+        if (port and res != port) or (socket and res != 1):
             raise Exception(f"Could not bind to port {port}")
 
         server_desc = f"Pex server on port {port} in process {os.getpid()}"
@@ -245,23 +249,3 @@ def run_multipex_server(
         server_termination_thread.join()
 
     print_fn("Server shut down.")
-
-
-def wait_for_grpc_server(client, timeout=180):
-    start_time = time.time()
-
-    while True:
-        try:
-            client.ping("")
-            return
-        except Exception:
-            last_error = serializable_error_info_from_exc_info(sys.exc_info())
-            print(str(last_error))
-
-        if time.time() - start_time > timeout:
-            raise Exception(
-                f"Timed out after waiting {timeout}s for server. "
-                f"Most recent connection error: {str(last_error)}"
-            )
-
-        time.sleep(1)

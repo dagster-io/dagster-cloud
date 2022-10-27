@@ -102,6 +102,8 @@ class Client:
         secrets=None,
         sidecars=None,
         logger=None,
+        cpu=None,
+        memory=None,
     ):
 
         container_name = container_name or family
@@ -134,6 +136,8 @@ class Client:
             task_role_arn=task_role_arn,
             sidecars=sidecars,
             requires_compatibilities=[self.launch_type],
+            cpu=cpu,
+            memory=memory,
         )
 
         try:
@@ -184,6 +188,8 @@ class Client:
         secrets=None,
         sidecars=None,
         logger=None,
+        cpu=None,
+        memory=None,
     ):
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
 
@@ -202,6 +208,8 @@ class Client:
             secrets=secrets,
             sidecars=sidecars,
             logger=logger,
+            cpu=cpu,
+            memory=memory,
         )
 
         service_registry_arn = None

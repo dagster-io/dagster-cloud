@@ -1,5 +1,17 @@
 # Dagster Cloud Changelog
 
+# 1.0.15
+
+### New
+
+- The default Docker image for Serverless no longer runs `pip install --upgrade pip`.
+
+### Experimental
+
+- Non-isolated runs: Previously all runs launched in an isolated run environment. Opting in to this new feature adds a default option to the Launchpad to execute without isolation. The run will start faster, but with fewer compute resources. This is great for testing, but not recommended for compute or memory intensive production jobs. This will only apply to runs launched via the UI. Scheduled runs won't be affected. To enable:
+  - Upgrade your agent to at least 1.0.15
+  - In the UI, click on profile icon → User Settings → Enable non-isolated runs
+
 # 1.0.14
 
 ### New

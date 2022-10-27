@@ -1,9 +1,7 @@
-import os
-import tempfile
-import zlib
 from contextlib import contextmanager
 
 import dagster._seven as _seven
+import requests
 from dagster import Field, StringSource
 from dagster import _check as check
 from dagster._core.storage.compute_log_manager import (
@@ -72,29 +70,26 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
     def _upload_from_local(self, run_id, key, io_type):
         path = self.get_local_path(run_id, key, io_type)
         ensure_file(path)
-        with open(path, "rb") as data:
-            with tempfile.TemporaryDirectory() as temp_dir:
-                dst = os.path.join(temp_dir, "compute_log.tmp")
-                with open(dst, "wb") as compressed:
-                    compressed.write(zlib.compress(data.read()))
-
-                with open(dst, "rb") as compressed:
-                    resp = self._instance.requests_session.post(
-                        self._instance.dagster_cloud_upload_logs_url,
-                        headers=self._instance.dagster_cloud_api_headers(
-                            DagsterCloudInstanceScope.DEPLOYMENT
-                        ),
-                        params={
-                            "run_id": run_id,
-                            "key": key,
-                            "io_type": io_type.value,
-                            "compressed": True,
-                        },
-                        files={"compute_log.tmp": compressed},
-                        timeout=self._instance.dagster_cloud_api_timeout,
-                        proxies=self._instance.dagster_cloud_api_proxies,
-                    )
+        resp = self._instance.requests_session.post(
+            self._instance.dagster_cloud_gen_logs_url_url,
+            headers=self._instance.dagster_cloud_api_headers(DagsterCloudInstanceScope.DEPLOYMENT),
+            params={
+                "run_id": run_id,
+                "key": key,
+                "io_type": io_type.value,
+            },
+            timeout=self._instance.dagster_cloud_api_timeout,
+            proxies=self._instance.dagster_cloud_api_proxies,
+        )
         raise_http_error(resp)
+        resp_data = resp.json()
+
+        with open(path, "rb") as f:
+            requests.post(
+                resp_data["url"],
+                data=resp_data["fields"],
+                files={"file": f},
+            )
 
     def download_url(self, run_id, key, io_type):
         raise NotImplementedError("User Agent should not need to download compute logs")

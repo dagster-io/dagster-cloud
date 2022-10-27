@@ -1,4 +1,6 @@
 import os
+import sys
+import time
 from contextlib import contextmanager
 
 import dagster._check as check
@@ -7,7 +9,7 @@ from dagster._core.errors import DagsterUserCodeProcessError, DagsterUserCodeUnr
 from dagster._grpc.client import DEFAULT_GRPC_TIMEOUT
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
 from dagster._serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
-from dagster._utils.error import SerializableErrorInfo
+from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 
 from .__generated__ import MultiPexApiStub, multi_pex_api_pb2
 from .types import (
@@ -92,3 +94,22 @@ class MultiPexGrpcClient:
         check.str_param(echo, "echo")
         res = self._query("Ping", multi_pex_api_pb2.PingRequest, echo=echo)
         return res.echo
+
+
+def wait_for_grpc_server(client, timeout=180):
+    start_time = time.time()
+
+    while True:
+        try:
+            client.ping("")
+            return
+        except Exception:
+            last_error = serializable_error_info_from_exc_info(sys.exc_info())
+
+        if time.time() - start_time > timeout:
+            raise Exception(
+                f"Timed out after waiting {timeout}s for server. "
+                f"Most recent connection error: {str(last_error)}"
+            )
+
+        time.sleep(1)

@@ -10,8 +10,8 @@ from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._grpc.server import GrpcServerProcess
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
-from . import registry
-from .grpc.types import PexServerHandle
+from ..types import PexServerHandle
+from .registry import PexS3Registry
 
 
 class PexProcessEntry(
@@ -53,7 +53,7 @@ class MultiPexManager(AbstractContextManager):
         self._pex_servers: Dict[str, PexProcessEntry] = {}
         self._pex_servers_lock = threading.Lock()
         self._heartbeat_ttl = 60
-        self._registry = registry.PexS3Registry(local_pex_files_dir)
+        self._registry = PexS3Registry(local_pex_files_dir)
 
     def get_pex_grpc_client(self, server_handle: PexServerHandle):
         handle_id = server_handle.get_id()
@@ -102,7 +102,6 @@ class MultiPexManager(AbstractContextManager):
             heartbeat_timeout=self._heartbeat_ttl,
             startup_timeout=0,  # don't wait for startup, agent will poll for status
             log_level="INFO",
-            # Temporary for testing
             env={**os.environ.copy(), **pex_executable.environ},
         )
 
@@ -148,7 +147,6 @@ class MultiPexManager(AbstractContextManager):
             except DagsterUserCodeUnreachableError:
                 # Server already shutdown
                 pass
-            pex_server.grpc_server_process.wait()
 
     def __exit__(self, exception_type, exception_value, traceback):
         for _handle, pex_server in self._pex_servers.items():

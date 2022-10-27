@@ -225,6 +225,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return f"{self.dagster_cloud_url}/upload_logs"
 
     @property
+    def dagster_cloud_gen_logs_url_url(self):
+        return f"{self.dagster_cloud_url}/gen_logs_url"
+
+    @property
     def dagster_cloud_upload_job_snap_url(self):
         return f"{self.dagster_cloud_url}/upload_job_snapshot"
 

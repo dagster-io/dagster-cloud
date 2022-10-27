@@ -10,6 +10,15 @@ GET_USER_CLOUD_REQUESTS_QUERY = """
             }
         }
     }
+
+"""
+
+DEPLOYMENTS_QUERY = """
+    query Deployments($deploymentNames: [String!]!) {
+        deployments(deploymentNames: $deploymentNames) {
+            deploymentName
+        }
+    }
 """
 
 WORKSPACE_ENTRIES_QUERY = """

@@ -1,4 +1,4 @@
-from typing import Any, Collection, Dict, List, Optional, Tuple
+from typing import Any, Collection, Dict, List, Optional
 
 import boto3
 from dagster import Array, Enum, EnumValue, Field, IntSource, Noneable, ScalarUnion, StringSource
@@ -14,6 +14,7 @@ from dagster_cloud.workspace.ecs.utils import get_ecs_human_readable_label, uniq
 from dagster_cloud.workspace.user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
+    DagsterCloudGrpcServer,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
 )
@@ -38,7 +39,6 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         service_discovery_namespace_id: str,
         task_role_arn: str = None,
         security_group_ids: List[str] = None,
-        server_process_startup_timeout=None,
         inst_data: Optional[ConfigurableClassData] = None,
         secrets=None,
         secrets_tag=None,
@@ -73,12 +73,6 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             ]
 
         self.secrets_tag = secrets_tag
-
-        self._server_process_startup_timeout = check.opt_int_param(
-            server_process_startup_timeout,
-            "server_process_startup_timeout",
-            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-        )
 
         self._ecs_timeout = check.opt_int_param(
             ecs_timeout,
@@ -200,13 +194,26 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _get_grpc_server_sidecars(self) -> Optional[List[Dict[str, Any]]]:
         return None
 
+    def _get_service_cpu_override(self) -> Optional[str]:
+        return None
+
+    def _get_service_memory_override(self) -> Optional[str]:
+        return None
+
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
-    ) -> Tuple[EcsServerHandleType, ServerEndpoint]:
-
-        command = metadata.get_grpc_server_command()
+    ) -> DagsterCloudGrpcServer:
 
         port = 4000
+
+        if metadata.pex_metadata:
+            command = metadata.get_multipex_server_command(port)
+            additional_env = {}
+            tags = {"dagster/multipex_server": "1"}
+        else:
+            command = metadata.get_grpc_server_command()
+            additional_env = metadata.get_grpc_server_env(port)
+            tags = {"dagster/grpc_server": "1"}
 
         container_context = EcsContainerContext(
             secrets=self.secrets,
@@ -217,7 +224,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         environment = merge_dicts(
             container_context.get_environment_dict(),
-            metadata.get_grpc_server_env(port),
+            additional_env,
         )
 
         self._logger.info(
@@ -243,11 +250,14 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "dagster/location_hash": deterministic_label_for_location(
                     deployment_name, location_name
                 ),
+                **tags,
             },
             task_role_arn=self.task_role_arn,
             secrets=container_context.get_secrets_dict(self.secrets_manager),
             sidecars=self._get_grpc_server_sidecars(),
             logger=self._logger,
+            cpu=self._get_service_cpu_override(),
+            memory=self._get_service_memory_override(),
         )
         self._logger.info(
             "Created a new service at hostname {} for {}:{}, waiting for server to be ready...".format(
@@ -261,7 +271,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             socket=None,
         )
 
-        return (service, endpoint)
+        return DagsterCloudGrpcServer(service, endpoint, metadata)
 
     def _wait_for_new_server_ready(
         self,
@@ -272,14 +282,13 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         server_endpoint: ServerEndpoint,
     ) -> None:
         self.client.wait_for_service(
-            server_handle, container_name=server_handle.name, logger=self._logger
+            server_handle, container_name=CONTAINER_NAME, logger=self._logger
         )
-        self._wait_for_server_process(
-            host=server_endpoint.host,
-            port=server_endpoint.port,
+        self._wait_for_dagster_server_process(
+            client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
             additional_check=lambda: self.client.wait_for_service(
-                server_handle, server_handle.name, self._logger
+                server_handle, CONTAINER_NAME, self._logger
             ),
         )
 
@@ -294,13 +303,29 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             "Deleted service {} at hostname {}.".format(server_handle.name, server_handle.hostname)
         )
 
-    def _get_server_handles_for_location(
+    def _get_multipex_server_handles_for_location(
         self, deployment_name, location_name: str
     ) -> Collection[EcsServerHandleType]:
         tags = {
             "dagster/location_hash": deterministic_label_for_location(
                 deployment_name, location_name
-            )
+            ),
+            "dagster/multipex_server": "1",
+        }
+        services = self.client.list_services()
+        location_services = [
+            service for service in services if tags.items() <= service.tags.items()
+        ]
+        return location_services
+
+    def _get_standalone_dagster_server_handles_for_location(
+        self, deployment_name, location_name: str
+    ) -> Collection[EcsServerHandleType]:
+        tags = {
+            "dagster/location_hash": deterministic_label_for_location(
+                deployment_name, location_name
+            ),
+            "dagster/grpc_server": "1",
         }
         services = self.client.list_services()
         location_services = [

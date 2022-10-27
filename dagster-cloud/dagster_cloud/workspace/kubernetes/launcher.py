@@ -18,6 +18,7 @@ from kubernetes.client.rest import ApiException
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
+    DagsterCloudGrpcServer,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
 )
@@ -58,7 +59,6 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         volumes=None,
         image_pull_secrets=None,
         deployment_startup_timeout=None,
-        server_process_startup_timeout=None,
         image_pull_grace_period=None,
         labels=None,
         resources=None,
@@ -93,11 +93,6 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             deployment_startup_timeout,
             "deployment_startup_timeout",
             DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT,
-        )
-        self._server_process_startup_timeout = check.opt_int_param(
-            server_process_startup_timeout,
-            "server_process_startup_timeout",
-            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
         self._image_pull_grace_period = check.opt_int_param(
             image_pull_grace_period,
@@ -222,7 +217,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
-    ) -> Tuple[K8sHandle, ServerEndpoint]:
+    ) -> DagsterCloudGrpcServer:
         command = metadata.get_grpc_server_command()
 
         resource_name = unique_k8s_resource_name(deployment_name, location_name)
@@ -294,7 +289,9 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             socket=None,
         )
 
-        return (K8sHandle(namespace=namespace, name=resource_name), endpoint)
+        return DagsterCloudGrpcServer(
+            K8sHandle(namespace=namespace, name=resource_name), endpoint, metadata
+        )
 
     def _wait_for_new_server_ready(
         self,
@@ -315,13 +312,12 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             image_pull_grace_period=self._image_pull_grace_period,
         )
 
-        self._wait_for_server_process(
-            host=server_endpoint.host,
-            port=server_endpoint.port,
+        self._wait_for_dagster_server_process(
+            client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
         )
 
-    def _get_server_handles_for_location(
+    def _get_standalone_dagster_server_handles_for_location(
         self,
         deployment_name: str,
         location_name: str,

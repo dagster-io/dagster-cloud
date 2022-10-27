@@ -14,6 +14,7 @@ import pendulum
 from dagster import DagsterInstance
 from dagster._core.host_representation import RepositoryLocationOrigin
 from dagster._core.host_representation.origin import RegisteredRepositoryLocationOrigin
+from dagster._core.launcher import DefaultRunLauncher
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._serdes import (
@@ -48,6 +49,7 @@ from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from ..version import __version__
 from .queries import (
     ADD_AGENT_HEARTBEATS_MUTATION,
+    DEPLOYMENTS_QUERY,
     GET_USER_CLOUD_REQUESTS_QUERY,
     WORKSPACE_ENTRIES_QUERY,
 )
@@ -68,6 +70,8 @@ DEPLOYMENT_INFO_QUERY = """
          }
      }
 """
+
+NON_ISOLATED_RUN_TAG = ("dagster/isolation", "disabled")
 
 
 class DagsterCloudApiFutureContext(
@@ -159,6 +163,24 @@ class DagsterCloudAgent:
             if not is_branch_deployment
         ]
 
+    def _check_initial_deployment_names(self, instance):
+        if instance.deployment_names:
+            result = instance.organization_scoped_graphql_client().execute(
+                DEPLOYMENTS_QUERY, variable_values={"deploymentNames": instance.deployment_names}
+            )
+            deployments = result["data"]["deployments"]
+            existing_deployment_names = {deployment["deploymentName"] for deployment in deployments}
+            requested_deployment_names = set(instance.deployment_names)
+            missing_deployment_names = requested_deployment_names.difference(
+                existing_deployment_names
+            )
+
+            if missing_deployment_names:
+                deployment_str = f"deployment{'s' if len(missing_deployment_names) > 1 else ''} {', '.join(missing_deployment_names)}"
+                raise Exception(
+                    f"Agent is configured to serve an invalid {deployment_str}. Check your agent configuration to make sure it is serving the correct deployment.",
+                )
+
     def run_loop(self, instance, user_code_launcher, agent_uuid):
         heartbeat_interval_seconds = AGENT_HEARTBEAT_INTERVAL_SECONDS
 
@@ -177,6 +199,8 @@ class DagsterCloudAgent:
             instance = self._exit_stack.enter_context(
                 DagsterInstance.from_ref(instance.ref_for_deployment(deployment_name))
             )
+
+        self._check_initial_deployment_names(instance)
 
         self._check_update_workspace(instance, user_code_launcher)
 
@@ -683,9 +707,32 @@ class DagsterCloudAgent:
                     ),
                 )
 
-                scoped_instance.run_launcher.launch_run(
-                    LaunchRunContext(pipeline_run=run, workspace=None)
-                )
+                if run.tags.get(NON_ISOLATED_RUN_TAG[0]) == NON_ISOLATED_RUN_TAG[1]:
+                    scoped_instance.report_engine_event(
+                        f"Launching {run.run_id} without an isolated run environment.",
+                        run,
+                        cls=self.__class__,
+                    )
+
+                    launcher = DefaultRunLauncher()
+                    launcher.register_instance(scoped_instance)
+
+                    run_location_name = (
+                        run.external_pipeline_origin.external_repository_origin.repository_location_origin.location_name
+                    )
+
+                    client = self._get_grpc_client(
+                        user_code_launcher,
+                        deployment_name,
+                        cast(str, run_location_name),
+                    )
+
+                    launcher.launch_run_from_grpc_client(scoped_instance, run, client)
+                else:
+                    scoped_instance.run_launcher.launch_run(
+                        LaunchRunContext(pipeline_run=run, workspace=None)
+                    )
+
                 return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.TERMINATE_RUN:
             # With agent replicas enabled:

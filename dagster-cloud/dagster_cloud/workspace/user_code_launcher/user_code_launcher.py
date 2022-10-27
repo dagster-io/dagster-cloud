@@ -9,6 +9,7 @@ from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager
 from typing import (
+    Any,
     Callable,
     Collection,
     Dict,
@@ -24,7 +25,6 @@ from typing import (
 
 import dagster._check as check
 from dagster import BoolSource, Field, IntSource
-from dagster._api.get_server_id import sync_get_server_id
 from dagster._api.list_repositories import sync_list_repositories_grpc
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.host_representation import ExternalRepositoryOrigin, JobSelector
@@ -53,6 +53,13 @@ from dagster_cloud.execution.monitoring import (
     start_run_worker_monitoring_thread,
 )
 from dagster_cloud.instance import DagsterCloudAgentInstance
+from dagster_cloud.pex.grpc.client import MultiPexGrpcClient
+from dagster_cloud.pex.grpc.types import (
+    CreatePexServerArgs,
+    GetPexServersArgs,
+    PexServerHandle,
+    ShutdownPexServerArgs,
+)
 from dagster_cloud.util import diff_serializable_namedtuple_map
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
@@ -190,19 +197,55 @@ class ServerEndpoint(
             ("host", str),
             ("port", Optional[int]),
             ("socket", Optional[str]),
+            ("metadata", Optional[List[Tuple[str, str]]]),
         ],
     )
 ):
-    def __new__(cls, host, port, socket):
+    def __new__(cls, host, port, socket, metadata=None):
         return super(ServerEndpoint, cls).__new__(
             cls,
             check.str_param(host, "host"),
             check.opt_int_param(port, "port"),
             check.opt_str_param(socket, "socket"),
+            check.opt_list_param(metadata, "metadata"),
         )
 
     def create_client(self) -> DagsterGrpcClient:
-        return DagsterGrpcClient(port=self.port, socket=self.socket, host=self.host)
+        return DagsterGrpcClient(
+            port=self.port, socket=self.socket, host=self.host, metadata=self.metadata
+        )
+
+    def create_multipex_client(self) -> MultiPexGrpcClient:
+        return MultiPexGrpcClient(port=self.port, socket=self.socket, host=self.host)
+
+    def with_metadata(self, metadata: Optional[List[Tuple[str, str]]]):
+        return self._replace(metadata=metadata)
+
+
+class DagsterCloudGrpcServer(
+    NamedTuple(
+        "_DagsterCloudGrpcServer",
+        [
+            ("server_handle", Any),  # No Generic NamedTuples yet sadly
+            ("server_endpoint", ServerEndpoint),
+            ("code_deployment_metadata", CodeDeploymentMetadata),
+        ],
+    ),
+):
+    def __new__(
+        cls,
+        server_handle: Any,
+        server_endpoint: ServerEndpoint,
+        code_deployment_metadata: CodeDeploymentMetadata,
+    ):
+        return super(DagsterCloudGrpcServer, cls).__new__(
+            cls,
+            server_handle,
+            check.inst_param(server_endpoint, "server_endpoint", ServerEndpoint),
+            check.inst_param(
+                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+            ),
+        )
 
 
 class DagsterCloudUserCodeLauncher(
@@ -212,11 +255,14 @@ class DagsterCloudUserCodeLauncher(
         self,
         server_ttl: Optional[dict] = None,
         defer_job_snapshots: bool = True,
+        server_process_startup_timeout=None,
     ):
-        self._grpc_endpoints: Dict[
-            DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]
+        self._grpc_servers: Dict[
+            DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
         ] = {}
-        self._grpc_endpoints_lock = threading.Lock()
+        self._grpc_servers_lock = threading.Lock()
+
+        self._multipex_servers: Dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
 
         self._server_ttl_config = check.opt_dict_param(server_ttl, "server_ttl")
         self._defer_job_snapshots = defer_job_snapshots
@@ -239,6 +285,12 @@ class DagsterCloudUserCodeLauncher(
         self._reconcile_count = 0
         self._reconcile_grpc_metadata_shutdown_event = threading.Event()
         self._reconcile_grpc_metadata_thread = None
+
+        self._server_process_startup_timeout = check.opt_int_param(
+            server_process_startup_timeout,
+            "server_process_startup_timeout",
+            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+        )
 
         super().__init__()
 
@@ -509,7 +561,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-        endpoint,
+        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
         metadata: CodeDeploymentMetadata,
     ):
         self._logger.info(
@@ -519,9 +571,12 @@ class DagsterCloudUserCodeLauncher(
         )
 
         try:
-            if isinstance(endpoint, SerializableErrorInfo):
+            if isinstance(server_or_error, SerializableErrorInfo):
                 self._update_location_error(
-                    deployment_name, location_name, error_info=endpoint, metadata=metadata
+                    deployment_name,
+                    location_name,
+                    error_info=server_or_error,
+                    metadata=metadata,
                 )
                 return
 
@@ -530,7 +585,8 @@ class DagsterCloudUserCodeLauncher(
                     location_name=location_name,
                     deployment_metadata=metadata,
                     upload_location_data=self._get_upload_location_data(
-                        deployment_name, location_name
+                        deployment_name,
+                        location_name,
                     ),
                     serialized_error_info=None,
                 )
@@ -571,14 +627,43 @@ class DagsterCloudUserCodeLauncher(
     def requires_images(self) -> bool:
         pass
 
+    def _get_existing_pex_servers(
+        self, deployment_name: str, location_name: str
+    ) -> List[PexServerHandle]:
+
+        server = self._multipex_servers.get((deployment_name, location_name))
+
+        if not server:
+            return []
+
+        _server_handle, server_endpoint, _code_deployment_metadata = server
+        return (
+            server_endpoint.create_multipex_client()
+            .get_pex_servers(
+                GetPexServersArgs(
+                    deployment_name=deployment_name,
+                    location_name=location_name,
+                )
+            )
+            .server_handles
+        )
+
     @abstractmethod
-    def _get_server_handles_for_location(
+    def _get_standalone_dagster_server_handles_for_location(
         self, deployment_name: str, location_name: str
     ) -> Collection[ServerHandle]:
-        """Return a list of 'handles' that represent all running servers for a given location.
-        Typically this will be a single server (unless an error was previous raised during a
-        reconciliation loop. ServerHandle can be any type that is sufficient for
-        _remove_server_handle to remove the service."""
+        """Return a list of 'handles' that represent all running servers for a given location
+        that are running the dagster grpc server as the entry point (i.e. are not multipex
+        servers). Typically this will be a single server (unless an error was previous raised
+        during a reconciliation loop. ServerHandle can be any type that is sufficient to uniquely
+        identify the server and can be passed into _remove_server_handle to remove the server."""
+
+    def _get_multipex_server_handles_for_location(
+        self, _deployment_name: str, _location_name: str
+    ) -> Collection[ServerHandle]:
+        """Return a list of 'handles' that represent all servers running the multipex server
+        entrypoint."""
+        return []
 
     @abstractmethod
     def _start_new_server_spinup(
@@ -586,10 +671,18 @@ class DagsterCloudUserCodeLauncher(
         deployment_name: str,
         location_name: str,
         metadata: CodeDeploymentMetadata,
-    ) -> Tuple[ServerHandle, ServerEndpoint]:
+    ) -> DagsterCloudGrpcServer:
         """Create a new server for the given location using the given metadata as configuration
         and return a ServerHandle indicating where it can be found. Any waiting for the server
         to happen should happen in _wait_for_new_server_endpoint."""
+
+    def _wait_for_new_multipex_server(
+        self, _deployment_name: str, _location_name: str, multipex_endpoint: ServerEndpoint
+    ):
+        self._wait_for_server_process(
+            multipex_endpoint.create_multipex_client(),
+            timeout=self._server_process_startup_timeout,
+        )
 
     @abstractmethod
     def _wait_for_new_server_ready(
@@ -601,6 +694,17 @@ class DagsterCloudUserCodeLauncher(
         server_endpoint: ServerEndpoint,
     ) -> None:
         """Wait for a newly-created server to be ready."""
+
+    def _remove_pex_server_handle(
+        self,
+        _deployment_name,
+        _location_name,
+        _server_handle: ServerHandle,
+        server_endpoint: ServerEndpoint,
+        pex_server_handle: PexServerHandle,
+    ) -> None:
+        multi_pex_client = server_endpoint.create_multipex_client()
+        multi_pex_client.shutdown_pex_server(ShutdownPexServerArgs(server_handle=pex_server_handle))
 
     @abstractmethod
     def _remove_server_handle(self, server_handle: ServerHandle) -> None:
@@ -724,6 +828,9 @@ class DagsterCloudUserCodeLauncher(
             + "}"
         )
 
+    def _check_running_multipex_server(self, multipex_server: DagsterCloudGrpcServer):
+        multipex_server.server_endpoint.create_multipex_client().ping("")
+
     def _reconcile(
         self,
         desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
@@ -752,17 +859,139 @@ class DagsterCloudUserCodeLauncher(
         )
 
         to_update_keys = diff.to_add.union(diff.to_update)
-        existing_server_handles: Dict[DeploymentAndLocation, Collection[ServerHandle]] = {}
 
-        new_server_handles: Dict[
-            str, Union[Tuple[ServerHandle, ServerEndpoint], SerializableErrorInfo]
+        # Handles for all running standalone Dagster GRPC servers
+        existing_standalone_dagster_server_handles: Dict[
+            DeploymentAndLocation, Collection[ServerHandle]
         ] = {}
+
+        # Handles for all running Dagster multipex servers (which can each host multiple grpc subprocesses)
+        existing_multipex_server_handles: Dict[DeploymentAndLocation, Collection[ServerHandle]] = {}
+
+        # For each location, all currently running pex servers on the current multipex server
+        existing_pex_server_handles: Dict[DeploymentAndLocation, List[PexServerHandle]] = {}
+
+        # Dagster grpc servers created in this loop (including both standalone grpc servers
+        # and pex servers on a multipex server) - or an error that explains why it couldn't load
+        new_dagster_servers: Dict[
+            DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
+        ] = {}
+
+        # Multipex servers created in this loop (a new multipex server might not always
+        # be created on each loop even if the code has changed, as long as the base image
+        # is the same)
+        new_multipex_servers: Dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
 
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
 
+            desired_entry = desired_entries[to_update_key]
+
+            code_deployment_metadata = desired_entry.code_deployment_metadata
+
+            # First check what multipex servers already exist for this location (any that are
+            # no longer used will be cleaned up at the end)
+            existing_multipex_server_handles[
+                to_update_key
+            ] = self._get_multipex_server_handles_for_location(deployment_name, location_name)
+
+            if code_deployment_metadata.pex_metadata:
+                try:
+                    # See if a multipex server exists that satisfies this new metadata or if
+                    # one needs to be created
+                    multipex_server = self._get_multipex_server(
+                        deployment_name, location_name, desired_entry.code_deployment_metadata
+                    )
+
+                    if multipex_server:
+                        try:
+                            self._check_running_multipex_server(multipex_server)
+                        except:
+                            error_info = serializable_error_info_from_exc_info(sys.exc_info())
+                            self._logger.error(
+                                "Spinning up a new multipex server for {deployment_name}:{location_name} since the existing one failed with the following error: {error_info}".format(
+                                    deployment_name=deployment_name,
+                                    location_name=location_name,
+                                    error_info=error_info,
+                                )
+                            )
+                            multipex_server = None
+
+                    if not multipex_server:
+                        self._logger.info(
+                            "Creating new multipex server for {deployment_name}:{location_name}".format(
+                                deployment_name=deployment_name,
+                                location_name=location_name,
+                            )
+                        )
+                        multipex_server = self._create_multipex_server(
+                            deployment_name, location_name, desired_entry.code_deployment_metadata
+                        )
+                        assert self._get_multipex_server(
+                            deployment_name,
+                            location_name,
+                            desired_entry.code_deployment_metadata,
+                        )
+                        new_multipex_servers[to_update_key] = multipex_server
+                    else:
+                        self._logger.info(
+                            "Found running multipex server for {deployment_name}:{location_name}".format(
+                                deployment_name=deployment_name,
+                                location_name=location_name,
+                            )
+                        )
+
+                except Exception:
+                    error_info = serializable_error_info_from_exc_info(sys.exc_info())
+                    self._logger.error(
+                        "Error while setting up multipex server for {deployment_name}:{location_name}: {error_info}".format(
+                            deployment_name=deployment_name,
+                            location_name=location_name,
+                            error_info=error_info,
+                        )
+                    )
+                    new_dagster_servers[to_update_key] = error_info
+
+        # For each new multi-pex server, wait for it to be ready. If it fails, put
+        # the location that was planned to use it into an error state
+        for to_update_key, multipex_server in new_multipex_servers.items():
+            deployment_name, location_name = to_update_key
+
             try:
-                code_deployment_metadata = desired_entries[to_update_key].code_deployment_metadata
+                self._logger.info(
+                    "Waiting for new multipex server for {deployment_name}:{location_name} to be ready".format(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
+                    )
+                )
+                self._wait_for_new_multipex_server(
+                    deployment_name, location_name, multipex_server.server_endpoint
+                )
+            except Exception:
+                error_info = serializable_error_info_from_exc_info(sys.exc_info())
+
+                self._logger.error(
+                    "Error while waiting for multipex server for {deployment_name}:{location_name}: {error_info}".format(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
+                        error_info=error_info,
+                    )
+                )
+                new_dagster_servers[to_update_key] = error_info
+                # Clear out this multipex server so we don't try to use it again
+                del self._multipex_servers[to_update_key]
+
+        # Now that any needed multipex servers have been created, spin up dagster servers
+        # (either as standalone servers or within a multipex server)
+        for to_update_key in to_update_keys:
+            if isinstance(new_dagster_servers.get(to_update_key), SerializableErrorInfo):
+                # Don't keep going for this location if a previous step failed
+                continue
+
+            deployment_name, location_name = to_update_key
+            try:
+                desired_entry = desired_entries[to_update_key]
+                code_deployment_metadata = desired_entry.code_deployment_metadata
 
                 self._logger.info(
                     "Updating server for {deployment_name}:{location_name}".format(
@@ -770,16 +999,22 @@ class DagsterCloudUserCodeLauncher(
                         location_name=location_name,
                     )
                 )
-                existing_server_handles[to_update_key] = self._get_server_handles_for_location(
+                existing_standalone_dagster_server_handles[
+                    to_update_key
+                ] = self._get_standalone_dagster_server_handles_for_location(
+                    deployment_name, location_name
+                )
+
+                existing_pex_server_handles[to_update_key] = self._get_existing_pex_servers(
                     deployment_name, location_name
                 )
 
                 self._check_for_image(code_deployment_metadata)
 
-                new_server_handles[to_update_key] = self._start_new_server_spinup(
+                new_dagster_servers[to_update_key] = self._start_new_dagster_server(
                     deployment_name,
                     location_name,
-                    code_deployment_metadata,
+                    desired_entry,
                 )
 
                 self._logger.info(
@@ -794,29 +1029,28 @@ class DagsterCloudUserCodeLauncher(
                         error_info=error_info,
                     )
                 )
-                new_server_handles[to_update_key] = error_info
+                new_dagster_servers[to_update_key] = error_info
 
+        # Wait for all new dagster servers (standalone or within a multipex server) to be ready
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
             code_deployment_metadata = desired_entries[to_update_key].code_deployment_metadata
-            server_handle_or_error = new_server_handles[to_update_key]
+            server_or_error = new_dagster_servers[to_update_key]
 
-            new_updated_endpoint: Union[ServerEndpoint, SerializableErrorInfo]
-
-            if isinstance(server_handle_or_error, SerializableErrorInfo):
-                # Failed spinning up the endpoint - no need to wait
-                new_updated_endpoint = server_handle_or_error
-            else:
-                server_handle, server_endpoint = server_handle_or_error
+            if not isinstance(server_or_error, SerializableErrorInfo):
                 try:
+                    self._logger.info(
+                        "Waiting for new grpc server for {location_name} to be ready...".format(
+                            location_name=to_update_key
+                        )
+                    )
                     self._wait_for_new_server_ready(
                         deployment_name,
                         location_name,
                         code_deployment_metadata,
-                        server_handle,
-                        server_endpoint,
+                        server_or_error.server_handle,
+                        server_or_error.server_endpoint,
                     )
-                    new_updated_endpoint = server_endpoint
                 except:
                     error_info = serializable_error_info_from_exc_info(sys.exc_info())
                     self._logger.error(
@@ -826,25 +1060,28 @@ class DagsterCloudUserCodeLauncher(
                             error_info=error_info,
                         )
                     )
-                    new_updated_endpoint = error_info
+                    server_or_error = error_info
 
-            with self._grpc_endpoints_lock:
-                self._grpc_endpoints[to_update_key] = new_updated_endpoint
+            with self._grpc_servers_lock:
+                self._grpc_servers[to_update_key] = server_or_error
 
             if to_update_key in upload_locations:
                 upload_locations.remove(to_update_key)
                 self._update_location_data(
                     deployment_name,
                     location_name,
-                    new_updated_endpoint,
+                    server_or_error,
                     desired_entries[to_update_key].code_deployment_metadata,
                 )
 
+        # Remove any old standalone grpc server containers
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
-            server_handles = existing_server_handles.get(to_update_key, [])
+            server_handles = existing_standalone_dagster_server_handles.get(to_update_key, [])
+            removed_any_servers = False
 
             if server_handles:
+                removed_any_servers = True
                 self._logger.info(
                     "Removing {num_servers} existing servers for {deployment_name}:{location_name}".format(
                         num_servers=len(server_handles),
@@ -865,7 +1102,73 @@ class DagsterCloudUserCodeLauncher(
                         )
                     )
 
-            if server_handles:
+            # Remove any existing multipex servers other than the current one for each location
+            multipex_server_handles = existing_multipex_server_handles.get(to_update_key, [])
+
+            current_multipex_server = self._get_multipex_server(
+                deployment_name,
+                location_name,
+                desired_entries[to_update_key].code_deployment_metadata,
+            )
+
+            for multipex_server_handle in multipex_server_handles:
+                current_multipex_server_handle = (
+                    current_multipex_server.server_handle if current_multipex_server else None
+                )
+
+                if (
+                    current_multipex_server_handle
+                    and current_multipex_server_handle != multipex_server_handle
+                ):
+                    self._logger.info(
+                        "Removing old multipex server for {deployment_name}:{location_name}".format(
+                            location_name=location_name,
+                            deployment_name=deployment_name,
+                        )
+                    )
+
+                    try:
+                        self._remove_server_handle(multipex_server_handle)
+                    except Exception:
+                        self._logger.error(
+                            "Error while cleaning up old multipex server for {deployment_name}:{location_name}: {error_info}".format(
+                                deployment_name=deployment_name,
+                                location_name=location_name,
+                                error_info=serializable_error_info_from_exc_info(sys.exc_info()),
+                            )
+                        )
+
+            # On the current multipex server, shut down any old pex servers
+            pex_server_handles = existing_pex_server_handles.get(to_update_key)
+            if pex_server_handles:
+                assert current_multipex_server
+                removed_any_servers = True
+                self._logger.info(
+                    "Removing {num_servers} grpc processes from multipex server for {deployment_name}:{location_name}".format(
+                        num_servers=len(pex_server_handles),
+                        location_name=location_name,
+                        deployment_name=deployment_name,
+                    )
+                )
+                for pex_server_handle in pex_server_handles:
+                    try:
+                        self._remove_pex_server_handle(
+                            deployment_name,
+                            location_name,
+                            current_multipex_server.server_handle,
+                            current_multipex_server.server_endpoint,
+                            pex_server_handle,
+                        )
+                    except Exception:
+                        self._logger.error(
+                            "Error while cleaning up after updating server for {deployment_name}:{location_name}: {error_info}".format(
+                                deployment_name=deployment_name,
+                                location_name=location_name,
+                                error_info=serializable_error_info_from_exc_info(sys.exc_info()),
+                            )
+                        )
+
+            if removed_any_servers:
                 self._logger.info(
                     "Removed all previous servers for {deployment_name}:{location_name}".format(
                         deployment_name=deployment_name,
@@ -889,50 +1192,135 @@ class DagsterCloudUserCodeLauncher(
                     )
                 )
 
-            with self._grpc_endpoints_lock:
-                del self._grpc_endpoints[to_remove_key]
+            with self._grpc_servers_lock:
+                del self._grpc_servers[to_remove_key]
             del self._actual_entries[to_remove_key]
 
         # Upload any locations that were requested to be uploaded, but weren't updated
         # as part of this reconciliation loop
         for location in upload_locations:
-            with self._grpc_endpoints_lock:
-                endpoint = self._grpc_endpoints.get(location)
+            with self._grpc_servers_lock:
+                server_or_error = self._grpc_servers[location]
 
             deployment_name, location_name = location
             self._update_location_data(
                 deployment_name,
                 location_name,
-                endpoint,
+                server_or_error,
                 self._actual_entries[location].code_deployment_metadata,
             )
 
         self._logger.info(f"Finished reconciling in {time.time() - start_time} seconds.")
 
     def has_grpc_endpoint(self, deployment_name: str, location_name: str) -> bool:
-        with self._grpc_endpoints_lock:
-            return (deployment_name, location_name) in self._grpc_endpoints
+        with self._grpc_servers_lock:
+            return (deployment_name, location_name) in self._grpc_servers
+
+    def _get_multipex_server(
+        self,
+        deployment_name,
+        location_name,
+        code_deployment_metadata,
+    ) -> Optional[DagsterCloudGrpcServer]:
+
+        if not code_deployment_metadata.pex_metadata:
+            return None
+
+        cand_server = self._multipex_servers.get((deployment_name, location_name))
+
+        if not cand_server:
+            return None
+
+        if (cand_server.code_deployment_metadata.image == code_deployment_metadata.image) and (
+            cand_server.code_deployment_metadata.container_context
+            == code_deployment_metadata.container_context
+        ):
+            return cand_server
+
+        return None
+
+    def _create_multipex_server(self, deployment_name, location_name, code_deployment_metadata):
+        multipex_server = self._start_new_server_spinup(
+            deployment_name,
+            location_name,
+            code_deployment_metadata,
+        )
+        self._multipex_servers[(deployment_name, location_name)] = multipex_server
+        return multipex_server
+
+    def _create_pex_server(
+        self,
+        deployment_name: str,
+        location_name: str,
+        desired_entry: UserCodeLauncherEntry,
+        multipex_server: DagsterCloudGrpcServer,
+    ):
+        multipex_endpoint = multipex_server.server_endpoint
+        multipex_client = multipex_endpoint.create_multipex_client()
+        multipex_client.create_pex_server(
+            CreatePexServerArgs(
+                server_handle=PexServerHandle(
+                    deployment_name=deployment_name,
+                    location_name=location_name,
+                    metadata_update_timestamp=int(desired_entry.update_timestamp),
+                ),
+                code_deployment_metadata=desired_entry.code_deployment_metadata,
+            )
+        )
+
+    def _start_new_dagster_server(
+        self, deployment_name: str, location_name: str, desired_entry: UserCodeLauncherEntry
+    ) -> DagsterCloudGrpcServer:
+        if desired_entry.code_deployment_metadata.pex_metadata:
+            multipex_server = self._get_multipex_server(
+                deployment_name, location_name, desired_entry.code_deployment_metadata
+            )
+
+            assert multipex_server  # should have been started earlier or we should never reach here
+
+            self._create_pex_server(deployment_name, location_name, desired_entry, multipex_server)
+
+            server_handle = multipex_server.server_handle
+            multipex_endpoint = multipex_server.server_endpoint
+
+            # start a new pex server on the multipexer, which we can count on already existing
+            return DagsterCloudGrpcServer(
+                server_handle,
+                multipex_endpoint.with_metadata(
+                    [
+                        ("has_pex", "1"),
+                        ("deployment", deployment_name),
+                        ("location", location_name),
+                        ("timestamp", str(int(desired_entry.update_timestamp))),
+                    ],
+                ),
+                desired_entry.code_deployment_metadata,
+            )
+        else:
+            return self._start_new_server_spinup(
+                deployment_name, location_name, desired_entry.code_deployment_metadata
+            )
 
     def get_grpc_endpoint(
         self,
         deployment_name: str,
         location_name: str,
     ) -> ServerEndpoint:
-        with self._grpc_endpoints_lock:
-            endpoint = self._grpc_endpoints.get((deployment_name, location_name))
+        with self._grpc_servers_lock:
+            server = self._grpc_servers.get((deployment_name, location_name))
 
-        if not endpoint:
+        if not server:
             raise DagsterUserCodeUnreachableError(
                 f"No server endpoint exists for {deployment_name}:{location_name}"
             )
 
-        if isinstance(endpoint, SerializableErrorInfo):
+        if isinstance(server, SerializableErrorInfo):
             # Consider raising the original exception here instead of a wrapped one
             raise DagsterUserCodeUnreachableError(
-                f"Failure loading server endpoint for {deployment_name}:{location_name}: {endpoint}"
+                f"Failure loading server endpoint for {deployment_name}:{location_name}: {server}"
             )
 
-        return endpoint
+        return server.server_endpoint
 
     def get_grpc_server_heartbeats(self) -> Dict[str, List[CloudCodeServerHeartbeat]]:
         endpoint_or_errors = self.get_grpc_endpoints()
@@ -974,8 +1362,11 @@ class DagsterCloudUserCodeLauncher(
     def get_grpc_endpoints(
         self,
     ) -> Dict[DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]]:
-        with self._grpc_endpoints_lock:
-            return self._grpc_endpoints.copy()
+        with self._grpc_servers_lock:
+            return {
+                key: val if isinstance(val, SerializableErrorInfo) else val.server_endpoint
+                for key, val in self._grpc_servers.items()
+            }
 
     def _remove_server(self, deployment_name: str, location_name: str):
         self._logger.info(
@@ -983,37 +1374,48 @@ class DagsterCloudUserCodeLauncher(
                 deployment_name=deployment_name, location_name=location_name
             )
         )
-        existing_server_handles = self._get_server_handles_for_location(
+        existing_standalone_dagster_server_handles = (
+            self._get_standalone_dagster_server_handles_for_location(deployment_name, location_name)
+        )
+        for server_handle in existing_standalone_dagster_server_handles:
+            self._remove_server_handle(server_handle)
+
+        existing_multipex_server_handles = self._get_multipex_server_handles_for_location(
             deployment_name, location_name
         )
-        for server_handle in existing_server_handles:
+        for server_handle in existing_multipex_server_handles:
             self._remove_server_handle(server_handle)
+
+    def _wait_for_dagster_server_process(
+        self,
+        client: DagsterGrpcClient,
+        timeout,
+        additional_check: Optional[Callable[[], None]] = None,
+    ) -> None:
+        self._wait_for_server_process(client, timeout, additional_check)
+        # Call a method that raises an exception if there was an error importing the code
+        sync_list_repositories_grpc(client)
 
     def _wait_for_server_process(
         self,
-        host: str,
-        port: Optional[int],
+        client: Union[DagsterGrpcClient, MultiPexGrpcClient],
         timeout,
-        socket: Optional[str] = None,
         additional_check: Optional[Callable[[], None]] = None,
-    ) -> str:
-        # Wait for the server to be ready (while also loading the server ID)
-        server_id = None
+    ) -> None:
         start_time = time.time()
 
         last_error = None
 
         while True:
-            client = DagsterGrpcClient(port=port, host=host, socket=socket)
             try:
-                server_id = sync_get_server_id(client)
+                client.ping("")
                 break
             except Exception:
                 last_error = serializable_error_info_from_exc_info(sys.exc_info())
 
             if time.time() - start_time > timeout:
                 raise Exception(
-                    f"Timed out after waiting {timeout}s for server {host}:{port}. "
+                    f"Timed out after waiting {timeout}s for server {client.host}:{client.port or client.socket}. "
                     f"Most recent connection error: {str(last_error)}"
                 )
 
@@ -1021,10 +1423,6 @@ class DagsterCloudUserCodeLauncher(
 
             if additional_check:
                 additional_check()
-
-        # Call a method that raises an exception if there was an error importing the code
-        sync_list_repositories_grpc(client)
-        return server_id
 
     def upload_job_snapshot(
         self,

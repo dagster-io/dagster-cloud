@@ -18,13 +18,16 @@ from ..config_schema.docker import SHARED_DOCKER_CONFIG
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
+    DagsterCloudGrpcServer,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
+    UserCodeLauncherEntry,
 )
 from ..user_code_launcher.utils import deterministic_label_for_location
 from .utils import unique_docker_resource_name
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
+MULTIPEX_SERVER_LABEL = "dagster_multipex_server"
 
 IMAGE_PULL_LOG_INTERVAL = 15
 
@@ -36,7 +39,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         networks=None,
         env_vars=None,
         container_kwargs=None,
-        server_process_startup_timeout=None,
         **kwargs,
     ):
         self._inst_data = inst_data
@@ -46,12 +48,6 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
         self._container_kwargs = check.opt_dict_param(
             container_kwargs, "container_kwargs", key_type=str
-        )
-
-        self._server_process_startup_timeout = check.opt_int_param(
-            server_process_startup_timeout,
-            "server_process_startup_timeout",
-            DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
 
         super(DockerUserCodeLauncher, self).__init__(**kwargs)
@@ -94,114 +90,116 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
     def _create_container(
         self,
         client,
-        deployment_name,
-        location_name,
-        metadata,
+        image,
         container_name,
         hostname,
         environment,
         ports,
         container_context,
         command,
+        labels,
     ):
         return client.containers.create(
-            metadata.image,
+            image,
             detach=True,
             hostname=hostname,
             name=container_name,
             network=container_context.networks[0] if len(container_context.networks) else None,
             environment=environment,
-            labels=[
-                GRPC_SERVER_LABEL,
-                deterministic_label_for_location(deployment_name, location_name),
-            ],
+            labels=labels,
             command=command,
             ports=ports,
             **container_context.container_kwargs,
         )
 
-    def _get_server_handles_for_location(
+    def _get_standalone_dagster_server_handles_for_location(
         self, deployment_name: str, location_name: str
     ) -> Collection[Container]:
         client = docker.client.from_env()
         return client.containers.list(
             all=True,
-            filters={"label": deterministic_label_for_location(deployment_name, location_name)},
+            filters={
+                "label": [
+                    GRPC_SERVER_LABEL,
+                    deterministic_label_for_location(deployment_name, location_name),
+                ]
+            },
         )
 
-    def _start_new_server_spinup(
-        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
-    ) -> Tuple[Container, ServerEndpoint]:
-        command = metadata.get_grpc_server_command()
+    def _get_multipex_server_handles_for_location(
+        self, deployment_name: str, location_name: str
+    ) -> Collection[Container]:
         client = docker.client.from_env()
+        return client.containers.list(
+            all=True,
+            filters={
+                "label": [
+                    MULTIPEX_SERVER_LABEL,
+                    deterministic_label_for_location(deployment_name, location_name),
+                ]
+            },
+        )
 
-        container_context = DockerContainerContext(
-            registry=None,
-            env_vars=self.env_vars
-            + [f"{k}={v}" for k, v in (metadata.cloud_context_env or {}).items()],
-            networks=self._networks,
-            container_kwargs=self._container_kwargs,
-        ).merge(DockerContainerContext.create_from_config(metadata.container_context))
-
-        container_name = unique_docker_resource_name(deployment_name, location_name)
+    def _launch_container(
+        self,
+        deployment_name: str,
+        location_name: str,
+        container_name: str,
+        hostname: str,
+        grpc_port: int,
+        ports: Dict[int, int],
+        image: str,
+        container_context: DockerContainerContext,
+        command: List[str],
+        additional_env: Dict[str, str],
+        labels: List[str],
+    ) -> Tuple[Container, ServerEndpoint]:
+        client = docker.client.from_env()
 
         self._logger.info(
             "Starting a new container for {deployment_name}:{location_name} with image {image}: {container_name}".format(
                 deployment_name=deployment_name,
                 location_name=location_name,
-                image=metadata.image,
+                image=image,
                 container_name=container_name,
             )
         )
 
-        ports = {}
-
-        has_network = len(self._networks) > 0
-        if has_network:
-            grpc_port = 4000
-            hostname = container_name
-        else:
-            grpc_port = find_free_port()
-            ports[grpc_port] = grpc_port
-            hostname = "localhost"
-
         environment = merge_dicts(
             (dict([parse_env_var(env_var) for env_var in container_context.env_vars])),
-            metadata.get_grpc_server_env(grpc_port),
+            additional_env,
         )
 
         try:
             container = self._create_container(
                 client,
-                deployment_name,
-                location_name,
-                metadata,
+                image,
                 container_name,
                 hostname,
                 environment,
                 ports,
                 container_context,
                 command,
+                labels,
             )
         except docker.errors.ImageNotFound:
             last_log_time = time.time()
-            self._logger.info("Pulling image {image}...".format(image=metadata.image))
-            for _line in docker.APIClient().pull(metadata.image, stream=True):
+            self._logger.info("Pulling image {image}...".format(image=image))
+            for _line in docker.APIClient().pull(image, stream=True):
                 if time.time() - last_log_time > IMAGE_PULL_LOG_INTERVAL:
-                    self._logger.info("Still pulling image {image}...".format(image=metadata.image))
+                    self._logger.info("Still pulling image {image}...".format(image=image))
                     last_log_time = time.time()
 
             container = self._create_container(
                 client,
-                deployment_name,
-                location_name,
-                metadata,
+                image,
                 container_name,
                 hostname,
                 environment,
                 ports,
                 container_context,
                 command,
+                labels,
             )
 
         if len(container_context.networks) > 1:
@@ -221,6 +219,64 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
         return (container, endpoint)
 
+    def _start_new_server_spinup(
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
+    ) -> DagsterCloudGrpcServer:
+        container_name = unique_docker_resource_name(deployment_name, location_name)
+
+        container_context = DockerContainerContext(
+            registry=None,
+            env_vars=self.env_vars
+            + [f"{k}={v}" for k, v in (metadata.cloud_context_env or {}).items()],
+            networks=self._networks,
+            container_kwargs=self._container_kwargs,
+        ).merge(DockerContainerContext.create_from_config(metadata.container_context))
+
+        ports = {}
+
+        has_network = len(self._networks) > 0
+        if has_network:
+            grpc_port = 4000
+            hostname = container_name
+        else:
+            grpc_port = find_free_port()
+            ports[grpc_port] = grpc_port
+            hostname = "localhost"
+
+        if metadata.pex_metadata:
+            command = metadata.get_multipex_server_command(grpc_port)
+            environment = {}
+            labels = [
+                MULTIPEX_SERVER_LABEL,
+                deterministic_label_for_location(deployment_name, location_name),
+            ]
+        else:
+            command = metadata.get_grpc_server_command()
+            environment = metadata.get_grpc_server_env(grpc_port)
+            labels = [
+                GRPC_SERVER_LABEL,
+                deterministic_label_for_location(deployment_name, location_name),
+            ]
+
+        server_handle, server_endpoint = self._launch_container(
+            deployment_name,
+            location_name,
+            container_name,
+            hostname,
+            grpc_port,
+            ports,
+            check.not_none(metadata.image),
+            container_context,
+            command,
+            additional_env=environment,
+            labels=labels,
+        )
+
+        return DagsterCloudGrpcServer(server_handle, server_endpoint, metadata)
+
     def _wait_for_new_server_ready(
         self,
         deployment_name: str,
@@ -229,11 +285,9 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         server_handle: Container,
         server_endpoint: ServerEndpoint,
     ) -> None:
-        self._wait_for_server_process(
-            host=server_endpoint.host,
-            port=server_endpoint.port,
+        self._wait_for_dagster_server_process(
+            client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
-            socket=server_endpoint.socket,
         )
 
     def _remove_server_handle(self, server_handle: Container) -> None:
@@ -254,6 +308,10 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         client = docker.client.from_env()
 
         containers = client.containers.list(all=True, filters={"label": GRPC_SERVER_LABEL})
+        for container in containers:
+            self._remove_server_handle(container)
+
+        containers = client.containers.list(all=True, filters={"label": MULTIPEX_SERVER_LABEL})
         for container in containers:
             self._remove_server_handle(container)
 

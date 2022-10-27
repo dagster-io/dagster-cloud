@@ -1,33 +1,59 @@
 <p align="center">
-<a href="https://dagster.io/cloud"><img src="https://github.com/dagster-io/dagster-cloud/raw/main/assets/dagster-cloud-logo.png"/></a>
-<br /><br />
-<a href="https://badge.fury.io/py/dagster-cloud"><img src="https://badge.fury.io/py/dagster-cloud.svg"></>
-<a href="https://dagster-slackin.herokuapp.com/"><img src="https://dagster-slackin.herokuapp.com/badge.svg"></a>
+  <a target="_blank" href="https://dagster.io/cloud">
+    <img src="https://github.com/dagster-io/dagster-cloud/raw/main/assets/dagster-cloud-logo.png" width="auto"/>
+  </a>
+  <br /><br />
+  <a target="_blank" href="https://twitter.com/dagster">
+    <img src="https://img.shields.io/twitter/follow/dagster?labelColor=4F43DD&color=163B36&logo=twitter&style=flat">
+  </a>
+  <a target="_blank" href="https://dagster.io/slack">
+    <img src="https://dagster-slackin.herokuapp.com/badge.svg?bg=163B36">
+  </a>
+  <a target="_blank" href="https://github.com/dagster-io/dagster">
+    <img src="https://img.shields.io/github/stars/dagster-io/dagster?labelColor=4F43DD&color=163B36&logo=github">
+  </a>
+  <br />
+  <a target="_blank" href="https://pypi.org/project/dagster-cloud/">
+    <img src="https://img.shields.io/pypi/v/dagster-cloud?labelColor=4F43DD&color=163B36">
+  </a>
+  <img src="https://img.shields.io/pypi/pyversions/dagster-cloud?labelColor=4F43DD&color=163B36">
 </p>
 
 # Dagster Cloud
 
-Unify all your data tools into a productive, enterprise-grade platform. Sign up for early access to
-Dagster Cloud at https://dagster.io/cloud.
-
-## Demo
-
-https://user-images.githubusercontent.com/16431325/145064683-3df130f9-57e3-4477-9c47-168f97fc2544.mp4
+The enterprise orchestration platform that puts developer experience first, with fully serverless or hybrid deployments, native branching, and out-of-the-box CI/CD.
 
 ## Getting Started
 
-### Installation
+The complete Dagster Cloud feature set can be found on our [website](https://dagster.io/cloud). You
+can [sign up for Dagster Cloud](https://dagster.cloud/signup) and get started with a free 30 day
+trial.
 
-The Dagster Cloud Agent library is available in PyPi:
+## Installation
+
+The Dagster Cloud Agent is available on PyPI and officially supports Python 3.8.
 
 ```
-$ pip install dagster-cloud
+pip install dagster-cloud
 ```
 
-Dagster Cloud is currently in [Early Access](https://dagster.io/blog/introducing-dagster-cloud).
-You can join our [waitlist](https://www.dagster.io/cloud), read our [documentation](https://docs.dagster.cloud/), or reach out to us in Slack:
+## Documentation
 
-<br />
-<p align="center">
-<a href="https://join.slack.com/t/dagster/shared_invite/enQtNjEyNjkzNTA2OTkzLTI0MzdlNjU0ODVhZjQyOTMyMGM1ZDUwZDQ1YjJmYjI3YzExZGViMDI1ZDlkNTY5OThmYWVlOWM1MWVjN2I3NjU"><img src="https://user-images.githubusercontent.com/609349/63558739-f60a7e00-c502-11e9-8434-c8a95b03ce62.png" width=160px; /></a>
-</p>
+You can find the full Dagster Cloud documentation on our
+[website](https://docs.dagster.io/dagster-cloud).
+
+## Community
+
+Connect with thousands of other data practitioners building with Dagster. Share knowledge, get help,
+and contribute to the open-source project. To see featured material and upcoming events, check out
+our [Dagster Community](https://dagster.io/community) page.
+
+Join our community here:
+
+- 🌟 [Star us on Github](https://github.com/dagster-io/dagster)
+- 🐦 [Follow us on Twitter](https://twitter.com/dagster)
+- 📺 [Subscribe to our YouTube channel](https://www.youtube.com/channel/UCfLnv9X8jyHTe6gJ4hVBo9Q)
+- 📚 [Read our blog posts](https://dagster.io/blog)
+- 👋 [Join us on Slack](https://dagster.io/slack)
+- 🗃 [Browse Slack archives](https://discuss.dagster.io)
+- ✏️ [Start a Github Discussion](https://github.com/dagster-io/dagster/discussions)

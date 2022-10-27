@@ -7,6 +7,9 @@ class Service:
         self.arn = self._long_arn(arn)
         self.name = arn.split("/")[-1]
 
+    def __eq__(self, other):
+        return isinstance(other, self.__class__) and self.arn == other.arn
+
     @property
     def hostname(self):
         hostname = f"{self.name}.{self.client.namespace}"
