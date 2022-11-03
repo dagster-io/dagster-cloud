@@ -7,6 +7,7 @@ from typing import Optional
 
 import yaml
 from dagster._core.errors import DagsterHomeNotSetError
+from dagster._utils import load_yaml_from_globs
 from dagster._utils.interrupts import capture_interrupts
 from dagster._utils.log import default_date_format_string, default_format_string
 from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent
@@ -34,9 +35,24 @@ def agent_home_exception():
     return ui.error(f"No Dagster config found.\n\n{dagster_home_loc}")
 
 
-def run_local_agent():
+def run_local_agent(agent_logging_config_path):
     try:
         with DagsterCloudAgentInstance.get() as instance:
+            logging.basicConfig(
+                level=logging.INFO,
+                format=default_format_string(),
+                datefmt=default_date_format_string(),
+                handlers=[logging.StreamHandler()],
+            )
+
+            if agent_logging_config_path:
+                agent_logging_config = {
+                    "version": 1,
+                    "disable_existing_loggers": False,
+                    **load_yaml_from_globs(str(agent_logging_config_path)),
+                }
+                logging.config.dictConfig(agent_logging_config)
+
             user_code_launcher = instance.user_code_launcher
             user_code_launcher.start()
 
@@ -46,14 +62,16 @@ def run_local_agent():
         raise agent_home_exception()
 
 
-def run_local_agent_in_environment(dagster_home: Optional[Path]):
+def run_local_agent_in_environment(
+    dagster_home: Optional[Path], agent_logging_config_path: Optional[Path]
+):
     with capture_interrupts():
         old_env = None
         try:
             old_env = dict(os.environ)
             if dagster_home:
                 os.environ["DAGSTER_HOME"] = str(dagster_home.resolve())
-            run_local_agent()
+            run_local_agent(agent_logging_config_path)
         finally:
             os.environ.clear()
             if old_env is not None:
@@ -107,7 +125,7 @@ def run_local_agent_in_temp_environment(
                     user_code_launcher_config_entry=config_entry,
                 )
             )
-        run_local_agent_in_environment(Path(d))
+        run_local_agent_in_environment(Path(d), None)
 
 
 PROCESS_USER_CODE_LAUNCHER = "dagster_cloud.workspace.user_code_launcher.ProcessUserCodeLauncher"
@@ -143,13 +161,14 @@ def run(
         "--user-code-launcher-config",
         help="Config to supply the User Code Launcher, in JSON format.",
     ),
+    agent_logging_config_path: Optional[Path] = Option(
+        None,
+        "--agent-logging-config-path",
+        help="Yaml file with logging config for the agent process that can be passed into logging.dictConfig",
+        exists=True,
+    ),
 ):
-    logging.basicConfig(
-        level=logging.INFO,
-        format=default_format_string(),
-        datefmt=default_date_format_string(),
-        handlers=[logging.StreamHandler()],
-    )
+
     if (
         agent_token
         or deployment
@@ -175,4 +194,4 @@ def run(
             user_code_launcher_config,
         )
     else:
-        run_local_agent_in_environment(dagster_home)
+        run_local_agent_in_environment(dagster_home, agent_logging_config_path)

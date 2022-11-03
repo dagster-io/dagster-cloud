@@ -1,5 +1,18 @@
 # Dagster Cloud Changelog
 
+# 1.0.16
+
+### New
+
+- [dagit] The new Overview and Workspace pages have been enabled for all users, after being gated with a feature flag for the last several releases. These changes include design updates, virtualized tables, and more performant querying.
+- When running a Dagster Cloud agent, the Python logging configuration of the agent process can now be configured by passing in a `--agent-logging-config-path` option to the `dagster-cloud agent run` command. This config can also be set in the Dagster Cloud Helm chart using the `loggingConfig` key.
+- Added a `dagster-cloud settings saml remove-identity-provider-metadata` command that can be used to reset the SAML configuration for an organization.
+- You can now re-execute a run from failure in a Serverless deployment in Dagster Cloud without needing to define an IO manager
+
+### Bugfixes
+
+- Fixed the `createdBefore` filter on the run GraphQL endpoint.
+
 # 1.0.15
 
 ### New
