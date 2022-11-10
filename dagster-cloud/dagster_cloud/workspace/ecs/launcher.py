@@ -208,11 +208,13 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(port)
-            additional_env = {}
+            additional_env = metadata.get_multipex_server_env()
             tags = {"dagster/multipex_server": "1"}
         else:
             command = metadata.get_grpc_server_command()
-            additional_env = metadata.get_grpc_server_env(port)
+            additional_env = metadata.get_grpc_server_env(
+                port, deployment_name, location_name, self._instance
+            )
             tags = {"dagster/grpc_server": "1"}
 
         container_context = EcsContainerContext(

@@ -381,6 +381,10 @@ instance_class:
             "dagster_cloud.storage.compute_logs", "CloudComputeLogManager", empty_yaml
         )
 
+        defaults["secrets"] = ConfigurableClassData(
+            "dagster_cloud.secrets", "DagsterCloudSecretsLoader", empty_yaml
+        )
+
         return defaults
 
     def dispose(self):

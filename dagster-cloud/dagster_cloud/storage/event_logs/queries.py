@@ -254,6 +254,21 @@ GET_MATERIALIZATION_COUNT_BY_PARTITION = """
     }
     """
 
+GET_EVENT_TAGS_FOR_ASSET = """
+query getAssetEventTags($assetKey: String!, $filterTags: [AssetFilterTagInput!]) {
+    eventLogs {
+        getAssetEventTags(assetKey: $assetKey, filterTags: $filterTags) {
+            ... on AssetEventTags {
+                tags {
+                    key
+                    value
+                }
+            }
+        }
+    }
+}
+"""
+
 
 STORE_EVENT_MUTATION = """
     mutation StoreEvent($eventRecord: EventLogEntryInput!) {

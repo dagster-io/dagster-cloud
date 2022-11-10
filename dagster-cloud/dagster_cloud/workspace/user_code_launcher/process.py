@@ -231,6 +231,14 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                 heartbeat=True,
                 heartbeat_timeout=self._heartbeat_ttl,
                 startup_timeout=self._server_process_startup_timeout,
+                env={
+                    **os.environ,
+                    **metadata.get_grpc_inject_env_vars_cli_env(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
+                        instance=self._instance,
+                    ),
+                },
             )
             client = DagsterGrpcClient(
                 port=server_process.port,

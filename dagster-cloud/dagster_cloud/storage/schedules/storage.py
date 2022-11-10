@@ -185,5 +185,5 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
     def upgrade(self):
         raise NotImplementedError("Not callable from user cloud")
 
-    def optimize_for_dagit(self, statement_timeout: int):
+    def optimize_for_dagit(self, statement_timeout: int, pool_recycle: int):
         raise NotImplementedError("Not callable from user cloud")

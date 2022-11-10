@@ -36,7 +36,7 @@ from dagster._serdes import (
     serialize_dagster_namedtuple,
 )
 from dagster._serdes.serdes import deserialize_as
-from dagster._utils import datetime_as_float
+from dagster._utils import datetime_as_float, merge_dicts
 from dagster._utils.error import SerializableErrorInfo
 from dagster_cloud.storage.event_logs.utils import truncate_event
 from dagster_cloud_cli.core.errors import GraphQLStorageError
@@ -48,6 +48,7 @@ from .queries import (
     GET_ASSET_RECORDS_QUERY,
     GET_ASSET_RUN_IDS_QUERY,
     GET_EVENT_RECORDS_QUERY,
+    GET_EVENT_TAGS_FOR_ASSET,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_RECORDS_FOR_RUN_QUERY,
@@ -131,7 +132,9 @@ def _event_log_entry_from_graphql(graphene_event_log_entry: Dict) -> EventLogEnt
     )
 
 
-def _get_event_records_filter_input(event_records_filter) -> Optional[Dict[str, Any]]:
+def _get_event_records_filter_input(
+    event_records_filter,
+) -> Optional[Dict[str, Any]]:
     check.opt_inst_param(event_records_filter, "event_records_filter", EventRecordsFilter)
 
     if event_records_filter is None:
@@ -163,6 +166,15 @@ def _get_event_records_filter_input(event_records_filter) -> Optional[Dict[str, 
         if isinstance(event_records_filter.after_cursor, RunShardedEventsCursor)
         else event_records_filter.after_cursor,
         "runUpdatedAfter": run_updated_timestamp,
+        "tags": [
+            merge_dicts(
+                {"key": tag_key},
+                ({"value": tag_value} if isinstance(tag_value, str) else {"values": tag_value}),
+            )
+            for tag_key, tag_value in event_records_filter.tags.items()
+        ]
+        if event_records_filter.tags
+        else None,
     }
 
 
@@ -512,6 +524,27 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 ] = graphene_partition_count["materializationCount"]
 
         return materialization_count_by_partition
+
+    def get_event_tags_for_asset(
+        self, asset_key: AssetKey, filter_tags: Optional[Mapping[str, str]] = None
+    ) -> Sequence[Mapping[str, str]]:
+        check.inst_param(asset_key, "asset_key", AssetKey)
+        filter_tags = check.opt_mapping_param(
+            filter_tags, "filter_tags", key_type=str, value_type=str
+        )
+
+        res = self._execute_query(
+            GET_EVENT_TAGS_FOR_ASSET,
+            variables={
+                "assetKey": asset_key.to_string(),
+                "filterTags": [{"key": key, "value": value} for key, value in filter_tags.items()],
+            },
+        )
+        tags_result = res["data"]["eventLogs"]["getAssetEventTags"]
+        return [
+            {event_tag["key"]: event_tag["value"] for event_tag in event_tags["tags"]}
+            for event_tags in tags_result
+        ]
 
     def wipe_asset(self, asset_key: AssetKey):
         res = self._execute_query(

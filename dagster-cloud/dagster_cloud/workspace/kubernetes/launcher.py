@@ -229,6 +229,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 api_response = api_instance.create_namespaced_deployment(
                     container_context.namespace,
                     construct_repo_location_deployment(
+                        self._instance,
                         deployment_name,
                         location_name,
                         resource_name,

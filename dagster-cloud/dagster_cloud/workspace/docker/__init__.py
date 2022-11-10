@@ -248,14 +248,16 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(grpc_port)
-            environment = {}
+            environment = metadata.get_multipex_server_env()
             labels = [
                 MULTIPEX_SERVER_LABEL,
                 deterministic_label_for_location(deployment_name, location_name),
             ]
         else:
             command = metadata.get_grpc_server_command()
-            environment = metadata.get_grpc_server_env(grpc_port)
+            environment = metadata.get_grpc_server_env(
+                grpc_port, deployment_name, location_name, self._instance
+            )
             labels = [
                 GRPC_SERVER_LABEL,
                 deterministic_label_for_location(deployment_name, location_name),

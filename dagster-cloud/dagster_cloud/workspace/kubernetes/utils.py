@@ -76,6 +76,7 @@ def construct_repo_location_service(deployment_name, location_name, service_name
 
 
 def construct_repo_location_deployment(
+    instance,
     deployment_name,
     location_name,
     k8s_deployment_name,
@@ -94,7 +95,7 @@ def construct_repo_location_deployment(
     scheduler_name=None,
 ):
     env = merge_dicts(
-        metadata.get_grpc_server_env(SERVICE_PORT),
+        metadata.get_grpc_server_env(SERVICE_PORT, deployment_name, location_name, instance),
         env or {},
     )
     # TODO: enable liveness probes

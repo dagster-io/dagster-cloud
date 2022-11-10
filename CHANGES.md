@@ -1,5 +1,13 @@
 # Dagster Cloud Changelog
 
+# 1.0.17
+
+### Documentation
+
+- Added documentation for [using environment variables](https://docs.dagster.io/dagster-cloud/developing-testing/environment-variables-and-secrets) in Dagster Cloud.
+- Added a [configuration reference for the Docker agent](https://docs.dagster.io/dagster-cloud/deployment/agents/docker/configuration-reference).
+- Added example configuration for environment variables and secrets to the [Kubernetes](https://docs.dagster.io/dagster-cloud/deployment/agents/kubernetes/configuration-reference#environment-variables-and-secrets) and [Amazon ECS](https://docs.dagster.io/dagster-cloud/deployment/agents/amazon-ecs/configuration-reference#environment-variables-and-secrets) agent configuration references.
+
 # 1.0.16
 
 ### New
