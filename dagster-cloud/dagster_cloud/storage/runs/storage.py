@@ -1,5 +1,5 @@
 import json
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set, Tuple, Union
 
 import dagster._check as check
 from dagster._core.errors import (
@@ -296,13 +296,13 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             for run_tag in res["data"]["runs"]["getRunTags"]
         ]
 
-    def add_run_tags(self, run_id: str, new_tags: Dict[str, str]):
+    def add_run_tags(self, run_id: str, new_tags: Mapping[str, str]):
         self._execute_query(
             ADD_RUN_TAGS_MUTATION,
             variables={
                 "runId": check.str_param(run_id, "run_id"),
                 "jsonNewTags": json.dumps(
-                    check.dict_param(new_tags, "new_tags", key_type=str, value_type=str)
+                    check.mapping_param(new_tags, "new_tags", key_type=str, value_type=str)
                 ),
             },
         )
@@ -480,7 +480,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def kvs_get(self, keys: Set[str]):
         return NotImplementedError("KVS is not supported from the user cloud")
 
-    def kvs_set(self, pairs: Dict[str, str]):
+    def kvs_set(self, pairs: Mapping[str, str]):
         return NotImplementedError("KVS is not supported from the user cloud")
 
     # Migrating run history

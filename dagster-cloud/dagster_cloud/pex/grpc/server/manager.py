@@ -1,13 +1,16 @@
 import os
+import subprocess
 import threading
 from contextlib import AbstractContextManager
 from typing import Dict, List, NamedTuple, Optional
 
+import dagster._seven as seven
 from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
+from dagster._core.instance import InstanceRef
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
-from dagster._grpc.server import GrpcServerProcess
+from dagster._serdes.ipc import open_ipc_subprocess
+from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from ..types import PexServerHandle
@@ -19,7 +22,7 @@ class PexProcessEntry(
         "_PexProcessEntry",
         [
             ("pex_server_handle", PexServerHandle),
-            ("grpc_server_process", GrpcServerProcess),
+            ("grpc_server_process", subprocess.Popen),
             ("grpc_client", DagsterGrpcClient),
             ("heartbeat_shutdown_event", threading.Event),
             ("heartbeat_thread", threading.Thread),
@@ -29,7 +32,7 @@ class PexProcessEntry(
     def __new__(
         cls,
         pex_server_handle: PexServerHandle,
-        grpc_server_process: GrpcServerProcess,
+        grpc_server_process: subprocess.Popen,
         grpc_client: DagsterGrpcClient,
         heartbeat_shutdown_event: threading.Event,
         heartbeat_thread: threading.Thread,
@@ -37,7 +40,7 @@ class PexProcessEntry(
         return super(PexProcessEntry, cls).__new__(
             cls,
             check.inst_param(pex_server_handle, "pex_server_handle", PexServerHandle),
-            check.inst_param(grpc_server_process, "grpc_server_process", GrpcServerProcess),
+            check.inst_param(grpc_server_process, "grpc_server_process", subprocess.Popen),
             check.inst_param(grpc_client, "grpc_client", DagsterGrpcClient),
             check.inst_param(heartbeat_shutdown_event, "heartbeat_shutdown_event", threading.Event),
             check.inst_param(heartbeat_thread, "heartbeat_thread", threading.Thread),
@@ -76,6 +79,7 @@ class MultiPexManager(AbstractContextManager):
         self,
         server_handle: PexServerHandle,
         code_deployment_metadata: CodeDeploymentMetadata,
+        instance_ref: Optional[InstanceRef],
     ):
         print(
             f"Creating new pex server for {server_handle.deployment_name}:{server_handle.location_name}"
@@ -87,27 +91,43 @@ class MultiPexManager(AbstractContextManager):
 
         metadata = code_deployment_metadata
 
-        loadable_target_origin = LoadableTargetOrigin(
-            executable_path=pex_executable.source_path,
-            python_file=metadata.python_file,
-            package_name=metadata.package_name,
-            module_name=metadata.module_name,
-            working_directory=metadata.working_directory,
-            attribute=metadata.attribute,
+        subprocess_args = [
+            pex_executable.source_path,
+            "-m",
+            "dagster",
+            "api",
+            "grpc",
+            "--heartbeat",
+            "--heartbeat-timeout",
+            str(self._heartbeat_ttl),
+        ]
+
+        if seven.IS_WINDOWS:
+            port = find_free_port()
+            socket = None
+        else:
+            port = None
+            socket = safe_tempfile_path_unmanaged()
+
+        additional_env = metadata.get_grpc_server_env(
+            port=port,
+            location_name=server_handle.location_name,
+            instance_ref=instance_ref,
+            socket=socket,
         )
 
-        server_process = GrpcServerProcess(
-            loadable_target_origin=loadable_target_origin,
-            heartbeat=True,
-            heartbeat_timeout=self._heartbeat_ttl,
-            startup_timeout=0,  # don't wait for startup, agent will poll for status
-            log_level="INFO",
-            env={**os.environ.copy(), **pex_executable.environ},
+        server_process = open_ipc_subprocess(
+            subprocess_args,
+            env={
+                **os.environ.copy(),
+                **pex_executable.environ,
+                **additional_env,
+            },
         )
 
         client = DagsterGrpcClient(
-            port=server_process.port,
-            socket=server_process.socket,
+            port=port,
+            socket=socket,
             host="localhost",
             use_ssl=False,
         )
@@ -159,4 +179,5 @@ class MultiPexManager(AbstractContextManager):
             except DagsterUserCodeUnreachableError:
                 # Server already shutdown
                 pass
-            pex_server.grpc_server_process.wait()
+            if pex_server.grpc_server_process.poll() is None:
+                pex_server.grpc_server_process.communicate(timeout=30)

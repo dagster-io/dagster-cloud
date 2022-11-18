@@ -213,7 +213,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         else:
             command = metadata.get_grpc_server_command()
             additional_env = metadata.get_grpc_server_env(
-                port, deployment_name, location_name, self._instance
+                port, location_name, self._instance.ref_for_deployment(deployment_name)
             )
             tags = {"dagster/grpc_server": "1"}
 

@@ -1,6 +1,7 @@
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 import dagster._check as check
+from dagster._core.instance.ref import InstanceRef
 from dagster._serdes import create_snapshot_id, whitelist_for_serdes
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
@@ -38,10 +39,24 @@ class CreatePexServerArgs(
         [
             ("server_handle", PexServerHandle),
             ("code_deployment_metadata", CodeDeploymentMetadata),
+            ("instance_ref", Optional[InstanceRef]),
         ],
     )
 ):
-    pass
+    def __new__(
+        cls,
+        server_handle: PexServerHandle,
+        code_deployment_metadata: CodeDeploymentMetadata,
+        instance_ref: Optional[InstanceRef] = None,
+    ):
+        return super(CreatePexServerArgs, cls).__new__(
+            cls,
+            check.inst_param(server_handle, "server_handle", PexServerHandle),
+            check.inst_param(
+                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+            ),
+            check.opt_inst_param(instance_ref, "instance_ref", InstanceRef),
+        )
 
 
 @whitelist_for_serdes

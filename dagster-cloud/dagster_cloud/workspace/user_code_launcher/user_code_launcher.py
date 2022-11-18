@@ -1265,6 +1265,7 @@ class DagsterCloudUserCodeLauncher(
                     metadata_update_timestamp=int(desired_entry.update_timestamp),
                 ),
                 code_deployment_metadata=desired_entry.code_deployment_metadata,
+                instance_ref=self._instance.ref_for_deployment(deployment_name),
             )
         )
 

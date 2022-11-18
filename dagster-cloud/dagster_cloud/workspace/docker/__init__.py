@@ -256,7 +256,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         else:
             command = metadata.get_grpc_server_command()
             environment = metadata.get_grpc_server_env(
-                grpc_port, deployment_name, location_name, self._instance
+                grpc_port, location_name, self._instance.ref_for_deployment(deployment_name)
             )
             labels = [
                 GRPC_SERVER_LABEL,

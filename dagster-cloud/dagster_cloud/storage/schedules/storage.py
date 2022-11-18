@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional, Sequence
 
 import dagster._check as check
 from dagster._core.definitions.run_request import InstigatorType
@@ -129,7 +129,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         before: Optional[float] = None,
         after: Optional[float] = None,
         limit: Optional[int] = None,
-        statuses: Optional[List[TickStatus]] = None,
+        statuses: Optional[Sequence[TickStatus]] = None,
     ) -> Iterable[InstigatorTick]:
         statuses = [status.value for status in statuses] if statuses else None
         res = self._execute_query(
@@ -178,7 +178,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         origin_id: str,
         selector_id: str,
         before: float,
-        tick_statuses: Optional[List[TickStatus]] = None,
+        tick_statuses: Optional[Sequence[TickStatus]] = None,
     ):
         raise NotImplementedError("Not callable from user cloud")
 

@@ -1,13 +1,13 @@
 import os
 import sys
-from typing import List
+from typing import Sequence
 
 from dagster._serdes.ipc import interrupt_ipc_subprocess_pid, open_ipc_subprocess
 
 from . import TaskStatus
 
 
-def launch_process(args: List[str]) -> int:
+def launch_process(args: Sequence[str]) -> int:
     """
     Launch a process and return the PID
     """

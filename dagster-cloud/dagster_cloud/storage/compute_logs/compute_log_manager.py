@@ -1,22 +1,22 @@
-from contextlib import contextmanager
+from typing import Any, Dict, Optional, Sequence
 
 import dagster._seven as _seven
 import requests
 from dagster import Field, StringSource
 from dagster import _check as check
-from dagster._core.storage.compute_log_manager import (
-    MAX_BYTES_FILE_READ,
-    ComputeIOType,
-    ComputeLogManager,
+from dagster._core.storage.cloud_storage_compute_log_manager import CloudStorageComputeLogManager
+from dagster._core.storage.compute_log_manager import ComputeIOType
+from dagster._core.storage.local_compute_log_manager import (
+    IO_TYPE_EXTENSION,
+    LocalComputeLogManager,
 )
-from dagster._core.storage.local_compute_log_manager import LocalComputeLogManager
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils import ensure_file
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 
 
-class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
+class CloudComputeLogManager(CloudStorageComputeLogManager, ConfigurableClass):
     def __init__(
         self,
         local_dir=None,
@@ -27,7 +27,7 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
         if not local_dir:
             local_dir = _seven.get_system_temp_directory()
 
-        self.local_manager = LocalComputeLogManager(local_dir)
+        self._local_manager = LocalComputeLogManager(local_dir)
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
 
     @property
@@ -44,45 +44,60 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
     def from_config_value(inst_data, config_value):
         return CloudComputeLogManager(inst_data=inst_data, **config_value)
 
-    @contextmanager
-    def _watch_logs(self, pipeline_run, step_key=None):
-        # proxy watching to the local compute log manager, interacting with the filesystem
-        with self.local_manager._watch_logs(  # pylint: disable=protected-access
-            pipeline_run, step_key
-        ):
-            yield
+    @property
+    def local_manager(self) -> LocalComputeLogManager:
+        return self._local_manager
 
-    def get_local_path(self, run_id, key, io_type):
-        return self.local_manager.get_local_path(run_id, key, io_type)
+    @property
+    def upload_interval(self) -> Optional[int]:
+        return None
 
-    def on_watch_start(self, pipeline_run, step_key):
-        self.local_manager.on_watch_start(pipeline_run, step_key)
+    def delete_logs(
+        self, log_key: Optional[Sequence[str]] = None, prefix: Optional[Sequence[str]] = None
+    ):
+        raise NotImplementedError("User Agent should not need to delete compute logs")
 
-    def is_watch_completed(self, run_id, key):
-        return self.local_manager.is_watch_completed(run_id, key)
+    def download_url_for_type(self, log_key: Sequence[str], io_type: ComputeIOType):
+        raise NotImplementedError("User Agent should not need to download compute logs")
 
-    def on_watch_finish(self, pipeline_run, step_key):
-        self.local_manager.on_watch_finish(pipeline_run, step_key)
-        key = self.local_manager.get_key(pipeline_run, step_key)
-        self._upload_from_local(pipeline_run.run_id, key, ComputeIOType.STDOUT)
-        self._upload_from_local(pipeline_run.run_id, key, ComputeIOType.STDERR)
+    def display_path_for_type(self, log_key: Sequence[str], io_type: ComputeIOType):
+        raise NotImplementedError("User Agent should not need to download compute logs")
 
-    def _upload_from_local(self, run_id, key, io_type):
-        path = self.get_local_path(run_id, key, io_type)
+    def cloud_storage_has_logs(
+        self, log_key: Sequence[str], io_type: ComputeIOType, partial: bool = False
+    ) -> bool:
+        """
+        Returns whether the cloud storage contains logs for a given log key
+        """
+
+    def upload_to_cloud_storage(
+        self, log_key: Sequence[str], io_type: ComputeIOType, partial=False
+    ):
+        path = self.local_manager.get_captured_local_path(
+            log_key, IO_TYPE_EXTENSION[io_type], partial=partial
+        )
         ensure_file(path)
+        params: Dict[str, Any] = {
+            "log_key": log_key,
+            "io_type": io_type.value,
+            # for back-compat
+            "run_id": log_key[0],
+            "key": log_key[-1],
+        }
+        if partial:
+            params["partial"] = True
         resp = self._instance.requests_session.post(
             self._instance.dagster_cloud_gen_logs_url_url,
+            params=params,
             headers=self._instance.dagster_cloud_api_headers(DagsterCloudInstanceScope.DEPLOYMENT),
-            params={
-                "run_id": run_id,
-                "key": key,
-                "io_type": io_type.value,
-            },
             timeout=self._instance.dagster_cloud_api_timeout,
             proxies=self._instance.dagster_cloud_api_proxies,
         )
         raise_http_error(resp)
         resp_data = resp.json()
+
+        if resp_data.get("skip_upload"):
+            return
 
         with open(path, "rb") as f:
             requests.post(
@@ -91,10 +106,9 @@ class CloudComputeLogManager(ComputeLogManager, ConfigurableClass):
                 files={"file": f},
             )
 
-    def download_url(self, run_id, key, io_type):
-        raise NotImplementedError("User Agent should not need to download compute logs")
-
-    def read_logs_file(self, run_id, key, io_type, cursor=0, max_bytes=MAX_BYTES_FILE_READ):
+    def download_from_cloud_storage(
+        self, log_key: Sequence[str], io_type: ComputeIOType, partial=False
+    ):
         raise NotImplementedError("User Agent should not need to download compute logs")
 
     def on_subscribe(self, subscription):

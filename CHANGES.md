@@ -1,5 +1,21 @@
 # Dagster Cloud Changelog
 
+# 1.1.1
+
+### New
+
+- A new “Environment Variables” section in the Deployment tab allows you to set environment variables that will be included whenever your Dagster code runs. See [the docs](https://docs.dagster.io/dagster-cloud/developing-testing/environment-variables-and-secrets) for more information. In order for environment variables to be included, your code must be using dagster version 1.0.17 or higher, and if you’re using a Hybrid agent, it must also be at dagster version 1.0.17 or higher.
+
+### Bugfixes
+
+- Fixed an issue where stack traces from errors that occurred within user code were sometimes not displayed in Dagit.
+- Fixed an issue where failure during automatic retries before run creation would result in alerts not being sent. Now, if a failure occurs during the automatic retry of a run before the next run has been created, a specific alert will be sent.
+
+### Documentation
+
+- Updated [Environment variables and secrets documentation](https://docs.dagster.io/dagster-cloud/developing-testing/environment-variables-and-secrets) to include info about using the new “Environment Variables” section in the Deployment tab
+- Added a dedicated guide for [setting environment variables using a Hybrid agent’s configuration](https://docs.dagster.io/dagster-cloud/developing-testing/setting-environment-variables-dagster-cloud-agents)
+
 # 1.0.17
 
 ### Documentation

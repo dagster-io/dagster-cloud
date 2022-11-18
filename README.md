@@ -1,22 +1,24 @@
 <p align="center">
-  <a target="_blank" href="https://dagster.io/cloud">
+  <a target="_blank" href="https://dagster.io/cloud" style="background:none">
     <img src="https://github.com/dagster-io/dagster-cloud/raw/main/assets/dagster-cloud-logo.png" width="auto"/>
   </a>
   <br /><br />
-  <a target="_blank" href="https://twitter.com/dagster">
+  <a target="_blank" href="https://twitter.com/dagster" style="background:none">
     <img src="https://img.shields.io/twitter/follow/dagster?labelColor=4F43DD&color=163B36&logo=twitter&style=flat">
   </a>
-  <a target="_blank" href="https://dagster.io/slack">
-    <img src="https://dagster-slackin.herokuapp.com/badge.svg?bg=163B36">
+  <a target="_blank" href="https://dagster.io/slack" style="background:none">
+    <img src="https://img.shields.io/badge/slack-dagster-blue.svg?labelColor=4F43DD&color=163B36&logo=slack" />
   </a>
-  <a target="_blank" href="https://github.com/dagster-io/dagster">
+  <a target="_blank" href="https://github.com/dagster-io/dagster" style="background:none">
     <img src="https://img.shields.io/github/stars/dagster-io/dagster?labelColor=4F43DD&color=163B36&logo=github">
   </a>
   <br />
-  <a target="_blank" href="https://pypi.org/project/dagster-cloud/">
+  <a target="_blank" href="https://pypi.org/project/dagster-cloud/" style="background:none">
     <img src="https://img.shields.io/pypi/v/dagster-cloud?labelColor=4F43DD&color=163B36">
   </a>
-  <img src="https://img.shields.io/pypi/pyversions/dagster-cloud?labelColor=4F43DD&color=163B36">
+  <a target="_blank" href="https://pypi.org/project/dagster-cloud/" style="background:none">
+    <img src="https://img.shields.io/pypi/pyversions/dagster-cloud?labelColor=4F43DD&color=163B36">
+  </a>
 </p>
 
 # Dagster Cloud

@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import sys
 import threading
 from collections import defaultdict
@@ -9,9 +10,7 @@ import dagster._seven as seven
 from dagster import BoolSource, Field, IntSource
 from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
-from dagster._grpc.server import GrpcServerProcess
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, merge_dicts, safe_tempfile_path_unmanaged
@@ -34,7 +33,7 @@ class ProcessUserCodeEntry(
     NamedTuple(
         "_ProcessUserCodeEntry",
         [
-            ("grpc_server_process", GrpcServerProcess),
+            ("grpc_server_process", subprocess.Popen),
             ("grpc_client", DagsterGrpcClient),
             ("heartbeat_shutdown_event", threading.Event),
             ("heartbeat_thread", threading.Thread),
@@ -43,63 +42,37 @@ class ProcessUserCodeEntry(
 ):
     def __new__(
         cls,
-        grpc_server_process: GrpcServerProcess,
+        grpc_server_process: subprocess.Popen,
         grpc_client: DagsterGrpcClient,
         heartbeat_shutdown_event: threading.Event,
         heartbeat_thread: threading.Thread,
     ):
         return super(ProcessUserCodeEntry, cls).__new__(
             cls,
-            check.inst_param(grpc_server_process, "grpc_server_process", GrpcServerProcess),
+            check.inst_param(grpc_server_process, "grpc_server_process", subprocess.Popen),
             check.inst_param(grpc_client, "grpc_client", DagsterGrpcClient),
             check.inst_param(heartbeat_shutdown_event, "heartbeat_shutdown_event", threading.Event),
             check.inst_param(heartbeat_thread, "heartbeat_thread", threading.Thread),
         )
 
 
-class MultipexServerProcess:
-    def __init__(
-        self,
-        metadata: CodeDeploymentMetadata,
-    ):
-        self.port = None
-        self.socket = None
-
-        if seven.IS_WINDOWS:
-            self.port = find_free_port()
-        else:
-            self.socket = safe_tempfile_path_unmanaged()
-
-        self.server_process = open_ipc_subprocess(
-            metadata.get_multipex_server_command(self.port, self.socket)
-        )
-
-    @property
-    def pid(self):
-        return self.server_process.pid
-
-    def wait(self, timeout=30):
-        if self.server_process.poll() is None:
-            seven.wait_for_process(self.server_process, timeout=timeout)
-
-
 class MultipexUserCodeEntry(
     NamedTuple(
         "_MultipexUserCodeEntry",
         [
-            ("grpc_server_process", MultipexServerProcess),
+            ("grpc_server_process", subprocess.Popen),
             ("grpc_client", MultiPexGrpcClient),
         ],
     )
 ):
     def __new__(
         cls,
-        grpc_server_process: MultipexServerProcess,
+        grpc_server_process: subprocess.Popen,
         grpc_client: MultiPexGrpcClient,
     ):
         return super(MultipexUserCodeEntry, cls).__new__(
             cls,
-            check.inst_param(grpc_server_process, "grpc_server_process", MultipexServerProcess),
+            check.inst_param(grpc_server_process, "grpc_server_process", subprocess.Popen),
             check.inst_param(grpc_client, "grpc_client", MultiPexGrpcClient),
         )
 
@@ -208,41 +181,58 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         key = (deployment_name, location_name)
 
-        server_process: Union[MultipexServerProcess, GrpcServerProcess]
         client: Union[MultiPexGrpcClient, DagsterGrpcClient]
 
+        port: Optional[int] = None
+        socket: Optional[str] = None
+
+        if seven.IS_WINDOWS:
+            port = find_free_port()
+            socket = None
+        else:
+            port = None
+            socket = safe_tempfile_path_unmanaged()
+
         if metadata.pex_metadata:
-            server_process = MultipexServerProcess(metadata)
-            client = MultiPexGrpcClient(port=server_process.port, socket=server_process.socket)
+            multipex_process = open_ipc_subprocess(
+                metadata.get_multipex_server_command(port, socket)
+            )
 
-            pid = server_process.pid
+            pid = multipex_process.pid
 
-            self._process_entries[server_process.pid] = MultipexUserCodeEntry(
-                server_process,
+            client = MultiPexGrpcClient(port=port, socket=socket)
+
+            self._process_entries[pid] = MultipexUserCodeEntry(
+                multipex_process,
                 client,
             )
 
             self._active_multipex_pids[key].add(pid)
-
         else:
-            loadable_target_origin = self._get_loadable_target_origin(metadata)
-            server_process = GrpcServerProcess(
-                loadable_target_origin=loadable_target_origin,
-                heartbeat=True,
-                heartbeat_timeout=self._heartbeat_ttl,
-                startup_timeout=self._server_process_startup_timeout,
+
+            subprocess_args = metadata.get_grpc_server_command() + [
+                "--heartbeat",
+                "--heartbeat-timeout",
+                str(self._heartbeat_ttl),
+            ]
+
+            additional_env = metadata.get_grpc_server_env(
+                port=port,
+                location_name=location_name,
+                instance_ref=self._instance.ref_for_deployment(deployment_name),
+                socket=socket,
+            )
+
+            server_process = open_ipc_subprocess(
+                subprocess_args,
                 env={
-                    **os.environ,
-                    **metadata.get_grpc_inject_env_vars_cli_env(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                        instance=self._instance,
-                    ),
+                    **os.environ.copy(),
+                    **additional_env,
                 },
             )
             client = DagsterGrpcClient(
-                port=server_process.port,
-                socket=server_process.socket,
+                port=port,
+                socket=socket,
                 host="localhost",
                 use_ssl=False,
             )
@@ -268,8 +258,8 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         endpoint = ServerEndpoint(
             host="localhost",
-            port=server_process.port,
-            socket=server_process.socket,
+            port=port,
+            socket=socket,
         )
 
         return DagsterCloudGrpcServer(pid, endpoint, metadata)
@@ -285,16 +275,6 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         self._wait_for_dagster_server_process(
             client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
-        )
-
-    def _get_loadable_target_origin(self, metadata: CodeDeploymentMetadata) -> LoadableTargetOrigin:
-        return LoadableTargetOrigin(
-            executable_path=metadata.executable_path if metadata.executable_path else "",
-            python_file=metadata.python_file,
-            package_name=metadata.package_name,
-            module_name=metadata.module_name,
-            working_directory=metadata.working_directory,
-            attribute=metadata.attribute,
         )
 
     def _get_standalone_dagster_server_handles_for_location(
@@ -321,7 +301,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             else:
                 # multi-pex server processes don't yet have heartbeats, so just terminate
                 # the multipex server process directly.
-                process_entry.grpc_server_process.server_process.terminate()
+                process_entry.grpc_server_process.terminate()
 
             del self._process_entries[pid]
 
@@ -355,8 +335,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                         # Server already shutdown
                         pass
                 else:
-                    process_entry.grpc_server_process.server_process.terminate()
-                process_entry.grpc_server_process.wait()
+                    process_entry.grpc_server_process.terminate()
+
+                if process_entry.grpc_server_process.poll() is None:
+                    process_entry.grpc_server_process.communicate(timeout=30)
 
     def __exit__(self, exception_type, exception_value, traceback):
         super().__exit__(exception_value, exception_value, traceback)

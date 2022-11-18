@@ -95,7 +95,9 @@ def construct_repo_location_deployment(
     scheduler_name=None,
 ):
     env = merge_dicts(
-        metadata.get_grpc_server_env(SERVICE_PORT, deployment_name, location_name, instance),
+        metadata.get_grpc_server_env(
+            SERVICE_PORT, location_name, instance.ref_for_deployment(deployment_name)
+        ),
         env or {},
     )
     # TODO: enable liveness probes
