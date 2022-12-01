@@ -4,7 +4,7 @@ import subprocess
 import sys
 import threading
 from collections import defaultdict
-from typing import Collection, Dict, NamedTuple, Optional, Set, Tuple, Union
+from typing import Any, Collection, Dict, Mapping, NamedTuple, Optional, Set, Tuple, Union
 
 import dagster._seven as seven
 from dagster import BoolSource, Field, IntSource
@@ -149,7 +149,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         return self._inst_data
 
     @classmethod
-    def config_type(cls) -> Dict:
+    def config_type(cls) -> Dict:  # type: ignore
         return merge_dicts(
             {
                 "server_process_startup_timeout": Field(
@@ -171,7 +171,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
     @staticmethod
     def from_config_value(
-        inst_data: ConfigurableClassData, config_value: Dict
+        inst_data: ConfigurableClassData, config_value: Mapping[str, Any]
     ) -> "ProcessUserCodeLauncher":
         return ProcessUserCodeLauncher(inst_data=inst_data, **config_value)
 

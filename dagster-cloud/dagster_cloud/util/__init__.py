@@ -62,3 +62,13 @@ def get_env_names_from_config(
                 env_vars.append(env_name)
 
     return env_vars
+
+
+NON_ISOLATED_RUN_TAG_PAIR = ("dagster/isolation", "disabled")
+
+
+def is_isolated_run(run):
+    return run.tags.get(NON_ISOLATED_RUN_TAG_PAIR[0]) != NON_ISOLATED_RUN_TAG_PAIR[1]
+
+
+SERVER_HANDLE_TAG = ".dagster/server_handle"

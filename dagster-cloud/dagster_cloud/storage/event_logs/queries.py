@@ -255,9 +255,9 @@ GET_MATERIALIZATION_COUNT_BY_PARTITION = """
     """
 
 GET_EVENT_TAGS_FOR_ASSET = """
-query getAssetEventTags($assetKey: String!, $filterTags: [AssetFilterTagInput!]) {
+query getAssetEventTags($assetKey: String!, $filterTags: [AssetFilterTagInput!], $filterEventId: Int) {
     eventLogs {
-        getAssetEventTags(assetKey: $assetKey, filterTags: $filterTags) {
+        getAssetEventTags(assetKey: $assetKey, filterTags: $filterTags, filterEventId: $filterEventId) {
             ... on AssetEventTags {
                 tags {
                     key

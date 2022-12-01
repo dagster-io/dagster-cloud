@@ -129,7 +129,9 @@ def _get_bucket_input(bucket_by: Optional[Union[JobBucket, TagBucket]]) -> Optio
 
 
 class GraphQLRunStorage(RunStorage, ConfigurableClass):
-    def __init__(self, inst_data: ConfigurableClassData = None, override_graphql_client=None):
+    def __init__(
+        self, inst_data: Optional[ConfigurableClassData] = None, override_graphql_client=None
+    ):
         """Initialize this class directly only for test (using `override_graphql_client`).
         Use the ConfigurableClass machinery to init from instance yaml."""
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
@@ -194,9 +196,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_runs(
         self,
-        filters: PipelineRunsFilter = None,
-        cursor: str = None,
-        limit: int = None,
+        filters: Optional[PipelineRunsFilter] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
         bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
     ) -> Iterable[PipelineRun]:
         res = self._execute_query(
@@ -210,7 +212,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return [deserialize_as(run, PipelineRun) for run in res["data"]["runs"]["getRuns"]]
 
-    def get_runs_count(self, filters: PipelineRunsFilter = None) -> int:
+    def get_runs_count(self, filters: Optional[PipelineRunsFilter] = None) -> int:
         res = self._execute_query(
             GET_RUNS_COUNT_QUERY,
             variables={
@@ -237,7 +239,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             )
 
     def get_run_groups(
-        self, filters: PipelineRunsFilter = None, cursor: str = None, limit: int = None
+        self,
+        filters: Optional[PipelineRunsFilter] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> Dict[str, Dict[str, Union[Iterable[PipelineRun], int]]]:
         res = self._execute_query(
             GET_RUN_GROUPS_QUERY,
@@ -269,11 +274,11 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_run_records(
         self,
-        filters: PipelineRunsFilter = None,
-        limit: int = None,
-        order_by: str = None,
+        filters: Optional[PipelineRunsFilter] = None,
+        limit: Optional[int] = None,
+        order_by: Optional[str] = None,
         ascending: bool = False,
-        cursor: str = None,
+        cursor: Optional[str] = None,
         bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
     ) -> List[RunRecord]:
         res = self._execute_query(
@@ -435,7 +440,12 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def has_bulk_actions_table(self) -> bool:
         return False
 
-    def get_backfills(self, status: BulkActionStatus = None, cursor: str = None, limit: int = None):
+    def get_backfills(
+        self,
+        status: Optional[BulkActionStatus] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ):
         """Get a list of partition backfills"""
         res = self._execute_query(
             GET_BACKFILLS_QUERY,

@@ -41,6 +41,9 @@ class K8sHandle(NamedTuple):
     namespace: str
     name: str
 
+    def __str__(self):
+        return f"{self.namespace}/{self.name}"
+
 
 class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableClass):
     def __init__(

@@ -75,6 +75,10 @@ class MultiPexManager(AbstractContextManager):
                 and server.pex_server_handle.location_name == location_name
             ]
 
+    def get_all_pex_grpc_clients(self) -> List[DagsterGrpcClient]:
+        with self._pex_servers_lock:
+            return [server.grpc_client for server in self._pex_servers.values()]
+
     def create_pex_server(
         self,
         server_handle: PexServerHandle,

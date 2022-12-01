@@ -35,7 +35,7 @@ from dagster._core.host_representation.origin import (
 from dagster._core.instance import MayHaveInstanceWeakref
 from dagster._core.launcher import RunLauncher
 from dagster._grpc.client import DagsterGrpcClient
-from dagster._grpc.types import GetCurrentImageResult
+from dagster._grpc.types import GetCurrentImageResult, GetCurrentRunsResult
 from dagster._serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
 from dagster._utils import merge_dicts
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
@@ -68,7 +68,10 @@ DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25
 
 
-USER_CODE_LAUNCHER_RECONCILE_INTERVAL = 1
+USER_CODE_LAUNCHER_RECONCILE_SLEEP_SECONDS = 1
+
+# Check on pending delete servers every 30th reconcile
+PENDING_DELETE_SERVER_CHECK_INTERVAL = 30
 
 ServerHandle = TypeVar("ServerHandle")
 
@@ -260,6 +263,7 @@ class DagsterCloudUserCodeLauncher(
         self._grpc_servers: Dict[
             DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
         ] = {}
+        self._pending_delete_grpc_server_handles: Set[ServerHandle] = set()
         self._grpc_servers_lock = threading.Lock()
 
         self._multipex_servers: Dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
@@ -293,6 +297,14 @@ class DagsterCloudUserCodeLauncher(
         )
 
         super().__init__()
+
+    def get_active_grpc_server_handles(self) -> List[ServerHandle]:
+        with self._grpc_servers_lock:
+            return [
+                s.server_handle
+                for s in self._grpc_servers.values()
+                if not isinstance(s, SerializableErrorInfo)
+            ] + list(self._pending_delete_grpc_server_handles)
 
     @property
     def server_ttl_enabled_for_full_deployments(self) -> bool:
@@ -332,7 +344,7 @@ class DagsterCloudUserCodeLauncher(
         # Begin spinning user code up and down
         self._started = True
 
-        if self._instance.run_launcher.supports_check_run_worker_health and (
+        if self._instance.user_code_launcher.run_launcher().supports_check_run_worker_health and (
             self._instance.deployment_names or self._instance.include_all_serverless_deployments
         ):
             self._logger.debug("Starting run worker monitoring.")
@@ -350,7 +362,7 @@ class DagsterCloudUserCodeLauncher(
                 "Not starting run worker monitoring, because it's not supported on this agent."
             )
 
-        self._cleanup_servers()
+        self._graceful_cleanup_servers()
 
         if run_reconcile_thread:
             self._reconcile_grpc_metadata_thread = threading.Thread(
@@ -711,9 +723,62 @@ class DagsterCloudUserCodeLauncher(
         """Shut down any resources associated with the given handle. Called both during updates
         to spin down the old server once a new server has been spun up, and during removal."""
 
+    @property
+    def _supports_graceful_remove(self) -> bool:
+        return False
+
+    def _get_grpc_client(self, server_handle: ServerHandle) -> DagsterGrpcClient:
+        raise NotImplementedError()
+
+    def _graceful_remove_server_handle(self, server_handle: ServerHandle):
+        """Check if there are non isolated runs and wait for them to finish before shutting down
+        the server."""
+
+        if not self._supports_graceful_remove:
+            return self._remove_server_handle(server_handle)
+
+        run_ids = None
+        try:
+            client = self._get_grpc_client(server_handle)
+            run_ids = deserialize_as(client.get_current_runs(), GetCurrentRunsResult).current_runs
+        except Exception:
+            self._logger.error(
+                "Failure connecting to server with handle {server_handle}, going to shut it down: {exc_info}".format(
+                    server_handle=server_handle,
+                    exc_info=serializable_error_info_from_exc_info(sys.exc_info()),
+                )
+            )
+
+        if run_ids:
+            self._logger.info(
+                f"Waiting for run_ids [{', '.join(run_ids)}] to finish before shutting down server {server_handle}"
+            )
+            with self._grpc_servers_lock:
+                self._pending_delete_grpc_server_handles.add(server_handle)
+        else:
+            if run_ids == []:  # If it's None, the grpc call failed
+                self._logger.info(f"No runs, shutting down server {server_handle}")
+            self._remove_server_handle(server_handle)
+            with self._grpc_servers_lock:
+                self._pending_delete_grpc_server_handles.discard(server_handle)
+
     @abstractmethod
     def _cleanup_servers(self):
         """Remove all servers, across all deployments and locations."""
+
+    def _list_server_handles(self) -> List[ServerHandle]:
+        """Return a list of all server handles across all deployments and locations."""
+        raise NotImplementedError()
+
+    def _graceful_cleanup_servers(self):  # ServerHandles
+        if not self._supports_graceful_remove:
+            return self._cleanup_servers()
+
+        handles = self._list_server_handles()
+        with self._grpc_servers_lock:
+            self._pending_delete_grpc_server_handles.update(handles)
+        for server_handle in handles:
+            self._graceful_remove_server_handle(server_handle)
 
     @abstractmethod
     def run_launcher(self) -> RunLauncher:
@@ -729,7 +794,7 @@ class DagsterCloudUserCodeLauncher(
             self._run_worker_monitoring_thread.join()
 
         if self._started:
-            self._cleanup_servers()
+            self._graceful_cleanup_servers()
 
         super().__exit__(exception_value, exception_value, traceback)
 
@@ -765,9 +830,13 @@ class DagsterCloudUserCodeLauncher(
     ) -> RegisteredRepositoryLocationOrigin:
         return RegisteredRepositoryLocationOrigin(location_name)
 
+    @property
+    def _reconcile_interval(self):
+        return PENDING_DELETE_SERVER_CHECK_INTERVAL
+
     def _reconcile_thread(self, shutdown_event):
         while True:
-            shutdown_event.wait(USER_CODE_LAUNCHER_RECONCILE_INTERVAL)
+            shutdown_event.wait(USER_CODE_LAUNCHER_RECONCILE_SLEEP_SECONDS)
             if shutdown_event.is_set():
                 break
 
@@ -792,7 +861,11 @@ class DagsterCloudUserCodeLauncher(
             # Wait for the first time the desired metadata is set before reconciling
             return
 
-        self._reconcile(desired_entries, upload_locations)
+        self._reconcile(
+            desired_entries,
+            upload_locations,
+            check_on_pending_delete_servers=self._reconcile_count % self._reconcile_interval == 0,
+        )
         self._reconcile_count += 1
 
     def _check_for_image(self, metadata: CodeDeploymentMetadata):
@@ -835,7 +908,17 @@ class DagsterCloudUserCodeLauncher(
         self,
         desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
         upload_locations: Set[DeploymentAndLocation],
+        check_on_pending_delete_servers: bool,
     ):
+
+        if check_on_pending_delete_servers:
+            with self._grpc_servers_lock:
+                handles = self._pending_delete_grpc_server_handles.copy()
+            if handles:
+                self._logger.info("Checking on pending delete servers")
+            for handle in handles:
+                self._graceful_remove_server_handle(handle)
+
         diff = diff_serializable_namedtuple_map(desired_entries, self._actual_entries)
         has_changes = diff.to_add or diff.to_update or diff.to_remove or upload_locations
 
@@ -1092,7 +1175,7 @@ class DagsterCloudUserCodeLauncher(
 
             for server_handle in server_handles:
                 try:
-                    self._remove_server_handle(server_handle)
+                    self._graceful_remove_server_handle(server_handle)
                 except Exception:
                     self._logger.error(
                         "Error while cleaning up after updating server for {deployment_name}:{location_name}: {error_info}".format(
@@ -1128,7 +1211,7 @@ class DagsterCloudUserCodeLauncher(
                     )
 
                     try:
-                        self._remove_server_handle(multipex_server_handle)
+                        self._graceful_remove_server_handle(multipex_server_handle)
                     except Exception:
                         self._logger.error(
                             "Error while cleaning up old multipex server for {deployment_name}:{location_name}: {error_info}".format(
@@ -1318,10 +1401,31 @@ class DagsterCloudUserCodeLauncher(
         if isinstance(server, SerializableErrorInfo):
             # Consider raising the original exception here instead of a wrapped one
             raise DagsterUserCodeUnreachableError(
-                f"Failure loading server endpoint for {deployment_name}:{location_name}: {server}"
+                f"Failure loading server endpoint for {deployment_name}:{location_name}:\n{server}"
             )
 
         return server.server_endpoint
+
+    def get_grpc_server(
+        self,
+        deployment_name: str,
+        location_name: str,
+    ) -> DagsterCloudGrpcServer:
+        with self._grpc_servers_lock:
+            server = self._grpc_servers.get((deployment_name, location_name))
+
+        if not server:
+            raise DagsterUserCodeUnreachableError(
+                f"No server endpoint exists for {deployment_name}:{location_name}"
+            )
+
+        if isinstance(server, SerializableErrorInfo):
+            # Consider raising the original exception here instead of a wrapped one
+            raise DagsterUserCodeUnreachableError(
+                f"Failure loading server endpoint for {deployment_name}:{location_name}:\n{server}"
+            )
+
+        return server
 
     def get_grpc_server_heartbeats(self) -> Dict[str, List[CloudCodeServerHeartbeat]]:
         endpoint_or_errors = self.get_grpc_endpoints()
@@ -1379,13 +1483,13 @@ class DagsterCloudUserCodeLauncher(
             self._get_standalone_dagster_server_handles_for_location(deployment_name, location_name)
         )
         for server_handle in existing_standalone_dagster_server_handles:
-            self._remove_server_handle(server_handle)
+            self._graceful_remove_server_handle(server_handle)
 
         existing_multipex_server_handles = self._get_multipex_server_handles_for_location(
             deployment_name, location_name
         )
         for server_handle in existing_multipex_server_handles:
-            self._remove_server_handle(server_handle)
+            self._graceful_remove_server_handle(server_handle)
 
     def _wait_for_dagster_server_process(
         self,

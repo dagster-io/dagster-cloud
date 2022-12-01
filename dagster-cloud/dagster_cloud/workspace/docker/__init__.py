@@ -1,7 +1,7 @@
 import logging
 import sys
 import time
-from typing import Any, Collection, Dict, List, Optional, Tuple
+from typing import Any, Collection, Dict, List, NamedTuple, Optional, Tuple
 
 import docker
 from dagster import Field, IntSource
@@ -32,7 +32,21 @@ MULTIPEX_SERVER_LABEL = "dagster_multipex_server"
 IMAGE_PULL_LOG_INTERVAL = 15
 
 
-class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], ConfigurableClass):
+class DagsterDockerContainer(NamedTuple):
+    """
+    We use __str__ on server handles to serialize them to the run tags. Wrap the docker container
+    object so that we can serialize it to a string.
+    """
+
+    container: Container
+
+    def __str__(self):
+        return self.container.id
+
+
+class DockerUserCodeLauncher(
+    DagsterCloudUserCodeLauncher[DagsterDockerContainer], ConfigurableClass
+):
     def __init__(
         self,
         inst_data=None,
@@ -116,29 +130,35 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
         self, deployment_name: str, location_name: str
     ) -> Collection[Container]:
         client = docker.client.from_env()
-        return client.containers.list(
-            all=True,
-            filters={
-                "label": [
-                    GRPC_SERVER_LABEL,
-                    deterministic_label_for_location(deployment_name, location_name),
-                ]
-            },
-        )
+        return [
+            DagsterDockerContainer(container=container)
+            for container in client.containers.list(
+                all=True,
+                filters={
+                    "label": [
+                        GRPC_SERVER_LABEL,
+                        deterministic_label_for_location(deployment_name, location_name),
+                    ]
+                },
+            )
+        ]
 
     def _get_multipex_server_handles_for_location(
         self, deployment_name: str, location_name: str
     ) -> Collection[Container]:
         client = docker.client.from_env()
-        return client.containers.list(
-            all=True,
-            filters={
-                "label": [
-                    MULTIPEX_SERVER_LABEL,
-                    deterministic_label_for_location(deployment_name, location_name),
-                ]
-            },
-        )
+        return [
+            DagsterDockerContainer(container=container)
+            for container in client.containers.list(
+                all=True,
+                filters={
+                    "label": [
+                        MULTIPEX_SERVER_LABEL,
+                        deterministic_label_for_location(deployment_name, location_name),
+                    ]
+                },
+            )
+        ]
 
     def _launch_container(
         self,
@@ -263,7 +283,7 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
                 deterministic_label_for_location(deployment_name, location_name),
             ]
 
-        server_handle, server_endpoint = self._launch_container(
+        container, server_endpoint = self._launch_container(
             deployment_name,
             location_name,
             container_name,
@@ -277,14 +297,16 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             labels=labels,
         )
 
-        return DagsterCloudGrpcServer(server_handle, server_endpoint, metadata)
+        return DagsterCloudGrpcServer(
+            DagsterDockerContainer(container=container), server_endpoint, metadata
+        )
 
     def _wait_for_new_server_ready(
         self,
         deployment_name: str,
         location_name: str,
         metadata: CodeDeploymentMetadata,
-        server_handle: Container,
+        server_handle: DagsterDockerContainer,
         server_endpoint: ServerEndpoint,
     ) -> None:
         self._wait_for_dagster_server_process(
@@ -292,8 +314,8 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
             timeout=self._server_process_startup_timeout,
         )
 
-    def _remove_server_handle(self, server_handle: Container) -> None:
-        container = server_handle
+    def _remove_server_handle(self, server_handle: DagsterDockerContainer) -> None:
+        container = server_handle.container
         try:
             container.stop()
         except Exception:
@@ -311,11 +333,11 @@ class DockerUserCodeLauncher(DagsterCloudUserCodeLauncher[Container], Configurab
 
         containers = client.containers.list(all=True, filters={"label": GRPC_SERVER_LABEL})
         for container in containers:
-            self._remove_server_handle(container)
+            self._remove_server_handle(DagsterDockerContainer(container=container))
 
         containers = client.containers.list(all=True, filters={"label": MULTIPEX_SERVER_LABEL})
         for container in containers:
-            self._remove_server_handle(container)
+            self._remove_server_handle(DagsterDockerContainer(container=container))
 
     def run_launcher(self):
         launcher = DockerRunLauncher(

@@ -27,6 +27,7 @@ from .utils import get_task_definition_family
 EcsServerHandleType = Service
 
 CONTAINER_NAME = "dagster"
+PORT = 4000
 
 
 class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], ConfigurableClass):
@@ -37,8 +38,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         execution_role_arn: str,
         log_group: str,
         service_discovery_namespace_id: str,
-        task_role_arn: str = None,
-        security_group_ids: List[str] = None,
+        task_role_arn: Optional[str] = None,
+        security_group_ids: Optional[List[str]] = None,
         inst_data: Optional[ConfigurableClassData] = None,
         secrets=None,
         secrets_tag=None,
@@ -184,7 +185,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
     @staticmethod
-    def from_config_value(inst_data: ConfigurableClassData, config_value: Dict[str, Any]):
+    def from_config_value(inst_data: ConfigurableClassData, config_value: Dict[str, Any]):  # type: ignore
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property
@@ -204,16 +205,14 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
 
-        port = 4000
-
         if metadata.pex_metadata:
-            command = metadata.get_multipex_server_command(port)
+            command = metadata.get_multipex_server_command(PORT)
             additional_env = metadata.get_multipex_server_env()
             tags = {"dagster/multipex_server": "1"}
         else:
             command = metadata.get_grpc_server_command()
             additional_env = metadata.get_grpc_server_env(
-                port, location_name, self._instance.ref_for_deployment(deployment_name)
+                PORT, location_name, self._instance.ref_for_deployment(deployment_name)
             )
             tags = {"dagster/grpc_server": "1"}
 
@@ -269,7 +268,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         endpoint = ServerEndpoint(
             host=service.hostname,
-            port=port,
+            port=PORT,
             socket=None,
         )
 

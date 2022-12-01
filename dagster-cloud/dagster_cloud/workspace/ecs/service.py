@@ -10,6 +10,12 @@ class Service:
     def __eq__(self, other):
         return isinstance(other, self.__class__) and self.arn == other.arn
 
+    def __hash__(self) -> int:
+        return hash(self.arn)
+
+    def __str__(self) -> str:
+        return self.arn
+
     @property
     def hostname(self):
         hostname = f"{self.name}.{self.client.namespace}"

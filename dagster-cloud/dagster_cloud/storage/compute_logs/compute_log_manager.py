@@ -14,6 +14,7 @@ from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils import ensure_file
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
+from requests.adapters import HTTPAdapter
 
 
 class CloudComputeLogManager(CloudStorageComputeLogManager, ConfigurableClass):
@@ -26,6 +27,11 @@ class CloudComputeLogManager(CloudStorageComputeLogManager, ConfigurableClass):
         # proxy calls to local compute log manager (for subscriptions, etc)
         if not local_dir:
             local_dir = _seven.get_system_temp_directory()
+
+        self._upload_session = requests.Session()
+        adapter = HTTPAdapter(max_retries=3)
+        self._upload_session.mount("http://", adapter)
+        self._upload_session.mount("https://", adapter)
 
         self._local_manager = LocalComputeLogManager(local_dir)
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
@@ -69,6 +75,7 @@ class CloudComputeLogManager(CloudStorageComputeLogManager, ConfigurableClass):
         """
         Returns whether the cloud storage contains logs for a given log key
         """
+        return False
 
     def upload_to_cloud_storage(
         self, log_key: Sequence[str], io_type: ComputeIOType, partial=False
@@ -100,7 +107,7 @@ class CloudComputeLogManager(CloudStorageComputeLogManager, ConfigurableClass):
             return
 
         with open(path, "rb") as f:
-            requests.post(
+            self._upload_session.post(
                 resp_data["url"],
                 data=resp_data["fields"],
                 files={"file": f},

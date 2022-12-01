@@ -401,7 +401,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def end_watch(self, run_id: str, handler: Callable):
         raise NotImplementedError("Not callable from user cloud")
 
-    def enable_secondary_index(self, name: str, run_id: str = None):
+    def enable_secondary_index(self, name: str, run_id: Optional[str] = None):
         return self._execute_query(
             ENABLE_SECONDARY_INDEX_MUTATION,
             variables={
@@ -526,7 +526,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return materialization_count_by_partition
 
     def get_event_tags_for_asset(
-        self, asset_key: AssetKey, filter_tags: Optional[Mapping[str, str]] = None
+        self,
+        asset_key: AssetKey,
+        filter_tags: Optional[Mapping[str, str]] = None,
+        filter_event_id: Optional[int] = None,
     ) -> Sequence[Mapping[str, str]]:
         check.inst_param(asset_key, "asset_key", AssetKey)
         filter_tags = check.opt_mapping_param(
@@ -538,6 +541,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             variables={
                 "assetKey": asset_key.to_string(),
                 "filterTags": [{"key": key, "value": value} for key, value in filter_tags.items()],
+                "filterEventId": filter_event_id,
             },
         )
         tags_result = res["data"]["eventLogs"]["getAssetEventTags"]

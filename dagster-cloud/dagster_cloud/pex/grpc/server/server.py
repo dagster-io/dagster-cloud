@@ -10,6 +10,7 @@ from dagster._grpc.__generated__.api_pb2_grpc import (
     add_DagsterApiServicer_to_server,
 )
 from dagster._grpc.server import server_termination_target
+from dagster._grpc.types import GetCurrentRunsResult
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
 from dagster._serdes import deserialize_as, serialize_dagster_namedtuple
 from dagster._utils.error import serializable_error_info_from_exc_info
@@ -185,6 +186,16 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
 
     def StartRun(self, request, context):
         return self._query("StartRun", request, context)
+
+    def GetCurrentRuns(self, request, context):
+        """
+        Collect all run ids across all pex servers.
+        """
+        all_run_ids = []
+        for client in self._pex_manager.get_all_pex_grpc_clients():
+            run_ids = deserialize_as(client.get_current_runs(), GetCurrentRunsResult).current_runs
+            all_run_ids.extend(run_ids)
+        return serialize_dagster_namedtuple(GetCurrentRunsResult(current_runs=all_run_ids))
 
 
 def run_multipex_server(

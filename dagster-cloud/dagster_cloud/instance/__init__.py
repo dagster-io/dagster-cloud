@@ -1,21 +1,19 @@
 import copy
-import importlib
 import uuid
 from contextlib import ExitStack
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional
 
 import yaml
 from dagster import Field
 from dagster import _check as check
 from dagster._config import process_config
 from dagster._core.errors import DagsterInvalidConfigError, DagsterInvariantViolationError
-from dagster._core.instance import DagsterInstance, InstanceType
+from dagster._core.instance import DagsterInstance
 from dagster._core.instance.config import config_field_for_configurable_class
 from dagster._core.instance.ref import ConfigurableClassData, InstanceRef, configurable_class_data
-from dagster._core.launcher import RunLauncher
-from dagster._serdes import ConfigurableClass
-from dagster._utils import frozendict
+from dagster._core.launcher import DefaultRunLauncher, RunLauncher
+from dagster._core.storage.pipeline_run import DagsterRun
 from dagster_cloud_cli.core.graphql_client import (
     create_cloud_requests_session,
     create_proxy_client,
@@ -25,7 +23,7 @@ from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 
 from ..auth.constants import get_organization_name_from_agent_token
 from ..storage.client import dagster_cloud_api_config
-from ..util import get_env_names_from_config
+from ..util import get_env_names_from_config, is_isolated_run
 
 
 class DagsterCloudInstance(DagsterInstance):
@@ -298,8 +296,24 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
     @property
     def run_launcher(self) -> RunLauncher:
-        # Run launcher is determined by the user code launcher
+        """
+        The agent has two run launchers, isolated and non-isolated. Use get_run_launcher_for_run to
+        get the appropriate one. This method will always return the isolated run launcher, which
+        is required for some OSS peices like the k8s executor.
+        """
         return self.user_code_launcher.run_launcher()
+
+    def get_run_launcher_for_run(self, run: DagsterRun) -> RunLauncher:
+        # If the run is isolated, use the isolated run launcher, which is specific to whatever agent
+        # type we're using- ECS, K8s, etc.
+        #
+        # If the run is not isolated, use the DefaultRunLauncher to send it to the gRPC server.
+        if is_isolated_run(run):
+            return self.user_code_launcher.run_launcher()
+        else:
+            launcher = DefaultRunLauncher()
+            launcher.register_instance(self)
+            return launcher
 
     @staticmethod
     def get():  # pylint: disable=arguments-differ

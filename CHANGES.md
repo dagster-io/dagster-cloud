@@ -1,5 +1,18 @@
 # Dagster Cloud Changelog
 
+# 1.1.4
+
+### New
+
+- A handful of changes have been made to URLs in Dagit:
+    - The `/instance` URL path prefix has been removed. E.g. `/instance/runs` can now be found at `/runs`.
+    - The `/workspace` URL path prefix has been changed to `/locations`. E.g. the URL for job `my_job` in repository `foo@bar` can now be found at `/locations/foo@bar/jobs/my_job`.
+- In Dagit, the “Workspace” navigation item in the top nav has been moved to be a tab under the “Deployment” section of the app, and is renamed to “Definitions”.
+
+### Dependency Changes
+
+- We’ve upgraded our `dagster/dagster-cloud-agent` Docker image’s base from `python:3.8.12-slim` to `python:3.8.15-slim` to patch [some vulnerabilities in the old base image](https://snyk.io/test/docker/python%3A3.8.12-slim).
+
 # 1.1.1
 
 ### New

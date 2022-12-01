@@ -14,7 +14,6 @@ import pendulum
 from dagster import DagsterInstance
 from dagster._core.host_representation import RepositoryLocationOrigin
 from dagster._core.host_representation.origin import RegisteredRepositoryLocationOrigin
-from dagster._core.launcher import DefaultRunLauncher
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._serdes import (
@@ -46,6 +45,7 @@ from dagster_cloud.workspace.user_code_launcher import (
 from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
+from ..util import SERVER_HANDLE_TAG, is_isolated_run
 from ..version import __version__
 from .queries import (
     ADD_AGENT_HEARTBEATS_MUTATION,
@@ -70,8 +70,6 @@ DEPLOYMENT_INFO_QUERY = """
          }
      }
 """
-
-NON_ISOLATED_RUN_TAG = ("dagster/isolation", "disabled")
 
 
 class DagsterCloudApiFutureContext(
@@ -707,30 +705,31 @@ class DagsterCloudAgent:
                     ),
                 )
 
-                if run.tags.get(NON_ISOLATED_RUN_TAG[0]) == NON_ISOLATED_RUN_TAG[1]:
+                launcher = scoped_instance.get_run_launcher_for_run(run)
+
+                if is_isolated_run(run):
+                    launcher.launch_run(LaunchRunContext(pipeline_run=run, workspace=None))
+                else:
                     scoped_instance.report_engine_event(
                         f"Launching {run.run_id} without an isolated run environment.",
                         run,
                         cls=self.__class__,
                     )
 
-                    launcher = DefaultRunLauncher()
-                    launcher.register_instance(scoped_instance)
-
-                    run_location_name = (
-                        run.external_pipeline_origin.external_repository_origin.repository_location_origin.location_name
+                    run_location_name = cast(
+                        str,
+                        run.external_pipeline_origin.external_repository_origin.repository_location_origin.location_name,
                     )
 
-                    client = self._get_grpc_client(
-                        user_code_launcher,
-                        deployment_name,
-                        cast(str, run_location_name),
+                    server = user_code_launcher.get_grpc_server(deployment_name, run_location_name)
+
+                    # Record the server handle that we launched it on to for run monitoring
+                    scoped_instance.add_run_tags(
+                        run.run_id, new_tags={SERVER_HANDLE_TAG: str(server.server_handle)}
                     )
 
-                    launcher.launch_run_from_grpc_client(scoped_instance, run, client)
-                else:
-                    scoped_instance.run_launcher.launch_run(
-                        LaunchRunContext(pipeline_run=run, workspace=None)
+                    launcher.launch_run_from_grpc_client(
+                        scoped_instance, run, server.server_endpoint.create_client()
                     )
 
                 return DagsterCloudApiSuccess()
@@ -757,7 +756,8 @@ class DagsterCloudAgent:
                         run,
                         cls=self.__class__,
                     )
-                    scoped_instance.run_launcher.terminate(run.run_id)
+                    launcher = scoped_instance.get_run_launcher_for_run(run)
+                    launcher.terminate(run.run_id)
             return DagsterCloudApiSuccess()
 
         else:
