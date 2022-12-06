@@ -20,7 +20,7 @@ def grpc(
     socket: Optional[str] = Option(default=None),
     max_workers: Optional[int] = Option(default=None),
     local_pex_files_dir: Optional[str] = Option(
-        default="/tmp/pex-files", envvar="LOCAL_PEX_FILES_DIR"
+        default="/pex-files", envvar="LOCAL_PEX_FILES_DIR"
     ),
 ):
     run_multipex_server(
@@ -38,7 +38,7 @@ def execute_run(
     input_json: str,
     pex_metadata_json: str,
     local_pex_files_dir: Optional[str] = Option(
-        default="/tmp/pex-files", envvar="LOCAL_PEX_FILES_DIR"
+        default="/pex-files", envvar="LOCAL_PEX_FILES_DIR"
     ),
 ):
     with capture_interrupts():

@@ -6,7 +6,7 @@ from uuid import uuid4
 from dagster import _check as check
 from dagster_cloud_cli.core.workspace import PexMetadata
 
-DEFAULT_PEX_FILES_DIR = "/tmp/pex-files"
+DEFAULT_PEX_FILES_DIR = "/pex-files"
 
 
 def _download_from_s3(filename: str, local_filepath: str):

@@ -204,7 +204,7 @@ def run_multipex_server(
     print_fn,
     host="localhost",
     max_workers=None,
-    local_pex_files_dir: Optional[str] = "/tmp/pex-files",
+    local_pex_files_dir: Optional[str] = "/pex-files",
 ):
     server = grpc.server(
         ThreadPoolExecutor(max_workers=max_workers),
