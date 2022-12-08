@@ -16,6 +16,7 @@ from dagster._core.host_representation import RepositoryLocationOrigin
 from dagster._core.host_representation.origin import RegisteredRepositoryLocationOrigin
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._grpc.client import DagsterGrpcClient
+from dagster._grpc.types import CancelExecutionRequest
 from dagster._serdes import (
     deserialize_as,
     deserialize_json_to_dagster_namedtuple,
@@ -756,8 +757,23 @@ class DagsterCloudAgent:
                         run,
                         cls=self.__class__,
                     )
-                    launcher = scoped_instance.get_run_launcher_for_run(run)
-                    launcher.terminate(run.run_id)
+                    if is_isolated_run(run):
+                        launcher = scoped_instance.get_run_launcher_for_run(run)
+                        launcher.terminate(run.run_id)
+                    else:
+                        run_location_name = cast(
+                            str,
+                            run.external_pipeline_origin.external_repository_origin.repository_location_origin.location_name,
+                        )
+
+                        server = user_code_launcher.get_grpc_server(
+                            deployment_name, run_location_name
+                        )
+                        client = server.server_endpoint.create_client()
+
+                        scoped_instance.report_run_canceling(run)
+                        client.cancel_execution(CancelExecutionRequest(run_id=run.run_id))
+
             return DagsterCloudApiSuccess()
 
         else:

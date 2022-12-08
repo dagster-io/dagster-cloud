@@ -17,6 +17,7 @@ from typing import (
     List,
     NamedTuple,
     Optional,
+    Sequence,
     Set,
     Tuple,
     TypeVar,
@@ -35,7 +36,7 @@ from dagster._core.host_representation.origin import (
 from dagster._core.instance import MayHaveInstanceWeakref
 from dagster._core.launcher import RunLauncher
 from dagster._grpc.client import DagsterGrpcClient
-from dagster._grpc.types import GetCurrentImageResult, GetCurrentRunsResult
+from dagster._grpc.types import GetCurrentImageResult
 from dagster._serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
 from dagster._utils import merge_dicts
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
@@ -689,7 +690,11 @@ class DagsterCloudUserCodeLauncher(
         to happen should happen in _wait_for_new_server_endpoint."""
 
     def _wait_for_new_multipex_server(
-        self, _deployment_name: str, _location_name: str, multipex_endpoint: ServerEndpoint
+        self,
+        _deployment_name: str,
+        _location_name: str,
+        _server_handle: ServerHandle,
+        multipex_endpoint: ServerEndpoint,
     ):
         self._wait_for_server_process(
             multipex_endpoint.create_multipex_client(),
@@ -724,23 +729,22 @@ class DagsterCloudUserCodeLauncher(
         to spin down the old server once a new server has been spun up, and during removal."""
 
     @property
-    def _supports_graceful_remove(self) -> bool:
+    def supports_get_current_runs_for_server_handle(self) -> bool:
         return False
 
-    def _get_grpc_client(self, server_handle: ServerHandle) -> DagsterGrpcClient:
+    def get_current_runs_for_server_handle(self, server_handle: ServerHandle) -> Sequence[str]:
         raise NotImplementedError()
 
     def _graceful_remove_server_handle(self, server_handle: ServerHandle):
         """Check if there are non isolated runs and wait for them to finish before shutting down
         the server."""
 
-        if not self._supports_graceful_remove:
+        if not self.supports_get_current_runs_for_server_handle:
             return self._remove_server_handle(server_handle)
 
         run_ids = None
         try:
-            client = self._get_grpc_client(server_handle)
-            run_ids = deserialize_as(client.get_current_runs(), GetCurrentRunsResult).current_runs
+            run_ids = self.get_current_runs_for_server_handle(server_handle)
         except Exception:
             self._logger.error(
                 "Failure connecting to server with handle {server_handle}, going to shut it down: {exc_info}".format(
@@ -771,7 +775,7 @@ class DagsterCloudUserCodeLauncher(
         raise NotImplementedError()
 
     def _graceful_cleanup_servers(self):  # ServerHandles
-        if not self._supports_graceful_remove:
+        if not self.supports_get_current_runs_for_server_handle:
             return self._cleanup_servers()
 
         handles = self._list_server_handles()
@@ -1048,7 +1052,10 @@ class DagsterCloudUserCodeLauncher(
                     )
                 )
                 self._wait_for_new_multipex_server(
-                    deployment_name, location_name, multipex_server.server_endpoint
+                    deployment_name,
+                    location_name,
+                    multipex_server.server_handle,
+                    multipex_server.server_endpoint,
                 )
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
@@ -1200,8 +1207,8 @@ class DagsterCloudUserCodeLauncher(
                 )
 
                 if (
-                    current_multipex_server_handle
-                    and current_multipex_server_handle != multipex_server_handle
+                    not current_multipex_server_handle
+                    or current_multipex_server_handle != multipex_server_handle
                 ):
                     self._logger.info(
                         "Removing old multipex server for {deployment_name}:{location_name}".format(
@@ -1223,8 +1230,7 @@ class DagsterCloudUserCodeLauncher(
 
             # On the current multipex server, shut down any old pex servers
             pex_server_handles = existing_pex_server_handles.get(to_update_key)
-            if pex_server_handles:
-                assert current_multipex_server
+            if current_multipex_server and pex_server_handles:
                 removed_any_servers = True
                 self._logger.info(
                     "Removing {num_servers} grpc processes from multipex server for {deployment_name}:{location_name}".format(
@@ -1506,10 +1512,13 @@ class DagsterCloudUserCodeLauncher(
         client: Union[DagsterGrpcClient, MultiPexGrpcClient],
         timeout,
         additional_check: Optional[Callable[[], None]] = None,
+        additional_check_interval: int = 5,
     ) -> None:
         start_time = time.time()
 
         last_error = None
+
+        last_additional_check_time = None
 
         while True:
             try:
@@ -1526,7 +1535,11 @@ class DagsterCloudUserCodeLauncher(
 
             time.sleep(1)
 
-            if additional_check:
+            if additional_check and (
+                not last_additional_check_time
+                or time.time() - last_additional_check_time > additional_check_interval
+            ):
+                last_additional_check_time = time.time()
                 additional_check()
 
     def upload_job_snapshot(

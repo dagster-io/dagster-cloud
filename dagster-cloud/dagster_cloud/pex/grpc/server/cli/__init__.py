@@ -56,4 +56,5 @@ def execute_run(
             ],
             check=True,
             env={**os.environ.copy(), **executable.environ},
+            cwd=executable.working_directory,
         )

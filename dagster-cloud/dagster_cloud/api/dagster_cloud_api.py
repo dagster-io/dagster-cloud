@@ -10,7 +10,7 @@ from dagster._core.host_representation import (
     JobSelector,
     RepositoryLocationOrigin,
 )
-from dagster._core.storage.pipeline_run import PipelineRun
+from dagster._core.storage.pipeline_run import DagsterRun
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo
 from dagster_cloud.execution.monitoring import CloudCodeServerHeartbeat, CloudRunWorkerStatuses
@@ -303,20 +303,20 @@ class PingLocationArgs(NamedTuple("_PingLocationArgs", [("location_name", str)])
 
 
 @whitelist_for_serdes
-class LaunchRunArgs(NamedTuple("_LaunchRunArgs", [("pipeline_run", PipelineRun)])):
+class LaunchRunArgs(NamedTuple("_LaunchRunArgs", [("pipeline_run", DagsterRun)])):
     def __new__(cls, pipeline_run):
         return super(cls, LaunchRunArgs).__new__(
             cls,
-            check.inst_param(pipeline_run, "pipeline_run", PipelineRun),
+            check.inst_param(pipeline_run, "pipeline_run", DagsterRun),
         )
 
 
 @whitelist_for_serdes
-class TerminateRunArgs(NamedTuple("_TerminateRunArgs", [("pipeline_run", PipelineRun)])):
+class TerminateRunArgs(NamedTuple("_TerminateRunArgs", [("pipeline_run", DagsterRun)])):
     def __new__(cls, pipeline_run):
         return super(cls, TerminateRunArgs).__new__(
             cls,
-            check.inst_param(pipeline_run, "pipeline_run", PipelineRun),
+            check.inst_param(pipeline_run, "pipeline_run", DagsterRun),
         )
 
 

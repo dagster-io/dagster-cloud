@@ -1,5 +1,7 @@
 "Decodes PexMetadata to download S3 files locally and setup a runnable PEX environment."
+import logging
 import os
+import subprocess
 from typing import Dict, List, NamedTuple, Optional
 from uuid import uuid4
 
@@ -38,6 +40,7 @@ class PexExecutable(
             ("source_path", str),
             ("all_paths", List[str]),
             ("environ", Dict[str, str]),
+            ("working_directory", Optional[str]),
         ],
     )
 ):
@@ -46,12 +49,14 @@ class PexExecutable(
         source_path: str,
         all_paths: List[str],
         environ: Dict[str, str],
+        working_directory: Optional[str],
     ):
         return super(PexExecutable, cls).__new__(
             cls,
             check.str_param(source_path, "source_path"),
             check.list_param(all_paths, "all_paths", str),
             check.dict_param(environ, "environ", str, str),
+            check.opt_str_param(working_directory, "working_directory"),
         )
 
 
@@ -61,6 +66,9 @@ class PexS3Registry:
             local_pex_files_dir if local_pex_files_dir else DEFAULT_PEX_FILES_DIR
         )
         os.makedirs(self._local_pex_files_dir, exist_ok=True)
+        self.working_dirs: Dict[
+            str, str
+        ] = {}  # once unpacked, working dirs dont change so we cache them
 
     def get_pex_executable(self, pex_metadata: PexMetadata) -> PexExecutable:
         if "=" not in pex_metadata.pex_tag:
@@ -97,8 +105,45 @@ class PexS3Registry:
         if not source_pex_filepath:
             raise ValueError("Invalid pex_tag has no source pex: %r" % pex_metadata.pex_tag)
 
+        working_dir = self.get_working_dir_for_pex(source_pex_filepath)
+
         return PexExecutable(
             source_pex_filepath,
             [source_pex_filepath] + deps_pex_filepaths,
             {"PEX_PATH": ":".join(deps_pex_filepaths)},
+            working_dir,
         )
+
+    def get_working_dir_for_pex(self, pex_path: str) -> Optional[str]:
+        # A special 'working_directory' package may be included the source package.
+        # If so we use site-packages/working_directory/root as the working dir.
+        # This allows shipping arbitrary files to the server - also used for python_file support.
+        if pex_path in self.working_dirs:
+            return self.working_dirs[pex_path]
+        try:
+            working_dir_file = subprocess.check_output(
+                [
+                    pex_path,
+                    "-c",
+                    "import working_directory; print(working_directory.__file__);",
+                ],
+                encoding="utf-8",
+            ).strip()
+            if working_dir_file:
+                package_dir, _ = working_dir_file.rsplit("/", 1)  # remove trailing __init__.py
+                working_dir = os.path.join(package_dir, "root")
+                self.working_dirs[pex_path] = working_dir
+                return working_dir
+            return None
+
+        except subprocess.CalledProcessError:
+            # working_directory package is optional, just log a message
+            logging.info("Cannot import working_directory package - not setting current directory.")
+            return None
+        except OSError:
+            # some issue with pex not being runnable, log an error but don't fail yet
+            # might fail later if we try to run this again
+            logging.exception(
+                "Ignoring failure to run pex file to determine working_directory %r", pex_path
+            )
+            return None

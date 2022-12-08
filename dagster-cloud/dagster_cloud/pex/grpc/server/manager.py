@@ -2,7 +2,7 @@ import os
 import subprocess
 import threading
 from contextlib import AbstractContextManager
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Set
 
 import dagster._seven as seven
 from dagster import _check as check
@@ -54,6 +54,7 @@ class MultiPexManager(AbstractContextManager):
     ):
         # Keyed by hash of PexServerHandle
         self._pex_servers: Dict[str, PexProcessEntry] = {}
+        self._pending_shutdown_pex_servers: Set[str] = set()
         self._pex_servers_lock = threading.Lock()
         self._heartbeat_ttl = 60
         self._registry = PexS3Registry(local_pex_files_dir)
@@ -78,6 +79,23 @@ class MultiPexManager(AbstractContextManager):
     def get_all_pex_grpc_clients(self) -> List[DagsterGrpcClient]:
         with self._pex_servers_lock:
             return [server.grpc_client for server in self._pex_servers.values()]
+
+    def get_all_pex_grpc_clients_map(self) -> Dict[str, DagsterGrpcClient]:
+        with self._pex_servers_lock:
+            return {
+                server.pex_server_handle.get_id(): server.grpc_client
+                for server in self._pex_servers.values()
+            }
+
+    def is_server_active(self, server_handle_id: str) -> bool:
+        """
+        Server is present and not pending shutdown
+        """
+        with self._pex_servers_lock:
+            return (
+                server_handle_id in self._pex_servers
+                and not server_handle_id in self._pending_shutdown_pex_servers
+            )
 
     def create_pex_server(
         self,
@@ -127,6 +145,7 @@ class MultiPexManager(AbstractContextManager):
                 **pex_executable.environ,
                 **additional_env,
             },
+            cwd=pex_executable.working_directory,
         )
 
         client = DagsterGrpcClient(
@@ -161,7 +180,7 @@ class MultiPexManager(AbstractContextManager):
         with self._pex_servers_lock:
             pex_server = self._pex_servers.get(handle_id)
             if pex_server:
-                del self._pex_servers[handle_id]
+                self._pending_shutdown_pex_servers.add(handle_id)
 
         if pex_server:
             pex_server.heartbeat_shutdown_event.set()
@@ -171,6 +190,17 @@ class MultiPexManager(AbstractContextManager):
             except DagsterUserCodeUnreachableError:
                 # Server already shutdown
                 pass
+
+    def cleanup_pending_shutdown_pex_servers(self):
+        with self._pex_servers_lock:
+            to_remove = set()
+            for handle_id in self._pending_shutdown_pex_servers:
+                if not self._pex_servers[handle_id].grpc_server_process.poll() is None:
+                    to_remove.add(handle_id)
+
+            for handle_id in to_remove:
+                self._pending_shutdown_pex_servers.remove(handle_id)
+                del self._pex_servers[handle_id]
 
     def __exit__(self, exception_type, exception_value, traceback):
         for _handle, pex_server in self._pex_servers.items():

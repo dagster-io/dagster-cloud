@@ -1,5 +1,23 @@
 # Dagster Cloud Changelog
 
+# 1.1.6
+
+
+### New
+
+- Dagster Cloud Serverless can now deploy changes to your code using PEX files instead of building a new Docker image on each change, resulting in much faster code updates.
+    - To update your existing GitHub workflows to use the PEX based fast deploys:
+        1. Replace the YAML files in your `.github/workflows` directory with updated YAML files found in our [quickstart repository](https://github.com/dagster-io/quickstart-etl/tree/e07e944c7504a52b3d252553d51ad2085b4d5914/.github/workflows).
+        2. Update the new YAML files and set `DAGSTER_CLOUD_URL` to the value in your original YAML files.
+- The `dagster-cloud serverless` command now supports two new sub commands for fast deploys using PEX files:
+    1. `dagster-cloud serverless deploy-python-executable` can be used instead of `dagster-cloud serverless deploy` to use the fast deploys mechanism. The existing `deploy` command is unchanged.
+    2. `dagster-cloud serverless upload-base-image` can be used to upload a custom base image used to run code deployed using the above `deploy-python-executable` command. Using custom base images is optional.
+    
+    More details can be found in [our docs](https://docs.dagster.io/dagster-cloud/deployment/serverless).
+    
+- Runs that are launched from the Dagit UI in Dagster Cloud serverless can now be configured as either non-isolated or isolated. Non-isolated runs are for iterating quickly and trade off isolation for speed. Isolated runs are for production and compute heavy Assets/Jobs. For more information see [the docs.](https://docs.dagster.io/dagster-cloud/deployment/serverless#run-isolation)
+- Email alerts from Dagster Cloud now include the name of the deployment in the email subject.
+
 # 1.1.4
 
 ### New

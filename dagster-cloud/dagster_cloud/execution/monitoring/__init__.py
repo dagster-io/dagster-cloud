@@ -1,20 +1,18 @@
 import logging
 import sys
 import threading
-from collections import namedtuple
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Set
+from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Union
 
 import dagster._check as check
-from dagster import DagsterInstance
-from dagster._core.errors import DagsterInvariantViolationError
+from dagster import DagsterInstance, DagsterRunStatus
 from dagster._core.launcher import CheckRunHealthResult, WorkerStatus
 from dagster._core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, PipelineRunsFilter
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
-from dagster_cloud.instance import DagsterCloudAgentInstance, InstanceRef
-from dagster_cloud.storage.runs import GraphQLRunStorage
+from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.util import SERVER_HANDLE_TAG, is_isolated_run
+from grpc._channel import _InactiveRpcError as GrpcInactiveRpcError
 
 
 @whitelist_for_serdes
@@ -99,14 +97,71 @@ class CloudRunWorkerStatuses(
         )
 
 
-def get_cloud_run_worker_statuses(instance, deployment_names, logger):
+class _GetCurrentRunsError(Enum):
+    UNIMPLEMENTED = "UNIMPLEMENTED"
+    OTHER_ERROR = "OTHER_ERROR"
+
+
+def _is_grpc_unimplemented_error(error: Exception) -> bool:
+    # NOTE: this goes a little deeper into grpc internals than ideal, but it's required for
+    # backcompat with dagster grpc servers earlier than 1.1.4.
+    cause = error.__cause__
+    if not isinstance(cause, GrpcInactiveRpcError):
+        return False
+    return cause.code().name == "UNIMPLEMENTED"
+
+
+def _is_grpc_unknown_error(error: Exception) -> bool:
+    cause = error.__cause__
+    if not isinstance(cause, GrpcInactiveRpcError):
+        return False
+    return cause.code().name == "UNKNOWN"
+
+
+def get_cloud_run_worker_statuses(instance: DagsterCloudAgentInstance, deployment_names, logger):
 
     statuses = {}
 
     # protected with a lock inside the method
-    active_grpc_server_handles = [
-        str(s) for s in instance.user_code_launcher.get_active_grpc_server_handles()
-    ]
+    active_grpc_server_handles = instance.user_code_launcher.get_active_grpc_server_handles()
+    active_grpc_server_handle_strings = [str(s) for s in active_grpc_server_handles]
+
+    active_non_isolated_run_ids_by_server_handle: Dict[
+        str, Union[Sequence[str], _GetCurrentRunsError]
+    ] = {}
+    if instance.user_code_launcher.supports_get_current_runs_for_server_handle:
+        for handle in active_grpc_server_handles:
+            try:
+                run_ids = instance.user_code_launcher.get_current_runs_for_server_handle(handle)
+                active_non_isolated_run_ids_by_server_handle[str(handle)] = run_ids
+            except Exception as e:
+                logger.exception(
+                    "Run monitoring: hit error with GetCurrentRunsResult for handle: {}".format(
+                        handle
+                    )
+                )
+                if _is_grpc_unimplemented_error(e):
+                    logger.info(
+                        "Run monitoring: get_current_runs not implemented, skipping server handle"
+                    )
+                    active_non_isolated_run_ids_by_server_handle[
+                        str(handle)
+                    ] = _GetCurrentRunsError.UNIMPLEMENTED
+
+                # NOTE: multipex servers on version 1.1.4 and 1.1.5 had a bug where they would return
+                # UNKNOWN errors for GetCurrentRuns. For backcompat, ignore it as unimplemented
+                if _is_grpc_unknown_error(e):
+                    logger.info(
+                        "Run monitoring: get_current_runs returned UNKNOWN error, skipping server handle"
+                    )
+                    active_non_isolated_run_ids_by_server_handle[
+                        str(handle)
+                    ] = _GetCurrentRunsError.UNIMPLEMENTED
+                else:
+                    logger.info("Run monitoring: error getting current runs for server handle")
+                    active_non_isolated_run_ids_by_server_handle[
+                        str(handle)
+                    ] = _GetCurrentRunsError.OTHER_ERROR
 
     for deployment_name in deployment_names:
         with DagsterInstance.from_ref(
@@ -127,11 +182,18 @@ def get_cloud_run_worker_statuses(instance, deployment_names, logger):
                         # Not currently supported for non isolated run monitoring
                         continue
 
+                    if run.status != DagsterRunStatus.STARTED:
+                        # Rely on timeout for runs in STARTING
+                        continue
+
                     server_handle_for_run = run.tags.get(SERVER_HANDLE_TAG)
-                    if (
-                        server_handle_for_run
-                        and server_handle_for_run not in active_grpc_server_handles
-                    ):
+
+                    if not server_handle_for_run:
+                        # shouldn't be able to happen except right when a user upgrades their agent
+                        # and has old runs still in progress
+                        continue
+
+                    if server_handle_for_run not in active_grpc_server_handle_strings:
                         logger.info(
                             f"Detected failure: run {run.run_id} on server {server_handle_for_run} is not in the active server handles {', '.join(active_grpc_server_handles)}"
                         )
@@ -139,7 +201,49 @@ def get_cloud_run_worker_statuses(instance, deployment_names, logger):
                             CloudRunWorkerStatus(
                                 run.run_id,
                                 WorkerStatus.FAILED,
-                                "The gRPC server that was hosting this run is no longer running.",
+                                "The code location server that was hosting this run is no longer running. "
+                                "Upgrading to a newer version of dagster in your asset/job code "
+                                "(version 1.1.4) may prevent this from occuring.",
+                            )
+                        )
+                        continue
+
+                    get_runs_result_for_server_handle = (
+                        active_non_isolated_run_ids_by_server_handle[server_handle_for_run]
+                    )
+                    if get_runs_result_for_server_handle == _GetCurrentRunsError.UNIMPLEMENTED:
+                        # Server is an older version than 1.1.4- we can't fully check on the run
+                        continue
+
+                    if get_runs_result_for_server_handle == _GetCurrentRunsError.OTHER_ERROR:
+                        logger.info(
+                            f"Detected failure: run {run.run_id} on server {server_handle_for_run}. Server is not responding"
+                        )
+                        statuses_for_deployment.append(
+                            CloudRunWorkerStatus(
+                                run.run_id,
+                                WorkerStatus.FAILED,
+                                "The code location server that was hosting this run is not responding. It may have crashed or been OOM killed.",
+                            )
+                        )
+                        continue
+
+                    if not isinstance(get_runs_result_for_server_handle, list):
+                        check.failed(
+                            f"get_runs_result_for_server_handle is an unexpected type: {get_runs_result_for_server_handle}",
+                        )
+
+                    # If the run is not in the list of runs returned by the server, maybe the server
+                    # crashed and ECS/etc. restarted it
+                    if run.run_id not in get_runs_result_for_server_handle:
+                        logger.info(
+                            f"Detected failure: run {run.run_id} on server {server_handle_for_run} is not in the current runs {', '.join(get_runs_result_for_server_handle)}"
+                        )
+                        statuses_for_deployment.append(
+                            CloudRunWorkerStatus(
+                                run.run_id,
+                                WorkerStatus.FAILED,
+                                "The run process can't be found on the code location server. The server may have crashed or been OOM killed.",
                             )
                         )
 

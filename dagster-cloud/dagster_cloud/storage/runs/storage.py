@@ -18,8 +18,8 @@ from dagster._core.snap import (
     create_pipeline_snapshot_id,
 )
 from dagster._core.storage.pipeline_run import (
+    DagsterRun,
     JobBucket,
-    PipelineRun,
     PipelineRunsFilter,
     RunPartitionData,
     RunRecord,
@@ -58,7 +58,6 @@ from .queries import (
     GET_RUN_PARTITION_DATA_QUERY,
     GET_RUN_RECORDS_QUERY,
     GET_RUN_TAGS_QUERY,
-    HANDLE_RUN_EVENT_MUTATION,
     HAS_EXECUTION_PLAN_SNAPSHOT_QUERY,
     HAS_PIPELINE_SNAPSHOT_QUERY,
     HAS_RUN_QUERY,
@@ -100,7 +99,7 @@ def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
             deserialize_json_to_dagster_namedtuple(
                 check.str_elem(graphene_run_record, "serializedPipelineRun")
             ),
-            PipelineRun,
+            DagsterRun,
         ),
         create_timestamp=utc_datetime_from_timestamp(
             check.float_elem(graphene_run_record, "createTimestamp")
@@ -163,8 +162,8 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             raise GraphQLStorageError(res)
         return res
 
-    def add_run(self, pipeline_run: PipelineRun):
-        check.inst_param(pipeline_run, "pipeline_run", PipelineRun)
+    def add_run(self, pipeline_run: DagsterRun):
+        check.inst_param(pipeline_run, "pipeline_run", DagsterRun)
         res = self._execute_query(
             ADD_RUN_MUTATION,
             variables={"serializedPipelineRun": serialize_dagster_namedtuple(pipeline_run)},
@@ -185,14 +184,8 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return pipeline_run
 
     def handle_run_event(self, run_id: str, event: DagsterEvent):
-        check.inst_param(event, "event", DagsterEvent)
-        self._execute_query(
-            HANDLE_RUN_EVENT_MUTATION,
-            variables={
-                "runId": check.str_param(run_id, "run_id"),
-                "serializedEvent": serialize_dagster_namedtuple(event),
-            },
-        )
+        # no-op, handled by store_event
+        pass
 
     def get_runs(
         self,
@@ -200,7 +193,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
         bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
-    ) -> Iterable[PipelineRun]:
+    ) -> Iterable[DagsterRun]:
         res = self._execute_query(
             GET_RUNS_QUERY,
             variables={
@@ -210,7 +203,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "bucketBy": _get_bucket_input(bucket_by),
             },
         )
-        return [deserialize_as(run, PipelineRun) for run in res["data"]["runs"]["getRuns"]]
+        return [deserialize_as(run, DagsterRun) for run in res["data"]["runs"]["getRuns"]]
 
     def get_runs_count(self, filters: Optional[PipelineRunsFilter] = None) -> int:
         res = self._execute_query(
@@ -221,7 +214,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["getRunsCount"]
 
-    def get_run_group(self, run_id: str) -> Optional[Tuple[str, Iterable[PipelineRun]]]:
+    def get_run_group(self, run_id: str) -> Optional[Tuple[str, Iterable[DagsterRun]]]:
         res = self._execute_query(
             GET_RUN_GROUP_QUERY, variables={"runId": check.str_param(run_id, "run_id")}
         )
@@ -229,7 +222,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         if run_group_or_error["__typename"] == "SerializedRunGroup":
             return (
                 run_group_or_error["rootRunId"],
-                [deserialize_as(run, PipelineRun) for run in run_group_or_error["serializedRuns"]],
+                [deserialize_as(run, DagsterRun) for run in run_group_or_error["serializedRuns"]],
             )
         elif run_group_or_error["__typename"] == "RunNotFoundError":
             raise DagsterRunNotFoundError(invalid_run_id=run_group_or_error["runId"])
@@ -243,7 +236,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         filters: Optional[PipelineRunsFilter] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> Dict[str, Dict[str, Union[Iterable[PipelineRun], int]]]:
+    ) -> Dict[str, Dict[str, Union[Iterable[DagsterRun], int]]]:
         res = self._execute_query(
             GET_RUN_GROUPS_QUERY,
             variables={
@@ -257,12 +250,12 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         run_groups = {}
         for run_group in raw_run_groups:
             run_groups[run_group["rootRunId"]] = {
-                "runs": [deserialize_as(run, PipelineRun) for run in run_group["serializedRuns"]],
+                "runs": [deserialize_as(run, DagsterRun) for run in run_group["serializedRuns"]],
                 "count": run_group["count"],
             }
         return run_groups
 
-    def get_run_by_id(self, run_id: str) -> Optional[PipelineRun]:
+    def get_run_by_id(self, run_id: str) -> Optional[DagsterRun]:
         res = self._execute_query(
             GET_RUN_BY_ID_QUERY, variables={"runId": check.str_param(run_id, "run_id")}
         )
@@ -270,7 +263,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         if run is None:
             return None
 
-        return deserialize_as(run, PipelineRun)
+        return deserialize_as(run, DagsterRun)
 
     def get_run_records(
         self,
@@ -494,7 +487,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return NotImplementedError("KVS is not supported from the user cloud")
 
     # Migrating run history
-    def replace_job_origin(self, run: PipelineRun, job_origin: ExternalPipelineOrigin):
+    def replace_job_origin(self, run: DagsterRun, job_origin: ExternalPipelineOrigin):
         self._execute_query(
             MUTATE_JOB_ORIGIN,
             variables={

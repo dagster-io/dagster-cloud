@@ -43,15 +43,6 @@ ADD_RUN_MUTATION = (
 """
 )
 
-HANDLE_RUN_EVENT_MUTATION = """
-    mutation handleRunEventMutation($runId: String!, $serializedEvent: String!) {
-        runs {
-            handleRunEvent(runId: $runId, serializedEvent: $serializedEvent) {
-                ok
-            }
-        }
-    }
-"""
 
 GET_RUNS_QUERY = """
     query getRunsQuery($filters: RunsFilter, $cursor: String, $limit: Int, $bucketBy: RunBucket) {

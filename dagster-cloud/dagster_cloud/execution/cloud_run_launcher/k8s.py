@@ -1,7 +1,7 @@
 import sys
 
 from dagster._core.launcher.base import CheckRunHealthResult, WorkerStatus
-from dagster._legacy import PipelineRun
+from dagster._core.storage.pipeline_run import DagsterRun
 from dagster._utils.error import serializable_error_info_from_exc_info
 from dagster_k8s import K8sRunLauncher
 from dagster_k8s.job import get_job_name_from_run_id
@@ -10,7 +10,7 @@ from dagster_k8s.job import get_job_name_from_run_id
 class CloudK8sRunLauncher(K8sRunLauncher):
     # Fork to avoid call to `count_resume_run_attempts`, since resuming runs is not currently
     # supported in cloud and the method makes repeated event log calls.
-    def check_run_worker_health(self, run: PipelineRun):
+    def check_run_worker_health(self, run: DagsterRun):
 
         container_context = self.get_container_context_for_run(run)
 
@@ -18,8 +18,8 @@ class CloudK8sRunLauncher(K8sRunLauncher):
             run.run_id,
         )
         try:
-            job = self._batch_api.read_namespaced_job(
-                namespace=container_context.namespace, name=job_name
+            job = self._api_client.get_job_status(
+                namespace=container_context.namespace, job_name=job_name
             )
         except Exception:
             return CheckRunHealthResult(

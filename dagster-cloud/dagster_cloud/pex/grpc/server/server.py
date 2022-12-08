@@ -1,10 +1,14 @@
 import os
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
+import dagster._check as check
 import grpc
+from dagster._core.errors import DagsterUserCodeUnreachableError
+from dagster._grpc.__generated__ import api_pb2
 from dagster._grpc.__generated__.api_pb2_grpc import (
     DagsterApiServicer,
     add_DagsterApiServicer_to_server,
@@ -39,6 +43,11 @@ class MultiPexApiServer(MultiPexApiServicer):
         pex_manager: MultiPexManager,
     ):
         self._pex_manager = pex_manager
+        self.__cleanup_thread = threading.Thread(
+            target=self._cleanup_thread, args=(), name="multi-pex-cleanup"
+        )
+        self.__cleanup_thread.daemon = True
+        self.__cleanup_thread.start()
 
     def CreatePexServer(self, request, _context):
         create_pex_server_args = deserialize_as(request.create_pex_server_args, CreatePexServerArgs)
@@ -87,6 +96,11 @@ class MultiPexApiServer(MultiPexApiServicer):
     def Ping(self, request, _context):
         echo = request.echo
         return multi_pex_api_pb2.PingReply(echo=echo)
+
+    def _cleanup_thread(self):
+        while True:
+            time.sleep(5)
+            self._pex_manager.cleanup_pending_shutdown_pex_servers()
 
 
 class DagsterPexProxyApiServer(DagsterApiServicer):
@@ -191,11 +205,44 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         """
         Collect all run ids across all pex servers.
         """
+        metadict = dict(context.invocation_metadata())
+
+        if "deployment" in metadict:
+            raise Exception(
+                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex servers"
+            )
+
+        if "location" in metadict:
+            raise Exception(
+                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex servers"
+            )
+
+        if "timestamp" in metadict:
+            raise Exception(
+                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex servers"
+            )
+
         all_run_ids = []
-        for client in self._pex_manager.get_all_pex_grpc_clients():
-            run_ids = deserialize_as(client.get_current_runs(), GetCurrentRunsResult).current_runs
-            all_run_ids.extend(run_ids)
-        return serialize_dagster_namedtuple(GetCurrentRunsResult(current_runs=all_run_ids))
+        for handle_id, client in self._pex_manager.get_all_pex_grpc_clients_map().items():
+            try:
+                run_ids = deserialize_as(
+                    client.get_current_runs(), GetCurrentRunsResult
+                ).current_runs
+                all_run_ids.extend(run_ids)
+            except DagsterUserCodeUnreachableError:
+                e = serializable_error_info_from_exc_info(sys.exc_info())
+
+                # If the pex server is unreachable, it may just be in the process of shutting down.
+                check.invariant(
+                    not self._pex_manager.is_server_active(handle_id),
+                    f"Active server hit error:\n{str(e)}",
+                )
+
+        return api_pb2.GetCurrentRunsReply(
+            serialized_current_runs=serialize_dagster_namedtuple(
+                GetCurrentRunsResult(current_runs=all_run_ids, serializable_error_info=None)
+            )
+        )
 
 
 def run_multipex_server(
