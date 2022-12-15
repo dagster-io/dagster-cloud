@@ -56,17 +56,19 @@ class Client:
         self.timeout = check.int_param(timeout, "timeout")
         self.grace_period = check.int_param(grace_period, "grace_period")
         self.launch_type = check.str_param(launch_type, "launch_type")
+        self._namespace: Optional[str] = None
 
     @property
     def namespace(self):
-        namespace = (
-            self.service_discovery.get_namespace(
-                Id=self.service_discovery_namespace_id,
+        if not self._namespace:
+            self._namespace = (
+                self.service_discovery.get_namespace(
+                    Id=self.service_discovery_namespace_id,
+                )
+                .get("Namespace")
+                .get("Name")
             )
-            .get("Namespace")
-            .get("Name")
-        )
-        return namespace
+        return self._namespace
 
     @property
     def taggable(self):

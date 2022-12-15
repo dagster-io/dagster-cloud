@@ -650,16 +650,28 @@ class DagsterCloudUserCodeLauncher(
             return []
 
         _server_handle, server_endpoint, _code_deployment_metadata = server
-        return (
-            server_endpoint.create_multipex_client()
-            .get_pex_servers(
-                GetPexServersArgs(
+        try:
+            return (
+                server_endpoint.create_multipex_client()
+                .get_pex_servers(
+                    GetPexServersArgs(
+                        deployment_name=deployment_name,
+                        location_name=location_name,
+                    )
+                )
+                .server_handles
+            )
+        except:
+            error_info = serializable_error_info_from_exc_info(sys.exc_info())
+
+            self._logger.error(
+                "Error while fetching existing PEX servers from multipex server for {deployment_name}:{location_name}: {error_info}".format(
                     deployment_name=deployment_name,
                     location_name=location_name,
+                    error_info=error_info,
                 )
             )
-            .server_handles
-        )
+            return []
 
     @abstractmethod
     def _get_standalone_dagster_server_handles_for_location(
@@ -1014,6 +1026,7 @@ class DagsterCloudUserCodeLauncher(
                         multipex_server = self._create_multipex_server(
                             deployment_name, location_name, desired_entry.code_deployment_metadata
                         )
+                        self._multipex_servers[to_update_key] = multipex_server
                         assert self._get_multipex_server(
                             deployment_name,
                             location_name,
@@ -1038,6 +1051,9 @@ class DagsterCloudUserCodeLauncher(
                         )
                     )
                     new_dagster_servers[to_update_key] = error_info
+            elif to_update_key in self._multipex_servers:
+                # This key is no longer a multipex server
+                del self._multipex_servers[to_update_key]
 
         # For each new multi-pex server, wait for it to be ready. If it fails, put
         # the location that was planned to use it into an error state
@@ -1164,9 +1180,10 @@ class DagsterCloudUserCodeLauncher(
                     desired_entries[to_update_key].code_deployment_metadata,
                 )
 
-        # Remove any old standalone grpc server containers
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
+
+            # Remove any old standalone grpc server containers
             server_handles = existing_standalone_dagster_server_handles.get(to_update_key, [])
             removed_any_servers = False
 
@@ -1334,7 +1351,6 @@ class DagsterCloudUserCodeLauncher(
             location_name,
             code_deployment_metadata,
         )
-        self._multipex_servers[(deployment_name, location_name)] = multipex_server
         return multipex_server
 
     def _create_pex_server(

@@ -1,4 +1,5 @@
 import json
+from os import getenv
 from typing import (
     Any,
     Callable,
@@ -12,6 +13,7 @@ from typing import (
     Union,
     cast,
 )
+from uuid import uuid4
 
 import dagster._check as check
 from dagster._core.assets import AssetDetails
@@ -242,8 +244,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             else self._instance.graphql_client
         )
 
-    def _execute_query(self, query, variables=None):
-        res = self._graphql_client.execute(query, variable_values=variables)
+    def _execute_query(self, query, variables=None, headers=None):
+        res = self._graphql_client.execute(
+            query,
+            variable_values=variables,
+            headers=headers,
+        )
         if "errors" in res:
             raise GraphQLStorageError(res)
         return res
@@ -357,6 +363,11 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
         event = truncate_event(event)
 
+        headers = {}
+        # env var opt-in for experimental feature
+        if getenv("DAGSTER_CLOUD_IDEMPOTENT_STORE_EVENT"):
+            headers = {"Idempotency-Key": str(uuid4())}
+
         self._execute_query(
             STORE_EVENT_MUTATION,
             variables={
@@ -371,6 +382,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     "dagsterEvent": _input_for_dagster_event(event.dagster_event),
                 }
             },
+            headers=headers,
         )
 
     def delete_events(self, run_id: str):

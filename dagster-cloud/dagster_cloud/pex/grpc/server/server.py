@@ -172,7 +172,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         return self._query("ExternalPartitionTags", request, context)
 
     def ExternalPartitionSetExecutionParams(self, request, context):
-        return self._query("ExternalPartitionSetExecutionParams", request, context)
+        return self._streaming_query("ExternalPartitionSetExecutionParams", request, context)
 
     def ExternalPipelineSubsetSnapshot(self, request, context):
         return self._query("ExternalPipelineSubsetSnapshot", request, context)

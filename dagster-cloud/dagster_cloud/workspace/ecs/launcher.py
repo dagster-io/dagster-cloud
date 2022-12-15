@@ -204,6 +204,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _get_enable_ecs_exec(self) -> bool:
         return False
 
+    def _get_additional_grpc_server_env(self) -> Dict[str, str]:
+        return {}
+
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
@@ -229,6 +232,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         environment = merge_dicts(
             container_context.get_environment_dict(),
             additional_env,
+            self._get_additional_grpc_server_env(),
         )
 
         self._logger.info(

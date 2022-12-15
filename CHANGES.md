@@ -1,20 +1,39 @@
 # Dagster Cloud Changelog
 
-# 1.1.6
+# 1.1.7
 
+### New
+
+- [Non-isolated runs](https://docs.dagster.io/dagster-cloud/deployment/serverless#run-isolation) in Dagster Cloud Serverless now default to running at most 2 ops in parallel at once, to reduce the default memory usage of these runs. This number can be increased from the launchpad by configuring the `execution` key, for example:
+
+```python
+execution:
+  config:
+    multiprocess:
+      max_concurrent: 4
+```
+
+- Run dequeue operations can now happen concurrently, improving the throughput of starting new runs.
+
+### Bugfixes
+
+- Fixed an issue where specifying a dictionary of proxies in the `dagster_cloud_api.proxies` key in an agent’s `dagster.yaml` file raised an error when proxies were also being set using environment variables.
+
+# 1.1.6
 
 ### New
 
 - Dagster Cloud Serverless can now deploy changes to your code using PEX files instead of building a new Docker image on each change, resulting in much faster code updates.
-    - To update your existing GitHub workflows to use the PEX based fast deploys:
-        1. Replace the YAML files in your `.github/workflows` directory with updated YAML files found in our [quickstart repository](https://github.com/dagster-io/quickstart-etl/tree/e07e944c7504a52b3d252553d51ad2085b4d5914/.github/workflows).
-        2. Update the new YAML files and set `DAGSTER_CLOUD_URL` to the value in your original YAML files.
+  - To update your existing GitHub workflows to use the PEX based fast deploys:
+    1. Replace the YAML files in your `.github/workflows` directory with updated YAML files found in our [quickstart repository](https://github.com/dagster-io/quickstart-etl/tree/e07e944c7504a52b3d252553d51ad2085b4d5914/.github/workflows).
+    2. Update the new YAML files and set `DAGSTER_CLOUD_URL` to the value in your original YAML files.
 - The `dagster-cloud serverless` command now supports two new sub commands for fast deploys using PEX files:
-    1. `dagster-cloud serverless deploy-python-executable` can be used instead of `dagster-cloud serverless deploy` to use the fast deploys mechanism. The existing `deploy` command is unchanged.
-    2. `dagster-cloud serverless upload-base-image` can be used to upload a custom base image used to run code deployed using the above `deploy-python-executable` command. Using custom base images is optional.
-    
-    More details can be found in [our docs](https://docs.dagster.io/dagster-cloud/deployment/serverless).
-    
+
+  1. `dagster-cloud serverless deploy-python-executable` can be used instead of `dagster-cloud serverless deploy` to use the fast deploys mechanism. The existing `deploy` command is unchanged.
+  2. `dagster-cloud serverless upload-base-image` can be used to upload a custom base image used to run code deployed using the above `deploy-python-executable` command. Using custom base images is optional.
+
+  More details can be found in [our docs](https://docs.dagster.io/dagster-cloud/deployment/serverless).
+
 - Runs that are launched from the Dagit UI in Dagster Cloud serverless can now be configured as either non-isolated or isolated. Non-isolated runs are for iterating quickly and trade off isolation for speed. Isolated runs are for production and compute heavy Assets/Jobs. For more information see [the docs.](https://docs.dagster.io/dagster-cloud/deployment/serverless#run-isolation)
 - Email alerts from Dagster Cloud now include the name of the deployment in the email subject.
 
@@ -23,8 +42,8 @@
 ### New
 
 - A handful of changes have been made to URLs in Dagit:
-    - The `/instance` URL path prefix has been removed. E.g. `/instance/runs` can now be found at `/runs`.
-    - The `/workspace` URL path prefix has been changed to `/locations`. E.g. the URL for job `my_job` in repository `foo@bar` can now be found at `/locations/foo@bar/jobs/my_job`.
+  - The `/instance` URL path prefix has been removed. E.g. `/instance/runs` can now be found at `/runs`.
+  - The `/workspace` URL path prefix has been changed to `/locations`. E.g. the URL for job `my_job` in repository `foo@bar` can now be found at `/locations/foo@bar/jobs/my_job`.
 - In Dagit, the “Workspace” navigation item in the top nav has been moved to be a tab under the “Deployment” section of the app, and is renamed to “Definitions”.
 
 ### Dependency Changes

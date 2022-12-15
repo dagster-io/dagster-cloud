@@ -149,9 +149,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     @property
     def requests_session(self):
         if self._requests_session == None:
-            self._requests_session = self._exit_stack.enter_context(
-                create_cloud_requests_session(self.dagster_cloud_api_retries)
-            )
+            self._requests_session = self._exit_stack.enter_context(create_cloud_requests_session())
 
         return self._requests_session
 
@@ -255,7 +253,12 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
     @property
     def dagster_cloud_api_proxies(self) -> Optional[Dict[str, str]]:
-        return self._dagster_cloud_api_config.get("proxies")
+        # Requests library modifies the proxies key so create a copy
+        return (
+            self._dagster_cloud_api_config.get("proxies").copy()
+            if self._dagster_cloud_api_config.get("proxies")
+            else {}
+        )
 
     @property
     def dagster_cloud_api_agent_label(self) -> Optional[str]:

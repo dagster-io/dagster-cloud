@@ -150,7 +150,7 @@ def get_cloud_run_worker_statuses(instance: DagsterCloudAgentInstance, deploymen
 
                 # NOTE: multipex servers on version 1.1.4 and 1.1.5 had a bug where they would return
                 # UNKNOWN errors for GetCurrentRuns. For backcompat, ignore it as unimplemented
-                if _is_grpc_unknown_error(e):
+                elif _is_grpc_unknown_error(e):
                     logger.info(
                         "Run monitoring: get_current_runs returned UNKNOWN error, skipping server handle"
                     )
