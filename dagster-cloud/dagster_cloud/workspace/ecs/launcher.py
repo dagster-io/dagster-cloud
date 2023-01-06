@@ -1,4 +1,4 @@
-from typing import Any, Collection, Dict, List, Optional
+from typing import Any, Collection, Dict, List, Mapping, Optional
 
 import boto3
 from dagster import Array, Enum, EnumValue, Field, IntSource, Noneable, ScalarUnion, StringSource
@@ -8,6 +8,7 @@ from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils import merge_dicts
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
+from dagster_cloud.workspace.config_schema import SHARED_ECS_CONFIG
 from dagster_cloud.workspace.ecs.client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
 from dagster_cloud.workspace.ecs.service import Service
 from dagster_cloud.workspace.ecs.utils import get_ecs_human_readable_label, unique_ecs_resource_name
@@ -47,6 +48,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         ecs_timeout=None,
         ecs_grace_period=None,
         launch_type: Optional[str] = None,
+        server_resources: Optional[Mapping[str, str]] = None,
+        run_resources: Optional[Mapping[str, str]] = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -88,6 +91,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
         self.launch_type = check.opt_str_param(launch_type, "launch_type", default="FARGATE")
+
+        self.server_resources = check.opt_mapping_param(server_resources, "server_resources")
+        self.run_resources = check.opt_mapping_param(run_resources, "run_resources")
 
         self.client = Client(
             cluster_name=self.cluster,
@@ -181,6 +187,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     ),
                 ),
             },
+            SHARED_ECS_CONFIG,
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
 
@@ -195,11 +202,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _get_grpc_server_sidecars(self) -> Optional[List[Dict[str, Any]]]:
         return None
 
-    def _get_service_cpu_override(self) -> Optional[str]:
-        return None
+    def _get_service_cpu_override(self, container_context: EcsContainerContext) -> Optional[str]:
+        return container_context.server_resources.get("cpu")
 
-    def _get_service_memory_override(self) -> Optional[str]:
-        return None
+    def _get_service_memory_override(self, container_context: EcsContainerContext) -> Optional[str]:
+        return container_context.server_resources.get("memory")
 
     def _get_enable_ecs_exec(self) -> bool:
         return False
@@ -227,6 +234,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             secrets_tags=[self.secrets_tag] if self.secrets_tag else [],
             env_vars=self.env_vars
             + [f"{k}={v}" for k, v in (metadata.cloud_context_env or {}).items()],
+            server_resources=self.server_resources,
+            run_resources=self.run_resources,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         environment = merge_dicts(
@@ -264,8 +273,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             secrets=container_context.get_secrets_dict(self.secrets_manager),
             sidecars=self._get_grpc_server_sidecars(),
             logger=self._logger,
-            cpu=self._get_service_cpu_override(),
-            memory=self._get_service_memory_override(),
+            cpu=self._get_service_cpu_override(container_context),
+            memory=self._get_service_memory_override(container_context),
             allow_ecs_exec=self._get_enable_ecs_exec(),
         )
         self._logger.info(
@@ -402,6 +411,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "launchType": self.launch_type,
             },
             container_name=CONTAINER_NAME,
+            run_resources=self.run_resources,
         )
 
     def run_launcher(self) -> RunLauncher:

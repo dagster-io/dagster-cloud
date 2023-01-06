@@ -6,7 +6,7 @@ from dagster._config import EvaluationError, StringSource, validate_config
 from dagster._utils import frozendict
 
 from .docker import SHARED_DOCKER_CONFIG
-from .ecs import SHARED_ECS_CONFIG
+from .ecs import ECS_CONTAINER_CONTEXT_CONFIG, SHARED_ECS_CONFIG
 from .kubernetes import SHARED_K8S_CONFIG
 
 
@@ -159,7 +159,7 @@ CONFIG_SCHEMA_FIELDS = {
             fields={
                 "k8s": Field(Shape(SHARED_K8S_CONFIG), is_required=False),
                 "docker": Field(Shape(SHARED_DOCKER_CONFIG), is_required=False),
-                "ecs": Field(Shape(SHARED_ECS_CONFIG), is_required=False),
+                "ecs": Field(Shape(ECS_CONTAINER_CONTEXT_CONFIG), is_required=False),
             },
         ),
         description="Metadata for specific compute environments",

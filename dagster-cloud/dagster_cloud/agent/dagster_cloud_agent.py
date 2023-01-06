@@ -201,7 +201,9 @@ class DagsterCloudAgent:
 
         self._check_initial_deployment_names(instance)
 
-        self._check_update_workspace(instance, user_code_launcher)
+        self._check_update_workspace(
+            instance, user_code_launcher, upload_all=user_code_launcher.upload_snapshots_on_startup
+        )
 
         self._logger.info("Started polling for requests from {}".format(instance.dagster_cloud_url))
 
@@ -234,7 +236,7 @@ class DagsterCloudAgent:
                 pass
 
             try:
-                self._check_update_workspace(instance, user_code_launcher)
+                self._check_update_workspace(instance, user_code_launcher, upload_all=False)
 
             except Exception:
                 self._logger.error(
@@ -247,7 +249,7 @@ class DagsterCloudAgent:
             with raise_interrupts_as(KeyboardInterrupt):
                 time.sleep(0.5)
 
-    def _check_update_workspace(self, instance, user_code_launcher):
+    def _check_update_workspace(self, instance, user_code_launcher, upload_all):
         curr_time = pendulum.now("UTC")
 
         if (
@@ -258,7 +260,7 @@ class DagsterCloudAgent:
             return
 
         self._last_workspace_check_time = curr_time
-        self._query_for_workspace_updates(instance, user_code_launcher)
+        self._query_for_workspace_updates(instance, user_code_launcher, upload_all=upload_all)
 
     def _check_add_heartbeat(self, instance, agent_uuid, heartbeat_interval_seconds):
         curr_time = pendulum.now("UTC")
@@ -438,6 +440,7 @@ class DagsterCloudAgent:
         self,
         instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
+        upload_all: bool,
     ):
 
         locations_with_ttl_to_query = self._get_locations_with_ttl_to_query(
@@ -511,7 +514,10 @@ class DagsterCloudAgent:
         else:
             self._logger.debug("Reconciling with no locations")
 
-        user_code_launcher.update_grpc_metadata(deployment_map)
+        if upload_all:
+            user_code_launcher.add_upload_metadata(deployment_map)
+        else:
+            user_code_launcher.update_grpc_metadata(deployment_map)
 
         # Tell run worker monitoring which deployments it should care about
         user_code_launcher.update_run_worker_monitoring_deployments(

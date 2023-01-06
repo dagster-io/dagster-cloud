@@ -1,6 +1,43 @@
-from dagster import Array, Field, Noneable, Shape, StringSource
+from dagster import Array, Field, Noneable, Permissive, Shape, StringSource
 
+# Shared between user code launcher config and container context
 SHARED_ECS_CONFIG = {
+    "server_resources": Field(
+        Permissive(
+            {
+                "cpu": Field(
+                    str,
+                    is_required=False,
+                    description="The CPU override to use for the launched task.",
+                ),
+                "memory": Field(
+                    str,
+                    is_required=False,
+                    description="The memory override to use for the launched task.",
+                ),
+            }
+        )
+    ),
+    "run_resources": Field(
+        Permissive(
+            {
+                "cpu": Field(
+                    str,
+                    is_required=False,
+                    description="The CPU override to use for the launched task.",
+                ),
+                "memory": Field(
+                    str,
+                    is_required=False,
+                    description="The memory override to use for the launched task.",
+                ),
+            }
+        )
+    ),
+}
+
+
+ECS_CONTAINER_CONTEXT_CONFIG = {
     "secrets": Field(
         Noneable(Array(Shape({"name": StringSource, "valueFrom": StringSource}))),
         is_required=False,
@@ -25,4 +62,5 @@ SHARED_ECS_CONFIG = {
         "Each can be of the form KEY=VALUE or just KEY (in which case the value will be pulled "
         "from the current process)",
     ),
+    **SHARED_ECS_CONFIG,
 }

@@ -30,6 +30,7 @@ from dagster._core.storage.event_log.base import (
     EventLogStorage,
     EventRecordsFilter,
 )
+from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
 from dagster._core.storage.pipeline_run import PipelineRunStatsSnapshot
 from dagster._serdes import (
     ConfigurableClass,
@@ -61,6 +62,7 @@ from .queries import (
     IS_PERSISTENT_QUERY,
     REINDEX_MUTATION,
     STORE_EVENT_MUTATION,
+    UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
     UPGRADE_EVENT_LOG_STORAGE_MUTATION,
     WIPE_ASSET_MUTATION,
     WIPE_EVENT_LOG_STORAGE_MUTATION,
@@ -510,6 +512,26 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             GET_ASSET_RUN_IDS_QUERY, variables={"assetKey": asset_key.to_string()}
         )
         return res["data"]["eventLogs"]["getAssetRunIds"]
+
+    def can_cache_asset_status_data(self) -> bool:
+        # cached_status_data column exists in the asset_key table
+        return True
+
+    def update_asset_cached_status_data(
+        self, asset_key: AssetKey, cache_values: AssetStatusCacheValue
+    ) -> None:
+        res = self._execute_query(
+            UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
+            variables={
+                "cacheData": {
+                    "assetKey": asset_key.to_string(),
+                    "latestStorageId": cache_values.latest_storage_id,
+                    "partitionsDefId": cache_values.partitions_def_id,
+                    "serializedMaterializedPartitionSubset": cache_values.serialized_materialized_partition_subset,
+                }
+            },
+        )
+        return res
 
     def get_materialization_count_by_partition(
         self, asset_keys: Sequence[AssetKey]

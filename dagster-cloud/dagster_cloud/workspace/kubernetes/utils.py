@@ -1,3 +1,4 @@
+import copy
 import re
 import time
 
@@ -81,93 +82,111 @@ def construct_repo_location_deployment(
     location_name,
     k8s_deployment_name,
     metadata,
-    pull_policy,
-    env_config_maps,
-    env_secrets,
-    service_account_name,
-    image_pull_secrets,
-    volume_mounts,
-    volumes,
-    labels,
-    resources,
-    command=None,
-    env=None,
-    scheduler_name=None,
+    container_context,
+    args,
 ):
+
+    pull_policy = container_context.image_pull_policy
+    env_config_maps = container_context.env_config_maps
+    env_secrets = container_context.env_secrets
+    service_account_name = container_context.service_account_name
+    image_pull_secrets = container_context.image_pull_secrets
+    volume_mounts = container_context.volume_mounts
+
+    volumes = container_context.volumes
+    labels = container_context.labels
+    resources = container_context.resources
+
+    scheduler_name = container_context.scheduler_name
+    security_context = container_context.security_context
+
     env = merge_dicts(
         metadata.get_grpc_server_env(
             SERVICE_PORT, location_name, instance.ref_for_deployment(deployment_name)
         ),
-        env or {},
+        container_context.get_environment_dict(),
     )
-    # TODO: enable liveness probes
-    return client.V1Deployment(
-        metadata=client.V1ObjectMeta(
-            name=k8s_deployment_name,
-            labels={
+
+    user_defined_config = container_context.get_server_user_defined_k8s_config()
+
+    container_config = copy.deepcopy(user_defined_config.container_config)
+
+    container_config["args"] = args
+
+    if pull_policy:
+        container_config["image_pull_policy"] = pull_policy
+
+    user_defined_env_vars = container_config.pop("env", [])
+    user_defined_env_from = container_config.pop("env_from", [])
+    user_defined_volume_mounts = container_config.pop("volume_mounts", [])
+    user_defined_resources = container_config.pop("resources", {})
+    user_defined_security_context = container_config.pop("security_context", None)
+
+    container_config = {
+        **container_config,
+        "name": "dagster",
+        "image": metadata.image,
+        "env": [{"name": key, "value": value} for key, value in env.items()]
+        + user_defined_env_vars,
+        "env_from": [{"config_map_ref": {"name": config_map}} for config_map in env_config_maps]
+        + [{"secret_ref": {"name": secret_name}} for secret_name in env_secrets]
+        + user_defined_env_from,
+        "volume_mounts": volume_mounts + user_defined_volume_mounts,
+        "resources": user_defined_resources or resources,
+        "security_context": user_defined_security_context or security_context,
+    }
+
+    pod_spec_config = copy.deepcopy(user_defined_config.pod_spec_config)
+
+    user_defined_image_pull_secrets = pod_spec_config.pop("image_pull_secrets", [])
+    user_defined_service_account_name = pod_spec_config.pop("service_account_name", None)
+    user_defined_containers = pod_spec_config.pop("containers", [])
+    user_defined_volumes = pod_spec_config.pop("volumes", [])
+    user_defined_scheduler_name = pod_spec_config.pop("scheduler_name", None)
+
+    pod_spec_config = {
+        **pod_spec_config,
+        "image_pull_secrets": (
+            [{"name": x["name"]} for x in image_pull_secrets] + user_defined_image_pull_secrets
+        ),
+        "service_account_name": user_defined_service_account_name or service_account_name,
+        "containers": [container_config] + user_defined_containers,
+        "volumes": volumes + user_defined_volumes,
+        "scheduler_name": user_defined_scheduler_name or scheduler_name,
+    }
+
+    pod_template_spec_metadata = copy.deepcopy(user_defined_config.pod_template_spec_metadata)
+    user_defined_pod_template_labels = pod_template_spec_metadata.pop("labels", {})
+
+    deployment_dict = {
+        "metadata": {
+            "name": k8s_deployment_name,
+            "labels": {
                 **MANAGED_RESOURCES_LABEL,
                 "location_hash": deterministic_label_for_location(deployment_name, location_name),
                 "location_name": get_k8s_human_readable_label(location_name),
                 "deployment_name": get_k8s_human_readable_label(deployment_name),
             },
-        ),
-        spec=client.V1DeploymentSpec(
-            selector=client.V1LabelSelector(match_labels={"user-deployment": k8s_deployment_name}),
-            template=client.V1PodTemplateSpec(
-                metadata=client.V1ObjectMeta(
-                    labels={"user-deployment": k8s_deployment_name, **labels}
-                ),
-                spec=client.V1PodSpec(
-                    image_pull_secrets=[
-                        client.V1LocalObjectReference(name=x["name"]) for x in image_pull_secrets
-                    ],
-                    service_account_name=service_account_name,
-                    containers=[
-                        client.V1Container(
-                            name="dagster",
-                            args=command,
-                            image=metadata.image,
-                            image_pull_policy=pull_policy,
-                            env=[
-                                client.V1EnvVar(name=key, value=value) for key, value in env.items()
-                            ],
-                            env_from=[
-                                kubernetes.client.V1EnvFromSource(
-                                    config_map_ref=kubernetes.client.V1ConfigMapEnvSource(
-                                        name=config_map
-                                    )
-                                )
-                                for config_map in env_config_maps
-                            ]
-                            + [
-                                client.V1EnvFromSource(
-                                    secret_ref=(client.V1SecretEnvSource(name=secret_name))
-                                )
-                                for secret_name in env_secrets
-                            ],
-                            volume_mounts=[
-                                k8s_model_from_dict(
-                                    kubernetes.client.models.V1VolumeMount, volume_mount
-                                )
-                                for volume_mount in volume_mounts
-                            ],
-                            resources=(
-                                k8s_model_from_dict(
-                                    kubernetes.client.models.V1ResourceRequirements, resources
-                                )
-                                if resources
-                                else None
-                            ),
-                        )
-                    ],
-                    volumes=[
-                        k8s_model_from_dict(kubernetes.client.models.V1Volume, volume)
-                        for volume in volumes
-                    ],
-                    scheduler_name=scheduler_name,
-                ),
-            ),
-        ),
+        },
+        "spec": {  # DeploymentSpec
+            "selector": {"match_labels": {"user-deployment": k8s_deployment_name}},
+            "template": {  # PodTemplateSpec
+                "metadata": {
+                    **pod_template_spec_metadata,
+                    "labels": {
+                        "user-deployment": k8s_deployment_name,
+                        **labels,
+                        **user_defined_pod_template_labels,
+                    },
+                },
+                "spec": pod_spec_config,
+            },
+        },
+    }
+
+    return k8s_model_from_dict(
+        kubernetes.client.V1Deployment,
+        deployment_dict,
     )
 
 

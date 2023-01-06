@@ -103,4 +103,29 @@ SHARED_K8S_CONFIG = {
         description="Use a custom Kubernetes scheduler for launched Pods. See:"
         "https://kubernetes.io/docs/tasks/extend-kubernetes/configure-multiple-schedulers/",
     ),
+    "run_k8s_config": Field(
+        Shape(
+            {
+                "container_config": Permissive(),
+                "pod_template_spec_metadata": Permissive(),
+                "pod_spec_config": Permissive(),
+                "job_config": Permissive(),
+                "job_metadata": Permissive(),
+                "job_spec_config": Permissive(),
+            }
+        ),
+        is_required=False,
+        description="Raw Kubernetes configuration for launched runs.",
+    ),
+    "server_k8s_config": Field(
+        Shape(
+            {
+                "container_config": Permissive(),
+                "pod_spec_config": Permissive(),
+                "pod_template_spec_metadata": Permissive(),
+            }
+        ),
+        is_required=False,
+        description="Raw Kubernetes configuration for launched code servers.",
+    ),
 }

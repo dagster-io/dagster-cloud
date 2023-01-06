@@ -238,6 +238,16 @@ GET_ASSET_RUN_IDS_QUERY = """
     }
     """
 
+UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION = """
+    mutation updateAssetCachedStatusData($cacheData: AssetStatusCacheValueInput!) {
+        eventLogs {
+            UpdateAssetCachedStatusData(cacheData: $cacheData) {
+                ok
+            }
+        }
+    }
+"""
+
 GET_MATERIALIZATION_COUNT_BY_PARTITION = """
     query getMaterializationCountByPartition($assetKeys: [String!]!) {
         eventLogs {

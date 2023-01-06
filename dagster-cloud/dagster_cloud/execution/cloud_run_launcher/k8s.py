@@ -18,7 +18,7 @@ class CloudK8sRunLauncher(K8sRunLauncher):
             run.run_id,
         )
         try:
-            job = self._api_client.get_job_status(
+            status = self._api_client.get_job_status(
                 namespace=container_context.namespace, job_name=job_name
             )
         except Exception:
@@ -26,8 +26,8 @@ class CloudK8sRunLauncher(K8sRunLauncher):
                 WorkerStatus.UNKNOWN,
                 str(serializable_error_info_from_exc_info(sys.exc_info())),
             )
-        if job.status.failed:
+        if status.failed:
             return CheckRunHealthResult(WorkerStatus.FAILED, "K8s job failed")
-        if job.status.succeeded:
+        if status.succeeded:
             return CheckRunHealthResult(WorkerStatus.SUCCESS)
         return CheckRunHealthResult(WorkerStatus.RUNNING)

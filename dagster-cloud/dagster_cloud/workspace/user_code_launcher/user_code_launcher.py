@@ -189,6 +189,13 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
         description="Do not include full job snapshots in the workspace "
         "snapshot, upload them separately if they have not been previously uploaded.",
     ),
+    "upload_snapshots_on_startup": Field(
+        BoolSource,
+        is_required=False,
+        default_value=True,
+        description="Upload information about code locations to Dagster Cloud whenever the "
+        "agent starts up, even if the code location has not changed since the last upload.",
+    ),
 }
 
 DeploymentAndLocation = Tuple[str, str]
@@ -260,6 +267,7 @@ class DagsterCloudUserCodeLauncher(
         server_ttl: Optional[dict] = None,
         defer_job_snapshots: bool = True,
         server_process_startup_timeout=None,
+        upload_snapshots_on_startup: bool = True,
     ):
         self._grpc_servers: Dict[
             DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
@@ -271,6 +279,9 @@ class DagsterCloudUserCodeLauncher(
 
         self._server_ttl_config = check.opt_dict_param(server_ttl, "server_ttl")
         self._defer_job_snapshots = defer_job_snapshots
+        self.upload_snapshots_on_startup = check.bool_param(
+            upload_snapshots_on_startup, "upload_snapshots_on_startup"
+        )
 
         # periodically reconciles to make desired = actual
         self._desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
@@ -814,7 +825,9 @@ class DagsterCloudUserCodeLauncher(
 
         super().__exit__(exception_value, exception_value, traceback)
 
-    def add_upload_metadata(self, upload_metadata: Dict[Tuple[str, str], UserCodeLauncherEntry]):
+    def add_upload_metadata(
+        self, upload_metadata: Dict[DeploymentAndLocation, UserCodeLauncherEntry]
+    ):
         """Add a set of locations to be uploaded in the next reconcilation loop."""
         with self._metadata_lock:
             self._upload_locations = self._upload_locations.union(upload_metadata)

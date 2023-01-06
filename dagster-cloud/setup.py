@@ -18,7 +18,7 @@ def get_description() -> str:
 
 ver = get_version()
 # dont pin dev installs to avoid pip dep resolver issues
-pin = "" if ver == "0+dev" else f"=={ver}"
+pin = "" if ver == "1!0+dev" else f"=={ver}"
 setup(
     name="dagster_cloud",
     long_description=get_description(),
@@ -39,8 +39,8 @@ setup(
     packages=find_packages(exclude=["dagster_cloud_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.1.7",
-        "dagster-cloud-cli==1.1.7",
+        "dagster==1.1.8",
+        "dagster-cloud-cli==1.1.8",
         "pex",
         "questionary",
         "requests",
@@ -61,11 +61,11 @@ setup(
             "types-PyYAML",
             "types-requests",
             "dagster-cloud-test-infra",
-            "dagster_k8s==0.17.7",
+            "dagster_k8s==0.17.8",
         ],
-        "docker": ["docker", "dagster_docker==0.17.7"],
-        "kubernetes": ["kubernetes", "dagster_k8s==0.17.7"],
-        "ecs": ["dagster_aws==0.17.7", "boto3"],
+        "docker": ["docker", "dagster_docker==0.17.8"],
+        "kubernetes": ["kubernetes", "dagster_k8s==0.17.8"],
+        "ecs": ["dagster_aws==0.17.8", "boto3"],
         "sandbox": ["supervisor"],
         "pex": ["boto3"],
         "serverless": ["boto3"],

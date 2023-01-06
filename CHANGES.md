@@ -1,5 +1,26 @@
 # Dagster Cloud Changelog
 
+# 1.1.8
+
+### New
+
+- [kubernetes] `securityContext` can now be set in the `dagsterCloudAgent` section of the Helm chart.
+- [kubernetes] The agent Helm chart now includes a `serverK8sConfig` and `runK8sConfig` key that allows you to specify additional Kubernetes config that will be applied to each pod spun up by the agent to run Dagster code. Code locations can also be configured with a `server_k8s_config` or `run_k8s_config` dictionary with additional Kubernetes config in the pods that are spun up by the agent for that code location. See the [Kubernetes agent configuration reference](https://docs.dagster.io/dagster-cloud/deployment/agents/kubernetes/configuration-reference#per-location-configuration) for more information.
+- [ecs] The ECS agent can now be configured with a `server_resources` and/or `run_resources` dictionary that will specify CPU and memory values for each task that is spun up by the agent to run Dagster code. Code locations can also be configured with a `server_resources` and/or `run_resources` dictionary that applies to each task spun up by the agent for that code location. See the [ECS agent configuration reference](https://docs.dagster.io/dagster-cloud/deployment/agents/amazon-ecs/configuration-reference) for more information.
+- The Dagster Cloud agent will now re-upload information about each code location to Dagster Cloud from every time it starts up. Previously, the agent would only upload changes to Dagster Cloud when a code location was updated, meaning it was possible for the agent to become out of sync with what was shown in Dagit when the agent restarted.
+- The `dagster-cloud serverless deploy-python-executable` command now supports a `--build-in-linux-docker` flag that builds the dependencies within a local Linux Docker container. This enables deploying source-only dependencies (sdists) from non Linux environment.
+- When the Dagster Cloud agent stops heartbeating (for example, when it is being upgraded), dequeueing runs will pause until the agent is available again.
+- Restored some metadata to the Code Locations tab in Dagster Cloud, including image, python file, module name, and commit hash.
+- Added an `--asset-key` argument to the `dagster-cloud job launch` CLI command that allows the job launch to only materialize one or more specific assets from the job.
+- `max_concurrent_dequeue`config has been added to the `run_queue` section of deployment config to allow slowing the rate at which queued runs are launched.
+
+### Bugfixes
+
+- Fixed an issue where the kubernetes agent was sometimes unable to move runs into a failed state when a run worker crashed or was interrupted by the Kubernetes cluster.
+- A regression in retry handling for HTTP `429` responses released in `1.1.7` has been resolved.
+- Cases where network errors were incorrectly reporting that they had tried and exhausted retries have been corrected.
+- Fixed an issue where when adding or updating an environment variable, the change sometimes wasn’t reflected in branch deployments until they were redeployed.
+
 # 1.1.7
 
 ### New

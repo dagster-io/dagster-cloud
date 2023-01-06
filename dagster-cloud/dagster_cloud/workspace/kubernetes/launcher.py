@@ -66,6 +66,10 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         labels=None,
         resources=None,
         scheduler_name=None,
+        server_k8s_config=None,
+        run_k8s_config=None,
+        k8s_apps_api_client=None,
+        k8s_core_api_client=None,
         **kwargs,
     ):
         self._inst_data = inst_data
@@ -107,10 +111,16 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
         self._scheduler_name = check.opt_str_param(scheduler_name, "scheduler_name")
 
+        self._server_k8s_config = check.opt_dict_param(server_k8s_config, "server_k8s_config")
+        self._run_k8s_config = check.opt_dict_param(run_k8s_config, "run_k8s_config")
+
         if kubeconfig_file:
             kubernetes.config.load_kube_config(kubeconfig_file)
         else:
             kubernetes.config.load_incluster_config()
+
+        self._k8s_apps_api_client = k8s_apps_api_client
+        self._k8s_core_api_client = k8s_core_api_client
 
         super(K8sUserCodeLauncher, self).__init__(**kwargs)
 
@@ -131,6 +141,9 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             labels=self._labels,
             resources=self._resources,
             scheduler_name=self._scheduler_name,
+            run_k8s_config=self._run_k8s_config,
+            kubeconfig_file=kubeconfig_file,
+            load_incluster_config=not kubeconfig_file,
         )
 
         # mutable set of observed namespaces to assist with cleanup
@@ -150,7 +163,6 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
     @classmethod
     def config_type(cls):
-
         container_context_config = SHARED_K8S_CONFIG.copy()
         del container_context_config["image_pull_policy"]  # uses 'pull_policy'
         del container_context_config["namespace"]  # default is different
@@ -196,8 +208,15 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             **config_value,
         )
 
+    def _get_core_api_client(self):
+        return self._k8s_core_api_client if self._k8s_core_api_client else client.CoreV1Api()
+
     @contextmanager
-    def _get_api_instance(self):
+    def _get_apps_api_instance(self):
+        if self._k8s_apps_api_client:
+            yield self._k8s_apps_api_client
+            return
+
         with client.ApiClient() as api_client:  # pylint: disable=not-context-manager
             yield client.AppsV1Api(api_client)
 
@@ -216,39 +235,31 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             namespace=self._namespace,
             resources=self._resources,
             scheduler_name=self._scheduler_name,
+            server_k8s_config=self._server_k8s_config,
+            run_k8s_config=self._run_k8s_config,
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
 
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
-        command = metadata.get_grpc_server_command()
+        args = metadata.get_grpc_server_command()
 
         resource_name = unique_k8s_resource_name(deployment_name, location_name)
 
         container_context = self._resolve_container_context(metadata)
 
         try:
-            with self._get_api_instance() as api_instance:
+            with self._get_apps_api_instance() as api_instance:
                 api_response = api_instance.create_namespaced_deployment(
                     container_context.namespace,
-                    construct_repo_location_deployment(
+                    body=construct_repo_location_deployment(
                         self._instance,
                         deployment_name,
                         location_name,
                         resource_name,
                         metadata,
-                        container_context.image_pull_policy,
-                        container_context.env_config_maps,
-                        container_context.env_secrets,
-                        container_context.service_account_name,
-                        container_context.image_pull_secrets,
-                        container_context.volume_mounts,
-                        container_context.volumes,
-                        container_context.labels,
-                        container_context.resources,
-                        command=command,
-                        env=container_context.get_environment_dict(),
-                        scheduler_name=container_context.scheduler_name,
+                        container_context,
+                        args=args,
                     ),
                 )
             self._logger.info(
@@ -268,7 +279,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self._used_namespaces[(deployment_name, location_name)].add(namespace)
 
         try:
-            api_response = client.CoreV1Api().create_namespaced_service(
+            api_response = self._get_core_api_client().create_namespaced_service(
                 namespace,
                 construct_repo_location_service(deployment_name, location_name, resource_name),
             )
@@ -331,7 +342,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             (deployment_name, location_name),
             [self._namespace],
         )
-        with self._get_api_instance() as api_instance:
+        with self._get_apps_api_instance() as api_instance:
             for namespace in namespaces_to_search:
                 deployments = api_instance.list_namespaced_deployment(
                     namespace,
@@ -343,7 +354,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         return handles
 
     def _cleanup_servers(self) -> None:
-        with self._get_api_instance() as api_instance:
+        with self._get_apps_api_instance() as api_instance:
             # search all used namespaces for to clean out
             # note: this will only clean the launchers default namespace on startup
             namespaces = set(
@@ -361,9 +372,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     )
 
     def _remove_server_handle(self, server_handle: K8sHandle) -> None:
-        with self._get_api_instance() as api_instance:
+        with self._get_apps_api_instance() as api_instance:
             api_instance.delete_namespaced_deployment(server_handle.name, server_handle.namespace)
-        client.CoreV1Api().delete_namespaced_service(server_handle.name, server_handle.namespace)
+        self._get_core_api_client().delete_namespaced_service(
+            server_handle.name, server_handle.namespace
+        )
         self._logger.info(
             "Removed deployment and service {} in namespace {}".format(
                 server_handle.name, server_handle.namespace

@@ -87,6 +87,8 @@ def _get_filters_input(filters) -> Optional[Dict[str, Any]]:
         else [],
         "snapshotId": filters.snapshot_id,
         "updatedAfter": filters.updated_after.timestamp() if filters.updated_after else None,
+        "updatedBefore": filters.updated_before.timestamp() if filters.updated_before else None,
+        "createdAfter": filters.created_after.timestamp() if filters.created_after else None,
         "createdBefore": filters.created_before.timestamp() if filters.created_before else None,
     }
 
