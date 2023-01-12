@@ -7,24 +7,23 @@ from typing import Optional
 
 import yaml
 from dagster._core.errors import DagsterHomeNotSetError
-from dagster._utils import load_yaml_from_globs
 from dagster._utils.interrupts import capture_interrupts
 from dagster._utils.log import default_date_format_string, default_format_string
-from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent
-from dagster_cloud.instance import DagsterCloudAgentInstance
+from dagster._utils.yaml_utils import load_yaml_from_globs
 from dagster_cloud_cli import ui
 from typer import Argument, Option, Typer
+
+from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent
+from dagster_cloud.instance import DagsterCloudAgentInstance
 
 app = Typer(help="Interact with the Dagster Cloud agent.")
 
 
 def agent_home_exception():
     dagster_home_loc = (
-        (
-            f"No Dagster config provided in specified directory {os.getenv('DAGSTER_HOME')}. "
-            "You must specify the location of a directory containing a dagster.yaml "
-            "file as a parameter or by setting the DAGSTER_HOME environment variable."
-        )
+        f"No Dagster config provided in specified directory {os.getenv('DAGSTER_HOME')}. "
+        "You must specify the location of a directory containing a dagster.yaml "
+        "file as a parameter or by setting the DAGSTER_HOME environment variable."
         if os.getenv("DAGSTER_HOME")
         else (
             "No directory provided or DAGSTER_CLOUD environment variable set. "
@@ -133,10 +132,10 @@ PROCESS_USER_CODE_LAUNCHER = "dagster_cloud.workspace.user_code_launcher.Process
 
 @app.command(
     help=(
-        "Runs the Dagster Cloud agent. The agent can either be run ephemerally by specifying an agent token "
-        "and deployment name as CLI options, or the agent can pull its config from a dagster.yaml file. "
-        "To use a dagster.yaml file, either pass a directory containing the file as a CLI argument or "
-        "set the DAGSTER_HOME environment variable."
+        "Runs the Dagster Cloud agent. The agent can either be run ephemerally by specifying an"
+        " agent token and deployment name as CLI options, or the agent can pull its config from a"
+        " dagster.yaml file. To use a dagster.yaml file, either pass a directory containing the"
+        " file as a CLI argument or set the DAGSTER_HOME environment variable."
     ),
     short_help="Run the Dagster Cloud agent.",
 )
@@ -164,11 +163,13 @@ def run(
     agent_logging_config_path: Optional[Path] = Option(
         None,
         "--agent-logging-config-path",
-        help="Yaml file with logging config for the agent process that can be passed into logging.dictConfig",
+        help=(
+            "Yaml file with logging config for the agent process that can be passed into"
+            " logging.dictConfig"
+        ),
         exists=True,
     ),
 ):
-
     if (
         agent_token
         or deployment

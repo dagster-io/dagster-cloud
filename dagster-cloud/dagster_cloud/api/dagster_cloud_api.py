@@ -13,8 +13,9 @@ from dagster._core.host_representation import (
 from dagster._core.storage.pipeline_run import DagsterRun
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo
-from dagster_cloud.execution.monitoring import CloudCodeServerHeartbeat, CloudRunWorkerStatuses
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+
+from dagster_cloud.execution.monitoring import CloudCodeServerHeartbeat, CloudRunWorkerStatuses
 
 DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
 
@@ -422,7 +423,6 @@ class TimestampedError(
     )
 ):
     def __new__(cls, timestamp, error):
-
         return super(TimestampedError, cls).__new__(
             cls,
             timestamp=check.opt_float_param(timestamp, "timestamp"),

@@ -62,7 +62,7 @@ class MultiPexManager(AbstractContextManager):
     def get_pex_grpc_client(self, server_handle: PexServerHandle):
         handle_id = server_handle.get_id()
         with self._pex_servers_lock:
-            if not handle_id in self._pex_servers:
+            if handle_id not in self._pex_servers:
                 raise Exception("No server created with the given handle")
 
             return self._pex_servers[handle_id].grpc_client
@@ -94,7 +94,7 @@ class MultiPexManager(AbstractContextManager):
         with self._pex_servers_lock:
             return (
                 server_handle_id in self._pex_servers
-                and not server_handle_id in self._pending_shutdown_pex_servers
+                and server_handle_id not in self._pending_shutdown_pex_servers
             )
 
     def create_pex_server(
@@ -104,7 +104,8 @@ class MultiPexManager(AbstractContextManager):
         instance_ref: Optional[InstanceRef],
     ):
         print(
-            f"Creating new pex server for {server_handle.deployment_name}:{server_handle.location_name}"
+            "Creating new pex server for"
+            f" {server_handle.deployment_name}:{server_handle.location_name}"
         )
 
         pex_executable = self._registry.get_pex_executable(
@@ -195,7 +196,7 @@ class MultiPexManager(AbstractContextManager):
         with self._pex_servers_lock:
             to_remove = set()
             for handle_id in self._pending_shutdown_pex_servers:
-                if not self._pex_servers[handle_id].grpc_server_process.poll() is None:
+                if self._pex_servers[handle_id].grpc_server_process.poll() is not None:
                     to_remove.add(handle_id)
 
             for handle_id in to_remove:

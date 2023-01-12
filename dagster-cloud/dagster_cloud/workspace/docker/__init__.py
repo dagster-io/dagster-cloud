@@ -1,14 +1,18 @@
 import logging
 import sys
 import time
-from typing import Any, Collection, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Collection, Dict, List, NamedTuple, Tuple
 
 import docker
-from dagster import Field, IntSource
-from dagster import _check as check
+from dagster import (
+    Field,
+    IntSource,
+    _check as check,
+)
 from dagster._core.utils import parse_env_var
 from dagster._serdes import ConfigurableClass
-from dagster._utils import find_free_port, merge_dicts
+from dagster._utils import find_free_port
+from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
@@ -21,7 +25,6 @@ from ..user_code_launcher import (
     DagsterCloudGrpcServer,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
-    UserCodeLauncherEntry,
 )
 from ..user_code_launcher.utils import deterministic_label_for_location
 from .utils import unique_docker_resource_name
@@ -91,7 +94,9 @@ class DockerUserCodeLauncher(
                     IntSource,
                     is_required=False,
                     default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                    description="Timeout when waiting for a code server to be ready after it is created",
+                    description=(
+                        "Timeout when waiting for a code server to be ready after it is created"
+                    ),
                 ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -177,7 +182,8 @@ class DockerUserCodeLauncher(
         client = docker.client.from_env()
 
         self._logger.info(
-            "Starting a new container for {deployment_name}:{location_name} with image {image}: {container_name}".format(
+            "Starting a new container for {deployment_name}:{location_name} with image {image}:"
+            " {container_name}".format(
                 deployment_name=deployment_name,
                 location_name=location_name,
                 image=image,

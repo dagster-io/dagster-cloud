@@ -1,1 +1,1 @@
-from .storage import GraphQLScheduleStorage
+from .storage import GraphQLScheduleStorage as GraphQLScheduleStorage

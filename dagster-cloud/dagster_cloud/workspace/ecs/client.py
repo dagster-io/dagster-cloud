@@ -9,6 +9,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from dagster_aws.ecs.tasks import DagsterEcsTaskDefinitionConfig
 from dagster_aws.ecs.utils import task_definitions_match
+
 from dagster_cloud.workspace.ecs.service import Service
 
 DEFAULT_ECS_TIMEOUT = 300
@@ -110,7 +111,6 @@ class Client:
         cpu=None,
         memory=None,
     ):
-
         container_name = container_name or family
 
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
@@ -420,7 +420,8 @@ class Client:
                 # "failures" and "services":
                 # https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeServices.html
                 raise Exception(
-                    f"ECS DescribeServices API returned an empty response for service {service.arn}."
+                    "ECS DescribeServices API returned an empty response for service"
+                    f" {service.arn}."
                 )
             time.sleep(10)
         raise Exception(messages)

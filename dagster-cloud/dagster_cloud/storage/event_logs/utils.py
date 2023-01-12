@@ -10,10 +10,13 @@ MAXIMUM_EVENT_MESSAGE_CHARACTERS = int(
 def truncate_event(
     event: EventLogEntry, maximum_length=MAXIMUM_EVENT_MESSAGE_CHARACTERS
 ) -> EventLogEntry:
-
     if len(event.user_message) > maximum_length:
         return event._replace(
-            user_message=f"[TRUNCATED from {len(event.user_message)} characters to {MAXIMUM_EVENT_MESSAGE_CHARACTERS}] {event.user_message[:maximum_length]} [TRUNCATED]",
+            user_message=(
+                f"[TRUNCATED from {len(event.user_message)} characters to"
+                f" {MAXIMUM_EVENT_MESSAGE_CHARACTERS}]"
+                f" {event.user_message[:maximum_length]} [TRUNCATED]"
+            ),
         )
 
     return event

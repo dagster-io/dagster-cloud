@@ -68,8 +68,10 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
         if context.dagster_type.typing_type == type(None):
             check.invariant(
                 obj is None,
-                "Output had Nothing type or 'None' annotation, but handle_output received value "
-                f"that was not None and was of type {type(obj)}.",
+                (
+                    "Output had Nothing type or 'None' annotation, but handle_output received"
+                    f" value that was not None and was of type {type(obj)}."
+                ),
             )
             return None
 
@@ -103,8 +105,11 @@ def serverless_io_manager(init_context):
     prefix = os.getenv("DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_PREFIX")
     check.invariant(
         bucket and prefix,
-        "The serverless_io_manager is only supported when running on Dagster Cloud Serverless. "
-        "DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_BUCKET or DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_PREFIX not found.",
+        (
+            "The serverless_io_manager is only supported when running on Dagster Cloud Serverless."
+            " DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_BUCKET or"
+            " DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_PREFIX not found."
+        ),
     )
 
     deployment_name = init_context.instance.deployment_name

@@ -5,8 +5,10 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 import yaml
-from dagster import Field
-from dagster import _check as check
+from dagster import (
+    Field,
+    _check as check,
+)
 from dagster._config import process_config
 from dagster._core.errors import DagsterInvalidConfigError, DagsterInvariantViolationError
 from dagster._core.instance import DagsterInstance
@@ -58,8 +60,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         if not self._user_code_launcher_data:
             # This is a user facing error. We should have more actionable advice and link to docs here.
             raise DagsterInvariantViolationError(
-                "User code launcher is not configured for DagsterCloudAgentInstance. "
-                "Configure a user code launcher under the user_code_launcher: key in your dagster.yaml file."
+                "User code launcher is not configured for DagsterCloudAgentInstance. Configure a"
+                " user code launcher under the user_code_launcher: key in your dagster.yaml file."
             )
 
         self._exit_stack = ExitStack()
@@ -148,14 +150,14 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
     @property
     def requests_session(self):
-        if self._requests_session == None:
+        if self._requests_session is None:
             self._requests_session = self._exit_stack.enter_context(create_cloud_requests_session())
 
         return self._requests_session
 
     @property
     def graphql_client(self):
-        if self._graphql_client == None:
+        if self._graphql_client is None:
             self._graphql_client = self.create_graphql_client(
                 scope=DagsterCloudInstanceScope.DEPLOYMENT
             )
@@ -170,7 +172,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         organization = get_organization_name_from_agent_token(self.dagster_cloud_agent_token)
         if not organization:
             raise DagsterInvariantViolationError(
-                "Could not derive Dagster Cloud URL from agent token. Create a new agent token or set the `url` field under `dagster_cloud_api` in your `dagster.yaml`."
+                "Could not derive Dagster Cloud URL from agent token. Create a new agent token or"
+                " set the `url` field under `dagster_cloud_api` in your `dagster.yaml`."
             )
 
         return f"https://{organization}.agent.dagster.cloud"
@@ -206,7 +209,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         organization = get_organization_name_from_agent_token(self.dagster_cloud_agent_token)
         if not organization:
             raise Exception(
-                "Could not derive Dagster Cloud URL from agent token to generate a Dagit URL. Generate a new agent token in the Dagit UI."
+                "Could not derive Dagster Cloud URL from agent token to generate a Dagit URL."
+                " Generate a new agent token in the Dagit UI."
             )
 
         deployment = self._dagster_cloud_api_config.get("deployment")

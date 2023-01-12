@@ -39,10 +39,12 @@ from dagster._serdes import (
     serialize_dagster_namedtuple,
 )
 from dagster._serdes.serdes import deserialize_as
-from dagster._utils import datetime_as_float, merge_dicts
+from dagster._utils import datetime_as_float
 from dagster._utils.error import SerializableErrorInfo
-from dagster_cloud.storage.event_logs.utils import truncate_event
+from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import GraphQLStorageError
+
+from dagster_cloud.storage.event_logs.utils import truncate_event
 
 from .queries import (
     DELETE_EVENTS_MUTATION,
@@ -263,11 +265,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         of_type: Optional[Union[DagsterEventType, Set[DagsterEventType]]] = None,
         limit: Optional[int] = None,
     ) -> EventLogConnection:
-        check.invariant(
-            not of_type
-            or isinstance(of_type, DagsterEventType)
-            or isinstance(of_type, (frozenset, set))
-        )
+        check.invariant(not of_type or isinstance(of_type, (DagsterEventType, frozenset, set)))
 
         is_of_type_set = isinstance(of_type, (set, frozenset))
 

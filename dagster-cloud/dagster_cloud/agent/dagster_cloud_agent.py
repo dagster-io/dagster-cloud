@@ -22,9 +22,12 @@ from dagster._serdes import (
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster._utils import merge_dicts
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.interrupts import raise_interrupts_as
+from dagster._utils.merger import merge_dicts
+from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
     DagsterCloudApi,
@@ -43,8 +46,6 @@ from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,
 )
-from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from ..util import SERVER_HANDLE_TAG, is_isolated_run
 from ..version import __version__
@@ -175,9 +176,14 @@ class DagsterCloudAgent:
             )
 
             if missing_deployment_names:
-                deployment_str = f"deployment{'s' if len(missing_deployment_names) > 1 else ''} {', '.join(missing_deployment_names)}"
+                deployment_str = (
+                    f"deployment{'s' if len(missing_deployment_names) > 1 else ''} {', '.join(missing_deployment_names)}"
+                )
                 raise Exception(
-                    f"Agent is configured to serve an invalid {deployment_str}. Check your agent configuration to make sure it is serving the correct deployment.",
+                    (
+                        f"Agent is configured to serve an invalid {deployment_str}. Check your"
+                        " agent configuration to make sure it is serving the correct deployment."
+                    ),
                 )
 
     def run_loop(self, instance, user_code_launcher, agent_uuid):
@@ -189,7 +195,8 @@ class DagsterCloudAgent:
             and not instance.include_all_serverless_deployments
         ):
             self._logger.info(
-                "Deployment name was not set - checking to see if it can be fetched from the server..."
+                "Deployment name was not set - checking to see if it can be fetched from the"
+                " server..."
             )
             # Fetch the deployment name from the server if it isn't set (only true
             # for old agents, and only will work if there's a single deployment in the org)
@@ -442,7 +449,6 @@ class DagsterCloudAgent:
         user_code_launcher: DagsterCloudUserCodeLauncher,
         upload_all: bool,
     ):
-
         locations_with_ttl_to_query = self._get_locations_with_ttl_to_query(
             instance, user_code_launcher
         )
@@ -894,7 +900,6 @@ class DagsterCloudAgent:
     def run_iteration(
         self, instance: DagsterCloudAgentInstance, user_code_launcher: DagsterCloudUserCodeLauncher
     ) -> Iterator[Optional[SerializableErrorInfo]]:
-
         num_pending_requests = len(self._pending_requests)
 
         if num_pending_requests < self._pending_requests_limit:
@@ -906,7 +911,9 @@ class DagsterCloudAgent:
                 json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
 
                 self._logger.debug(
-                    "Iteration #{iteration}: Adding {num_requests} branch deployment requests to be processed. Currently {num_pending_requests} waiting for server to be ready".format(
+                    "Iteration #{iteration}: Adding {num_requests} branch deployment requests to be"
+                    " processed. Currently {num_pending_requests} waiting for server to be ready"
+                    .format(
                         iteration=self._iteration,
                         num_requests=len(json_requests),
                         num_pending_requests=num_pending_requests,
@@ -923,7 +930,9 @@ class DagsterCloudAgent:
                 json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
 
                 self._logger.debug(
-                    "Iteration #{iteration}: Adding {num_requests} deployment requests to be processed. Currently {num_pending_requests} waiting for server to be ready".format(
+                    "Iteration #{iteration}: Adding {num_requests} deployment requests to be"
+                    " processed. Currently {num_pending_requests} waiting for server to be ready"
+                    .format(
                         iteration=self._iteration,
                         num_requests=len(json_requests),
                         num_pending_requests=num_pending_requests,
@@ -934,7 +943,8 @@ class DagsterCloudAgent:
 
         else:
             self._logger.warning(
-                "Iteration #{iteration}: Waiting to pull requests from the queue since there are already {num_pending_requests} in the queue".format(
+                "Iteration #{iteration}: Waiting to pull requests from the queue since there are"
+                " already {num_pending_requests} in the queue".format(
                     iteration=self._iteration,
                     num_pending_requests=len(self._pending_requests),
                 )

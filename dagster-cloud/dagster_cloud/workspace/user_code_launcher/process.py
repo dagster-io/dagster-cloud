@@ -7,16 +7,22 @@ from collections import defaultdict
 from typing import Any, Collection, Dict, Mapping, NamedTuple, Optional, Set, Tuple, Union
 
 import dagster._seven as seven
-from dagster import BoolSource, Field, IntSource
-from dagster import _check as check
+from dagster import (
+    BoolSource,
+    Field,
+    IntSource,
+    _check as check,
+)
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._serdes.ipc import open_ipc_subprocess
-from dagster._utils import find_free_port, merge_dicts, safe_tempfile_path_unmanaged
+from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
+from dagster._utils.merger import merge_dicts
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.pex.grpc import MultiPexGrpcClient
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from .user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
@@ -156,14 +162,18 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                     IntSource,
                     is_required=False,
                     default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                    description="Timeout when waiting for a code server to be ready after it is created",
+                    description=(
+                        "Timeout when waiting for a code server to be ready after it is created"
+                    ),
                 ),
                 "wait_for_processes": Field(
                     BoolSource,
                     is_required=False,
                     default_value=False,
-                    description="When cleaning up the agent, wait for any subprocesses to "
-                    "finish before shutting down. Generally only needed in tests/automation.",
+                    description=(
+                        "When cleaning up the agent, wait for any subprocesses to "
+                        "finish before shutting down. Generally only needed in tests/automation."
+                    ),
                 ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -178,7 +188,6 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
-
         key = (deployment_name, location_name)
 
         client: Union[MultiPexGrpcClient, DagsterGrpcClient]
@@ -209,7 +218,6 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
             self._active_multipex_pids[key].add(pid)
         else:
-
             subprocess_args = metadata.get_grpc_server_command() + [
                 "--heartbeat",
                 "--heartbeat-timeout",
@@ -327,7 +335,6 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
             self._remove_pid(pid)
             if self._wait_for_processes:
-
                 if isinstance(process_entry, ProcessUserCodeEntry):
                     try:
                         process_entry.grpc_client.shutdown_server()

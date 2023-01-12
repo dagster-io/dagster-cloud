@@ -3,5 +3,8 @@
     python -m dagster_cloud.pex.grpc.compile
 """
 
-from . import multi_pex_api_pb2
-from .multi_pex_api_pb2_grpc import MultiPexApiServicer, MultiPexApiStub
+from . import multi_pex_api_pb2 as multi_pex_api_pb2
+from .multi_pex_api_pb2_grpc import (
+    MultiPexApiServicer as MultiPexApiServicer,
+    MultiPexApiStub as MultiPexApiStub,
+)

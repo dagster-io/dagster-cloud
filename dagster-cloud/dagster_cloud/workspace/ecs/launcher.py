@@ -1,13 +1,24 @@
 from typing import Any, Collection, Dict, List, Mapping, Optional
 
 import boto3
-from dagster import Array, Enum, EnumValue, Field, IntSource, Noneable, ScalarUnion, StringSource
-from dagster import _check as check
+from dagster import (
+    Array,
+    Enum,
+    EnumValue,
+    Field,
+    IntSource,
+    Noneable,
+    ScalarUnion,
+    StringSource,
+    _check as check,
+)
 from dagster._core.launcher import RunLauncher
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
-from dagster._utils import merge_dicts
+from dagster._utils.merger import merge_dicts
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+
 from dagster_cloud.workspace.config_schema import SHARED_ECS_CONFIG
 from dagster_cloud.workspace.ecs.client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
 from dagster_cloud.workspace.ecs.service import Service
@@ -20,7 +31,6 @@ from dagster_cloud.workspace.user_code_launcher import (
     ServerEndpoint,
 )
 from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from .run_launcher import CloudEcsRunLauncher
 from .utils import get_task_definition_family
@@ -148,15 +158,19 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "env_vars": Field(
                     [StringSource],
                     is_required=False,
-                    description="List of environment variable names to include in the ECS task. "
-                    "Each can be of the form KEY=VALUE or just KEY (in which case the value will be pulled "
-                    "from the current process)",
+                    description=(
+                        "List of environment variable names to include in the ECS task. Each can be"
+                        " of the form KEY=VALUE or just KEY (in which case the value will be pulled"
+                        " from the current process)"
+                    ),
                 ),
                 "server_process_startup_timeout": Field(
                     IntSource,
                     is_required=False,
                     default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                    description="Timeout when waiting for a code server to be ready after it is created",
+                    description=(
+                        "Timeout when waiting for a code server to be ready after it is created"
+                    ),
                 ),
                 "ecs_timeout": Field(
                     IntSource,
@@ -168,8 +182,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     IntSource,
                     is_required=False,
                     default_value=DEFAULT_ECS_GRACE_PERIOD,
-                    description="How long (in seconds) to continue polling if an ECS API endpoint fails "
-                    "(because the ECS API is eventually consistent)",
+                    description=(
+                        "How long (in seconds) to continue polling if an ECS API endpoint fails "
+                        "(because the ECS API is eventually consistent)"
+                    ),
                 ),
                 "launch_type": Field(
                     Enum(
@@ -217,7 +233,6 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
-
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(PORT)
             additional_env = metadata.get_multipex_server_env()
@@ -278,9 +293,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             allow_ecs_exec=self._get_enable_ecs_exec(),
         )
         self._logger.info(
-            "Created a new service at hostname {} for {}:{}, waiting for server to be ready...".format(
-                service.hostname, deployment_name, location_name
-            )
+            "Created a new service at hostname {} for {}:{}, waiting for server to be ready..."
+            .format(service.hostname, deployment_name, location_name)
         )
 
         endpoint = ServerEndpoint(
@@ -293,7 +307,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _check_running_multipex_server(self, multipex_server: DagsterCloudGrpcServer):
         self._logger.info(
-            f"Checking for service {multipex_server.server_handle.name} is ready for existing multipex server..."
+            f"Checking for service {multipex_server.server_handle.name} is ready for existing"
+            " multipex server..."
         )
         self.client.wait_for_service(
             multipex_server.server_handle, container_name=CONTAINER_NAME, logger=self._logger
@@ -423,7 +438,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _get_logs(self, task_arn: str) -> List[str]:
         task_id = task_arn.split("/")[-1]
 
-        task = self.ecs.describe_tasks(cluster=self.cluster, tasks=[task_arn],).get(
+        task = self.ecs.describe_tasks(
+            cluster=self.cluster,
+            tasks=[task_arn],
+        ).get(
             "tasks"
         )[0]
         task_definition = self.ecs.describe_task_definition(

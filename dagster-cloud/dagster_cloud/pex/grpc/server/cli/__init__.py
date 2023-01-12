@@ -1,6 +1,6 @@
 import os
 import subprocess
-from typing import Optional, cast
+from typing import Optional
 
 from dagster._serdes import deserialize_as
 from dagster._utils.interrupts import capture_interrupts

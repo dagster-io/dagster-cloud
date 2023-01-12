@@ -96,7 +96,8 @@ class PexS3Registry:
             if not os.path.exists(local_filepath):
                 if os.getenv("S3_PEX_DISABLED"):
                     raise ValueError(
-                        f"File {local_filepath} not found for pex tag {pex_metadata.pex_tag}, S3_PEX_DISABLED"
+                        f"File {local_filepath} not found for pex tag {pex_metadata.pex_tag},"
+                        " S3_PEX_DISABLED"
                     )
                 _download_from_s3(filename, local_filepath)
 

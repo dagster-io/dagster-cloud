@@ -41,7 +41,6 @@ GENERATED_PB2_PYLINT_DIRECTIVE = [
 
 
 def protoc(generated_dir: str):
-
     generated_pb2_path = os.path.join(generated_dir, "multi_pex_api_pb2.py")
     generated_grpc_path = os.path.join(generated_dir, "multi_pex_api_pb2_grpc.py")
 

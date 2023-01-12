@@ -11,11 +11,6 @@ from dagster._core.host_representation.origin import InProcessRepositoryLocation
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster._serdes import serialize_dagster_namedtuple
 from dagster._utils.error import serializable_error_info_from_exc_info
-from dagster_cloud.api.dagster_cloud_api import (
-    DagsterCloudUploadLocationData,
-    DagsterCloudUploadRepositoryData,
-    DagsterCloudUploadWorkspaceEntry,
-)
 from dagster_cloud_cli import gql, ui
 from dagster_cloud_cli.config_utils import DEPLOYMENT_METADATA_OPTIONS, dagster_cloud_options
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
@@ -23,6 +18,12 @@ from dagster_cloud_cli.core.headers.impl import get_dagster_cloud_api_headers
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_cloud_cli.utils import add_options
 from typer import Argument
+
+from dagster_cloud.api.dagster_cloud_api import (
+    DagsterCloudUploadLocationData,
+    DagsterCloudUploadRepositoryData,
+    DagsterCloudUploadWorkspaceEntry,
+)
 
 
 def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCodeLocation:
@@ -125,10 +126,8 @@ def snapshot_command(
                     response.raise_for_status()
 
             ui.print(
-                (
-                    f"Uploaded snapshot of location `{location_data.name}` "
-                    f"in image `{location_data.image}` for code preview `{code_preview_uuid}`."
-                )
+                f"Uploaded snapshot of location `{location_data.name}` "
+                f"in image `{location_data.image}` for code preview `{code_preview_uuid}`."
             )
         except Exception as e:
             raise ui.error(

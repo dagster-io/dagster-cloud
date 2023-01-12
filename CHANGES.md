@@ -1,5 +1,15 @@
 # Dagster Cloud Changelog
 
+# 1.1.10
+
+### New
+
+- Added support in Dagster Cloud Serverless for code locations using `requirements.txt` files with local package dependencies (for example, `../some/other/package`).
+
+### Bugfixes
+
+- Fixed an issue where setting `workspace.securityContext` in the agent Helm chart to override the security context of pods launched by the agent caused an error when starting up the agent.
+
 # 1.1.8
 
 ### New

@@ -58,9 +58,11 @@ ECS_CONTAINER_CONTEXT_CONFIG = {
     "env_vars": Field(
         [StringSource],
         is_required=False,
-        description="List of environment variable names to include in the ECS task. "
-        "Each can be of the form KEY=VALUE or just KEY (in which case the value will be pulled "
-        "from the current process)",
+        description=(
+            "List of environment variable names to include in the ECS task. "
+            "Each can be of the form KEY=VALUE or just KEY (in which case the value will be pulled "
+            "from the current process)"
+        ),
     ),
     **SHARED_ECS_CONFIG,
 }

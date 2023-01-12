@@ -35,7 +35,8 @@ from dagster._serdes import (
     deserialize_json_to_dagster_namedtuple,
     serialize_dagster_namedtuple,
 )
-from dagster._utils import merge_dicts, utc_datetime_from_timestamp
+from dagster._utils import utc_datetime_from_timestamp
+from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import GraphQLStorageError
 
 from .queries import (
@@ -45,19 +46,19 @@ from .queries import (
     ADD_PIPELINE_SNAPSHOT_MUTATION,
     ADD_RUN_MUTATION,
     ADD_RUN_TAGS_MUTATION,
-    GET_BACKFILLS_QUERY,
     GET_BACKFILL_QUERY,
+    GET_BACKFILLS_QUERY,
     GET_DAEMON_HEARTBEATS_QUERY,
     GET_EXECUTION_PLAN_SNAPSHOT_QUERY,
     GET_PIPELINE_SNAPSHOT_QUERY,
-    GET_RUNS_COUNT_QUERY,
-    GET_RUNS_QUERY,
     GET_RUN_BY_ID_QUERY,
-    GET_RUN_GROUPS_QUERY,
     GET_RUN_GROUP_QUERY,
+    GET_RUN_GROUPS_QUERY,
     GET_RUN_PARTITION_DATA_QUERY,
     GET_RUN_RECORDS_QUERY,
     GET_RUN_TAGS_QUERY,
+    GET_RUNS_COUNT_QUERY,
+    GET_RUNS_QUERY,
     HAS_EXECUTION_PLAN_SNAPSHOT_QUERY,
     HAS_PIPELINE_SNAPSHOT_QUERY,
     HAS_RUN_QUERY,

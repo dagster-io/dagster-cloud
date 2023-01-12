@@ -209,17 +209,20 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
 
         if "deployment" in metadict:
             raise Exception(
-                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex servers"
+                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex"
+                " servers"
             )
 
         if "location" in metadict:
             raise Exception(
-                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex servers"
+                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex"
+                " servers"
             )
 
         if "timestamp" in metadict:
             raise Exception(
-                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex servers"
+                "GetCurrentRuns should not be called with grpc metadata. It applies to all pex"
+                " servers"
             )
 
         all_run_ids = []

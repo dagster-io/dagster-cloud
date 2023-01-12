@@ -1,12 +1,21 @@
 from typing import Any, Dict, List, Optional, cast
 
-from dagster import Field, Map, Noneable, Selector, Shape
-from dagster import _check as check
+from dagster import (
+    Field,
+    Map,
+    Noneable,
+    Selector,
+    Shape,
+    _check as check,
+)
 from dagster._config import EvaluationError, StringSource, validate_config
 from dagster._utils import frozendict
 
 from .docker import SHARED_DOCKER_CONFIG
-from .ecs import ECS_CONTAINER_CONTEXT_CONFIG, SHARED_ECS_CONFIG
+from .ecs import (
+    ECS_CONTAINER_CONTEXT_CONFIG as ECS_CONTAINER_CONTEXT_CONFIG,
+    SHARED_ECS_CONFIG as SHARED_ECS_CONFIG,
+)
 from .kubernetes import SHARED_K8S_CONFIG
 
 
@@ -125,17 +134,25 @@ CONFIG_SCHEMA_FIELDS = {
     "working_directory": Field(
         config=str,
         is_required=False,
-        description="Working directory to use for importing Python modules when loading the repository.",
+        description=(
+            "Working directory to use for importing Python modules when loading the repository."
+        ),
     ),
     "executable_path": Field(
         config=str,
         is_required=False,
-        description="Path to reach the executable to use for the Python environment to load the repository. Defaults to the installed dagster command-line entry point.",
+        description=(
+            "Path to reach the executable to use for the Python environment to load the repository."
+            " Defaults to the installed dagster command-line entry point."
+        ),
     ),
     "attribute": Field(
         config=str,
         is_required=False,
-        description="Specifies either a repository or a function that returns a repository. Can be used when the code contains multiple repositories but only one should be included.",
+        description=(
+            "Specifies either a repository or a function that returns a repository. Can be used"
+            " when the code contains multiple repositories but only one should be included."
+        ),
     ),
     "git": Field(
         Shape(

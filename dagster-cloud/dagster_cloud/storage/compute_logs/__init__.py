@@ -1,1 +1,1 @@
-from .compute_log_manager import CloudComputeLogManager
+from .compute_log_manager import CloudComputeLogManager as CloudComputeLogManager

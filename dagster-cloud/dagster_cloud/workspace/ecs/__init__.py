@@ -1,1 +1,1 @@
-from .launcher import EcsUserCodeLauncher
+from .launcher import EcsUserCodeLauncher as EcsUserCodeLauncher

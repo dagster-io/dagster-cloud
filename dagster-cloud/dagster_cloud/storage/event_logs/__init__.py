@@ -1,1 +1,1 @@
-from .storage import GraphQLEventLogStorage
+from .storage import GraphQLEventLogStorage as GraphQLEventLogStorage

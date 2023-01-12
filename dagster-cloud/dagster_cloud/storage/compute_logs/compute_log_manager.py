@@ -2,8 +2,11 @@ from typing import Any, Dict, Optional, Sequence
 
 import dagster._seven as _seven
 import requests
-from dagster import Field, StringSource
-from dagster import _check as check
+from dagster import (
+    Field,
+    StringSource,
+    _check as check,
+)
 from dagster._core.storage.cloud_storage_compute_log_manager import CloudStorageComputeLogManager
 from dagster._core.storage.compute_log_manager import ComputeIOType
 from dagster._core.storage.local_compute_log_manager import (
@@ -23,7 +26,6 @@ class CloudComputeLogManager(CloudStorageComputeLogManager, ConfigurableClass):
         local_dir=None,
         inst_data=None,
     ):
-
         # proxy calls to local compute log manager (for subscriptions, etc)
         if not local_dir:
             local_dir = _seven.get_system_temp_directory()

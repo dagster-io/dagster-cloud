@@ -5,15 +5,21 @@ from typing import Collection, Dict, NamedTuple, Set, Tuple
 
 import kubernetes
 import kubernetes.client as client
-from dagster import Field, IntSource, Noneable, StringSource
-from dagster import _check as check
+from dagster import (
+    Field,
+    IntSource,
+    Noneable,
+    StringSource,
+    _check as check,
+)
 from dagster._serdes import ConfigurableClass
-from dagster._utils import merge_dicts
-from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
+from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
+
+from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
@@ -70,6 +76,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         run_k8s_config=None,
         k8s_apps_api_client=None,
         k8s_core_api_client=None,
+        security_context=None,
         **kwargs,
     ):
         self._inst_data = inst_data
@@ -122,6 +129,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self._k8s_apps_api_client = k8s_apps_api_client
         self._k8s_core_api_client = k8s_core_api_client
 
+        self._security_context = security_context
+
         super(K8sUserCodeLauncher, self).__init__(**kwargs)
 
         self._launcher = CloudK8sRunLauncher(
@@ -144,6 +153,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             run_k8s_config=self._run_k8s_config,
             kubeconfig_file=kubeconfig_file,
             load_incluster_config=not kubeconfig_file,
+            security_context=self._security_context,
         )
 
         # mutable set of observed namespaces to assist with cleanup
@@ -177,13 +187,17 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     IntSource,
                     is_required=False,
                     default_value=DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT,
-                    description="Timeout when creating a new Kubernetes deployment for a code server",
+                    description=(
+                        "Timeout when creating a new Kubernetes deployment for a code server"
+                    ),
                 ),
                 "server_process_startup_timeout": Field(
                     IntSource,
                     is_required=False,
                     default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-                    description="Timeout when waiting for a code server to be ready after it is created",
+                    description=(
+                        "Timeout when waiting for a code server to be ready after it is created"
+                    ),
                 ),
                 "image_pull_grace_period": Field(
                     IntSource,
@@ -235,6 +249,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             namespace=self._namespace,
             resources=self._resources,
             scheduler_name=self._scheduler_name,
+            security_context=self._security_context,
             server_k8s_config=self._server_k8s_config,
             run_k8s_config=self._run_k8s_config,
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
@@ -346,7 +361,9 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             for namespace in namespaces_to_search:
                 deployments = api_instance.list_namespaced_deployment(
                     namespace,
-                    label_selector=f"location_hash={deterministic_label_for_location(deployment_name, location_name)}",
+                    label_selector=(
+                        f"location_hash={deterministic_label_for_location(deployment_name, location_name)}"
+                    ),
                 ).items
                 for deployment in deployments:
                     handles.append(K8sHandle(namespace=namespace, name=deployment.metadata.name))

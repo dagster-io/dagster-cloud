@@ -3,7 +3,7 @@ import re
 import time
 
 import kubernetes
-from dagster._utils import merge_dicts
+from dagster._utils.merger import merge_dicts
 from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
 
@@ -85,7 +85,6 @@ def construct_repo_location_deployment(
     container_context,
     args,
 ):
-
     pull_policy = container_context.image_pull_policy
     env_config_maps = container_context.env_config_maps
     env_secrets = container_context.env_secrets
@@ -236,8 +235,8 @@ def wait_for_deployment_complete(
         spec = deployment.spec
 
         logger.debug(
-            f"[updated_replicas:{status.updated_replicas},replicas:{status.replicas}"
-            f",available_replicas:{status.available_replicas},observed_generation:{status.observed_generation}] waiting..."
+            f"[updated_replicas:{status.updated_replicas},replicas:{status.replicas},available_replicas:{status.available_replicas},observed_generation:{status.observed_generation}]"
+            " waiting..."
         )
         logger.debug(f"Status: {status}, spec: {spec}")
 

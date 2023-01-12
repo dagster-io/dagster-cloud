@@ -11,7 +11,6 @@ class CloudK8sRunLauncher(K8sRunLauncher):
     # Fork to avoid call to `count_resume_run_attempts`, since resuming runs is not currently
     # supported in cloud and the method makes repeated event log calls.
     def check_run_worker_health(self, run: DagsterRun):
-
         container_context = self.get_container_context_for_run(run)
 
         job_name = get_job_name_from_run_id(

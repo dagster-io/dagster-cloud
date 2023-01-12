@@ -1,1 +1,1 @@
-from .storage import GraphQLRunStorage
+from .storage import GraphQLRunStorage as GraphQLRunStorage
