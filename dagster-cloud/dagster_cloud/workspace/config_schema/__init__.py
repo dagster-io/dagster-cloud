@@ -21,14 +21,16 @@ from .kubernetes import SHARED_K8S_CONFIG
 
 def validate_workspace_location(workspace_location) -> Optional[List[str]]:
     """Processes a single workspace location config. Returns a list of error
-    messages if any."""
+    messages if any.
+    """
     validation = validate_config(LOCATION_CONFIG_SCHEMA, workspace_location)
     return [error.message for error in validation.errors or []]
 
 
 def validate_workspace_config(workspace_config) -> Optional[List[str]]:
     """Processes an entire workspace location config. Returns a list of
-    error messages, if any."""
+    error messages, if any.
+    """
     validation = validate_config(WORKSPACE_CONFIG_SCHEMA, workspace_config)
     return [error.message for error in validation.errors or []]
 
@@ -36,7 +38,8 @@ def validate_workspace_config(workspace_config) -> Optional[List[str]]:
 def process_workspace_config(workspace_config) -> Dict[str, Any]:
     """Checks a workspace config, erroring if any mismatches with config
     and migrating an input in the legacy workspace config format to the
-    modern format, returning the validated input."""
+    modern format, returning the validated input.
+    """
     check.dict_param(workspace_config, "workspace_config")
 
     # Check if using the legacy format, see below for details

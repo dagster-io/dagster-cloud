@@ -1,4 +1,4 @@
-"Decodes PexMetadata to download S3 files locally and setup a runnable PEX environment."
+"""Decodes PexMetadata to download S3 files locally and setup a runnable PEX environment."""
 import hashlib
 import logging
 import os

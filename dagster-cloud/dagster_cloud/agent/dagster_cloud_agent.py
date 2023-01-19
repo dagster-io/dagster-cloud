@@ -1,4 +1,3 @@
-import concurrent.futures
 import logging
 import os
 import sys
@@ -6,8 +5,9 @@ import tempfile
 import time
 import zlib
 from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
-from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple, Union, cast
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
 
 import dagster._check as check
 import pendulum
@@ -74,36 +74,6 @@ DEPLOYMENT_INFO_QUERY = """
 """
 
 
-class DagsterCloudApiFutureContext(
-    NamedTuple(
-        "_DagsterCloudApiFutureContext",
-        [
-            ("future", concurrent.futures.Future),
-            ("timeout", float),
-        ],
-    )
-):
-    DEFAULT_TIMEOUT_SECONDS = 75
-
-    def __new__(
-        cls,
-        future: concurrent.futures.Future,
-        timeout: Optional[float] = None,
-    ):
-        return super(cls, DagsterCloudApiFutureContext).__new__(
-            cls,
-            check.inst_param(future, "future", concurrent.futures.Future),
-            check.opt_float_param(
-                timeout,
-                "timeout",
-                default=pendulum.now("UTC").add(seconds=cls.DEFAULT_TIMEOUT_SECONDS).timestamp(),
-            ),
-        )
-
-    def timed_out(self):
-        return pendulum.now("UTC").timestamp() > self.timeout
-
-
 class DagsterCloudAgent:
     MAX_THREADS_PER_CORE = 10
 
@@ -117,15 +87,15 @@ class DagsterCloudAgent:
 
         max_workers = (os.cpu_count() or 1) * self.MAX_THREADS_PER_CORE
         self._executor = self._exit_stack.enter_context(
-            concurrent.futures.ThreadPoolExecutor(
+            ThreadPoolExecutor(
                 max_workers=max_workers,
                 thread_name_prefix="dagster_cloud_agent_worker",
             )
         )
 
-        self._request_ids_to_future_context: Dict[str, DagsterCloudApiFutureContext] = {}
+        self._request_ids_to_futures: Dict[str, Future] = {}
 
-        self._last_heartbeat_time = None
+        self._last_heartbeat_time: Optional[pendulum.DateTime] = None
 
         self._last_workspace_check_time = None
 
@@ -163,7 +133,7 @@ class DagsterCloudAgent:
             if not is_branch_deployment
         ]
 
-    def _check_initial_deployment_names(self, instance):
+    def _check_initial_deployment_names(self, instance: DagsterCloudAgentInstance):
         if instance.deployment_names:
             result = instance.organization_scoped_graphql_client().execute(
                 DEPLOYMENTS_QUERY, variable_values={"deploymentNames": instance.deployment_names}
@@ -186,7 +156,12 @@ class DagsterCloudAgent:
                     ),
                 )
 
-    def run_loop(self, instance, user_code_launcher, agent_uuid):
+    def run_loop(
+        self,
+        instance: DagsterCloudAgentInstance,
+        user_code_launcher,
+        agent_uuid,
+    ):
         heartbeat_interval_seconds = AGENT_HEARTBEAT_INTERVAL_SECONDS
 
         if (
@@ -269,7 +244,12 @@ class DagsterCloudAgent:
         self._last_workspace_check_time = curr_time
         self._query_for_workspace_updates(instance, user_code_launcher, upload_all=upload_all)
 
-    def _check_add_heartbeat(self, instance, agent_uuid, heartbeat_interval_seconds):
+    def _check_add_heartbeat(
+        self,
+        instance: DagsterCloudAgentInstance,
+        agent_uuid,
+        heartbeat_interval_seconds,
+    ):
         curr_time = pendulum.now("UTC")
 
         if (
@@ -330,12 +310,12 @@ class DagsterCloudAgent:
             raise GraphQLStorageError(res)
 
     @property
-    def executor(self) -> concurrent.futures.ThreadPoolExecutor:
+    def executor(self) -> ThreadPoolExecutor:
         return self._executor
 
     @property
-    def request_ids_to_future_context(self) -> Dict[str, DagsterCloudApiFutureContext]:
-        return self._request_ids_to_future_context
+    def request_ids_to_futures(self) -> Dict[str, Future]:
+        return self._request_ids_to_futures
 
     def _upload_outdated_workspace_entries(
         self,
@@ -983,33 +963,31 @@ class DagsterCloudAgent:
         for json_request in self._ready_requests:
             request_id = json_request["requestId"]
             submitted_to_executor_timestamp = pendulum.now("UTC").timestamp()
-            future_context = DagsterCloudApiFutureContext(
-                future=self._executor.submit(
-                    self._process_api_request,
-                    json_request,
-                    instance,
-                    user_code_launcher,
-                    submitted_to_executor_timestamp,
-                ),
+            future = self._executor.submit(
+                self._process_api_request,
+                json_request,
+                instance,
+                user_code_launcher,
+                submitted_to_executor_timestamp,
             )
 
-            self._request_ids_to_future_context[request_id] = future_context
+            self._request_ids_to_futures[request_id] = future
 
         self._ready_requests = []
 
-        # Process futures that are done or have timed out
+        # Process futures that are done
         # Create a shallow copy of the futures dict to modify it while iterating
-        for request_id, future_context in self._request_ids_to_future_context.copy().items():
-            if future_context.future.done() or future_context.timed_out():
+        for request_id, future in self._request_ids_to_futures.copy().items():
+            if future.done():
                 response: Optional[SerializableErrorInfo] = None
 
                 try:
-                    response = future_context.future.result(timeout=0)
+                    response = future.result(timeout=0)
                 except:
                     response = serializable_error_info_from_exc_info(sys.exc_info())
 
                 # Do not process a request again once we have its result
-                del self._request_ids_to_future_context[request_id]
+                del self._request_ids_to_futures[request_id]
 
                 # Yield the error information from the future
                 if response:

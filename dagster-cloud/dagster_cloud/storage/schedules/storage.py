@@ -31,7 +31,8 @@ from .queries import (
 class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
     def __init__(self, inst_data=None, override_graphql_client=None):
         """Initialize this class directly only for test (using `override_graphql_client`).
-        Use the ConfigurableClass machinery to init from instance yaml."""
+        Use the ConfigurableClass machinery to init from instance yaml.
+        """
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
         self._override_graphql_client = override_graphql_client
 

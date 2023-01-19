@@ -711,13 +711,15 @@ class DagsterCloudUserCodeLauncher(
         that are running the dagster grpc server as the entry point (i.e. are not multipex
         servers). Typically this will be a single server (unless an error was previous raised
         during a reconciliation loop. ServerHandle can be any type that is sufficient to uniquely
-        identify the server and can be passed into _remove_server_handle to remove the server."""
+        identify the server and can be passed into _remove_server_handle to remove the server.
+        """
 
     def _get_multipex_server_handles_for_location(
         self, _deployment_name: str, _location_name: str
     ) -> Collection[ServerHandle]:
         """Return a list of 'handles' that represent all servers running the multipex server
-        entrypoint."""
+        entrypoint.
+        """
         return []
 
     @abstractmethod
@@ -729,7 +731,8 @@ class DagsterCloudUserCodeLauncher(
     ) -> DagsterCloudGrpcServer:
         """Create a new server for the given location using the given metadata as configuration
         and return a ServerHandle indicating where it can be found. Any waiting for the server
-        to happen should happen in _wait_for_new_server_endpoint."""
+        to happen should happen in _wait_for_new_server_endpoint.
+        """
 
     def _wait_for_new_multipex_server(
         self,
@@ -768,7 +771,8 @@ class DagsterCloudUserCodeLauncher(
     @abstractmethod
     def _remove_server_handle(self, server_handle: ServerHandle) -> None:
         """Shut down any resources associated with the given handle. Called both during updates
-        to spin down the old server once a new server has been spun up, and during removal."""
+        to spin down the old server once a new server has been spun up, and during removal.
+        """
 
     @property
     def supports_get_current_runs_for_server_handle(self) -> bool:
@@ -779,8 +783,8 @@ class DagsterCloudUserCodeLauncher(
 
     def _graceful_remove_server_handle(self, server_handle: ServerHandle):
         """Check if there are non isolated runs and wait for them to finish before shutting down
-        the server."""
-
+        the server.
+        """
         if not self.supports_get_current_runs_for_server_handle:
             return self._remove_server_handle(server_handle)
 

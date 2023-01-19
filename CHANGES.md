@@ -1,5 +1,17 @@
 # Dagster Cloud Changelog
 
+# 1.1.11
+
+### New
+
+- Requests that hit a `ReadTimeout` error will now retry in more cases.
+- The “User Settings” section now opens in a dialog.
+- [beta] Alert policies can now be set to notify on schedule / sensor tick failure. To learn more, check out the docs on alerting: https://docs.dagster.io/dagster-cloud/account/setting-up-alerts
+
+### Bugfixes
+
+- [dagit] Fixed search behavior on the Environment Variables page, which was incorrectly case-sensitive. Variables are also now sorted by “last update” time, with most-recently variables listed at the top.
+
 # 1.1.10
 
 ### New

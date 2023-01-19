@@ -142,7 +142,9 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                 # This may need to be different on Windows because process groups are
                 # handled differently.
                 try:
-                    pid, _exit_code = os.waitpid(0, os.WNOHANG)
+                    # https://docs.python.org/3/library/os.html#os.waitpid
+                    # If pid is -1, the request pertains to any child of the current process.
+                    pid, _exit_code = os.waitpid(-1, os.WNOHANG)
                 except ChildProcessError:
                     # Raised when there are no child processes
                     break
