@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 1.1.14
+
+### New
+
+- Large asset graphs can now be materialized in Dagit without needing to first enter an asset subset. Previously, if you wanted to materialize every asset in such a graph, you needed to first enter `*` as the asset selection before materializing the assets.
+
 # 1.1.11
 
 ### New
