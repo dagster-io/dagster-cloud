@@ -73,14 +73,14 @@ EVENT_RECORD_FRAGMENT = (
 )
 
 ASSET_ENTRY_FRAGMENT = (
-    EVENT_LOG_ENTRY_FRAGMENT
+    EVENT_RECORD_FRAGMENT
     + """
     fragment AssetEntryFragment on AssetEntry {
         assetKey {
             path
         }
-        lastMaterialization {
-            ...EventLogEntryFragment
+        lastMaterializationRecord {
+            ...EventLogRecordFragment
         }
         lastRunId
         assetDetails {
@@ -249,9 +249,9 @@ UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION = """
 """
 
 GET_MATERIALIZATION_COUNT_BY_PARTITION = """
-    query getMaterializationCountByPartition($assetKeys: [String!]!) {
+    query getMaterializationCountByPartition($assetKeys: [String!]!, $afterCursor: BigInt) {
         eventLogs {
-            getMaterializationCountByPartition(assetKeys: $assetKeys) {
+            getMaterializationCountByPartition(assetKeys: $assetKeys, afterCursor: $afterCursor) {
                 ... on AssetMaterializationCountByPartition {
                     assetKey
                     materializationCountByPartition {

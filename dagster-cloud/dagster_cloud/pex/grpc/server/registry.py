@@ -157,7 +157,15 @@ class PexS3Registry:
         pex_path = ":".join(deps_pex_filepaths)
         try:
             subprocess.check_output(
-                ["pex-tools", source_pex_filepath, "venv", venv_dir],
+                [
+                    "pex-tools",
+                    source_pex_filepath,
+                    "venv",
+                    venv_dir,
+                    # multiple packages sometimes provide the same file, eg dbt/__init__.py is in
+                    # both dbt_core and dbt_duckdb
+                    "--collisions-ok",
+                ],
                 stderr=subprocess.STDOUT,
                 env={**os.environ, "PEX_PATH": pex_path},
             )

@@ -5,9 +5,9 @@ from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, Union
 import dagster._check as check
 import pendulum
 from dagster._core.code_pointer import CodePointer
+from dagster._core.definitions.selector import JobSelector
 from dagster._core.host_representation import (
     ExternalRepositoryData,
-    JobSelector,
     RepositoryLocationOrigin,
 )
 from dagster._core.storage.pipeline_run import DagsterRun

@@ -26,7 +26,7 @@ from dagster._core.storage.pipeline_run import (
     RunsFilter,
     TagBucket,
 )
-from dagster._core.storage.runs.base import RunStorage
+from dagster._core.storage.runs.base import RunGroupInfo, RunStorage
 from dagster._daemon.types import DaemonHeartbeat
 from dagster._serdes import (
     ConfigurableClass,
@@ -240,7 +240,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         filters: Optional[PipelineRunsFilter] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> Dict[str, Dict[str, Union[Iterable[DagsterRun], int]]]:
+    ) -> Mapping[str, RunGroupInfo]:
         res = self._execute_query(
             GET_RUN_GROUPS_QUERY,
             variables={
@@ -251,7 +251,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         raw_run_groups = res["data"]["runs"]["getRunGroups"]
 
-        run_groups = {}
+        run_groups: Dict[str, RunGroupInfo] = {}
         for run_group in raw_run_groups:
             run_groups[run_group["rootRunId"]] = {
                 "runs": [deserialize_as(run, DagsterRun) for run in run_group["serializedRuns"]],

@@ -27,8 +27,9 @@ from typing import (
 import dagster._check as check
 from dagster import BoolSource, Field, IntSource
 from dagster._api.list_repositories import sync_list_repositories_grpc
+from dagster._core.definitions.selector import JobSelector
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._core.host_representation import ExternalRepositoryOrigin, JobSelector
+from dagster._core.host_representation import ExternalRepositoryOrigin
 from dagster._core.host_representation.origin import (
     RegisteredRepositoryLocationOrigin,
     RepositoryLocationOrigin,

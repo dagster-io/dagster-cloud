@@ -198,10 +198,10 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
 
     return AssetEntry(
         asset_key=AssetKey(graphene_asset_entry["assetKey"]["path"]),
-        last_materialization=_event_log_entry_from_graphql(
-            graphene_asset_entry["lastMaterialization"]
+        last_materialization_record=_event_record_from_graphql(
+            graphene_asset_entry["lastMaterializationRecord"]
         )
-        if graphene_asset_entry["lastMaterialization"]
+        if graphene_asset_entry["lastMaterializationRecord"]
         else None,
         last_run_id=graphene_asset_entry["lastRunId"],
         asset_details=AssetDetails(
@@ -533,13 +533,19 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return res
 
     def get_materialization_count_by_partition(
-        self, asset_keys: Sequence[AssetKey]
+        self,
+        asset_keys: Sequence[AssetKey],
+        after_cursor: Optional[int] = None,
     ) -> Mapping[AssetKey, Mapping[str, int]]:
         check.list_param(asset_keys, "asset_keys", of_type=AssetKey)
+        check.opt_int_param(after_cursor, "after_cursor")
 
         res = self._execute_query(
             GET_MATERIALIZATION_COUNT_BY_PARTITION,
-            variables={"assetKeys": [asset_key.to_string() for asset_key in asset_keys]},
+            variables={
+                "assetKeys": [asset_key.to_string() for asset_key in asset_keys],
+                "afterCursor": after_cursor,
+            },
         )
 
         materialization_count_result = res["data"]["eventLogs"][

@@ -1,5 +1,16 @@
 # Dagster Cloud Changelog
 
+# 1.1.15
+
+### New
+
+- Significant performance improvements for the asset reconciliation sensor when running on large asset graphs.
+- [dagit] The Permissions and Alerts sections of Cloud Settings have been moved to the Deployment section of the app.
+
+### Bugfixes
+
+- Some issues in `dagster-cloud serverless deploy-python-executable` with handling URLs and comments in `requirements.txt` have been fixed.
+
 # 1.1.14
 
 ### New
