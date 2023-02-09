@@ -18,7 +18,7 @@ from uuid import uuid4
 import dagster._check as check
 from dagster._core.assets import AssetDetails
 from dagster._core.definitions.events import AssetKey, ExpectationResult
-from dagster._core.event_api import RunShardedEventsCursor
+from dagster._core.event_api import EventLogRecord, EventRecordsFilter, RunShardedEventsCursor
 from dagster._core.events import DagsterEvent, DagsterEventType
 from dagster._core.events.log import EventLogEntry
 from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
@@ -26,9 +26,7 @@ from dagster._core.storage.event_log.base import (
     AssetEntry,
     AssetRecord,
     EventLogConnection,
-    EventLogRecord,
     EventLogStorage,
-    EventRecordsFilter,
 )
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
 from dagster._core.storage.pipeline_run import PipelineRunStatsSnapshot
@@ -47,11 +45,14 @@ from dagster_cloud_cli.core.errors import GraphQLStorageError
 from dagster_cloud.storage.event_logs.utils import truncate_event
 
 from .queries import (
+    ADD_DYNAMIC_PARTITIONS_MUTATION,
+    DELETE_DYNAMIC_PARTITION_MUTATION,
     DELETE_EVENTS_MUTATION,
     ENABLE_SECONDARY_INDEX_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
     GET_ASSET_RECORDS_QUERY,
     GET_ASSET_RUN_IDS_QUERY,
+    GET_DYNAMIC_PARTITIONS_QUERY,
     GET_EVENT_RECORDS_QUERY,
     GET_EVENT_TAGS_FOR_ASSET,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
@@ -60,6 +61,7 @@ from .queries import (
     GET_STATS_FOR_RUN_QUERY,
     GET_STEP_STATS_FOR_RUN_QUERY,
     HAS_ASSET_KEY_QUERY,
+    HAS_DYNAMIC_PARTITION_QUERY,
     IS_ASSET_AWARE_QUERY,
     IS_PERSISTENT_QUERY,
     REINDEX_MUTATION,
@@ -588,6 +590,50 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             {event_tag["key"]: event_tag["value"] for event_tag in event_tags["tags"]}
             for event_tags in tags_result
         ]
+
+    def get_dynamic_partitions(self, partitions_def_name: str) -> Sequence[str]:
+        check.str_param(partitions_def_name, "partitions_def_name")
+        res = self._execute_query(
+            GET_DYNAMIC_PARTITIONS_QUERY,
+            variables={"partitionsDefName": partitions_def_name},
+        )
+        return res["data"]["eventLogs"]["getDynamicPartitions"]
+
+    def has_dynamic_partition(self, partitions_def_name: str, partition_key: str) -> bool:
+        check.str_param(partitions_def_name, "partitions_def_name")
+        check.str_param(partition_key, "partition_key")
+        res = self._execute_query(
+            HAS_DYNAMIC_PARTITION_QUERY,
+            variables={
+                "partitionsDefName": partitions_def_name,
+                "partitionKey": partition_key,
+            },
+        )
+        return res["data"]["eventLogs"]["hasDynamicPartition"]
+
+    def add_dynamic_partitions(
+        self, partitions_def_name: str, partition_keys: Sequence[str]
+    ) -> None:
+        check.str_param(partitions_def_name, "partitions_def_name")
+        check.sequence_param(partition_keys, "partition_keys", of_type=str)
+        self._execute_query(
+            ADD_DYNAMIC_PARTITIONS_MUTATION,
+            variables={
+                "partitionsDefName": partitions_def_name,
+                "partitionKeys": partition_keys,
+            },
+        )
+
+    def delete_dynamic_partition(self, partitions_def_name: str, partition_key: str) -> None:
+        check.str_param(partitions_def_name, "partitions_def_name")
+        check.str_param(partition_key, "partition_key")
+        self._execute_query(
+            DELETE_DYNAMIC_PARTITION_MUTATION,
+            variables={
+                "partitionsDefName": partitions_def_name,
+                "partitionKey": partition_key,
+            },
+        )
 
     def wipe_asset(self, asset_key: AssetKey):
         res = self._execute_query(

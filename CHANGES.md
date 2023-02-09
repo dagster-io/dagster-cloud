@@ -1,5 +1,16 @@
 # Dagster Cloud Changelog
 
+# 1.1.18
+
+### New
+
+- Alerts can now be configured for Agent downtime on hybrid deployments. Check out the alerting documentation to learn more: https://docs.dagster.io/dagster-cloud/account/setting-up-alerts#setting-up-alerts-in-dagster-cloud.
+- Users with Editor permissions can now edit deployment settings within the Dagster Cloud UI. Previously, they could only edit deployment settings using the dagster-cloud CLI.
+
+### Bugfixes
+
+- Fixed a bug where schedule / sensor alerts would not fire upon re-enabling an alert policy.
+
 # 1.1.15
 
 ### New

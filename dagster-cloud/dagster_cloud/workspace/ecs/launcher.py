@@ -208,7 +208,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
     @staticmethod
-    def from_config_value(inst_data: ConfigurableClassData, config_value: Dict[str, Any]):  # type: ignore
+    def from_config_value(inst_data: ConfigurableClassData, config_value: Dict[str, Any]):
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property

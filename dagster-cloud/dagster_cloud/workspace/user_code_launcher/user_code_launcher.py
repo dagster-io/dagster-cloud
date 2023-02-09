@@ -106,7 +106,6 @@ class UserCodeLauncherEntry(
         [
             ("code_deployment_metadata", CodeDeploymentMetadata),
             ("update_timestamp", float),
-            ("sandbox_saved_timestamp", Optional[float]),
         ],
     )
 ):
@@ -114,7 +113,6 @@ class UserCodeLauncherEntry(
         cls,
         code_deployment_metadata,
         update_timestamp,
-        sandbox_saved_timestamp=None,
     ):
         return super(UserCodeLauncherEntry, cls).__new__(
             cls,
@@ -122,7 +120,6 @@ class UserCodeLauncherEntry(
                 code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
             ),
             check.float_param(update_timestamp, "update_timestamp"),
-            check.opt_float_param(sandbox_saved_timestamp, "sandbox_saved_timestamp"),
         )
 
 

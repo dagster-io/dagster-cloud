@@ -349,3 +349,39 @@ WIPE_ASSET_MUTATION = """
         }
     }
 """
+
+GET_DYNAMIC_PARTITIONS_QUERY = """
+query getDynamicPartitions($partitionsDefName: String!) {
+    eventLogs {
+        getDynamicPartitions(partitionsDefName: $partitionsDefName)
+    }
+}
+"""
+
+HAS_DYNAMIC_PARTITION_QUERY = """
+query hasDynamicPartition($partitionsDefName: String!, $partitionKey: String!) {
+    eventLogs {
+        hasDynamicPartition(partitionsDefName: $partitionsDefName, partitionKey: $partitionKey)
+    }
+}
+"""
+
+ADD_DYNAMIC_PARTITIONS_MUTATION = """
+    mutation AddDynamicPartitions($partitionsDefName: String!, $partitionKeys: [String!]!) {
+        eventLogs {
+            AddDynamicPartitions(partitionsDefName: $partitionsDefName, partitionKeys: $partitionKeys) {
+                ok
+            }
+        }
+    }
+"""
+
+DELETE_DYNAMIC_PARTITION_MUTATION = """
+    mutation DeleteDynamicPartition($partitionsDefName: String!, $partitionKey: String!) {
+        eventLogs {
+            DeleteDynamicPartition(partitionsDefName: $partitionsDefName, partitionKey: $partitionKey) {
+                ok
+            }
+        }
+    }
+"""

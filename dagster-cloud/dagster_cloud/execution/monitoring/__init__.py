@@ -107,14 +107,14 @@ def _is_grpc_unimplemented_error(error: Exception) -> bool:
     cause = error.__cause__
     if not isinstance(cause, grpc.RpcError):
         return False
-    return cause.code() == grpc.StatusCode.UNIMPLEMENTED
+    return cause.code() == grpc.StatusCode.UNIMPLEMENTED  # type: ignore  # (bad stubs)
 
 
 def _is_grpc_unknown_error(error: Exception) -> bool:
     cause = error.__cause__
     if not isinstance(cause, grpc.RpcError):
         return False
-    return cause.code() == grpc.StatusCode.UNKNOWN
+    return cause.code() == grpc.StatusCode.UNKNOWN  # type: ignore  # (bad stubs)
 
 
 def get_cloud_run_worker_statuses(instance: DagsterCloudAgentInstance, deployment_names, logger):

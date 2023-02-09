@@ -7,7 +7,7 @@ from typing import Dict, List, NamedTuple, Optional, Set
 import dagster._seven as seven
 from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._core.instance import InstanceRef
+from dagster._core.instance.ref import InstanceRef
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged

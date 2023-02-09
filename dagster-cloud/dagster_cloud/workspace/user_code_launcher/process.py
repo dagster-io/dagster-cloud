@@ -157,7 +157,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         return self._inst_data
 
     @classmethod
-    def config_type(cls) -> Dict:  # type: ignore
+    def config_type(cls) -> Dict:
         return merge_dicts(
             {
                 "server_process_startup_timeout": Field(

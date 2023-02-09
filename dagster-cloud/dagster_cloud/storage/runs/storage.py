@@ -67,7 +67,7 @@ from .queries import (
 )
 
 
-def _get_filters_input(filters) -> Optional[Dict[str, Any]]:
+def _get_filters_input(filters: Optional[PipelineRunsFilter]) -> Optional[Dict[str, Any]]:
     filters = check.opt_inst_param(filters, "filters", PipelineRunsFilter)
 
     if filters is None:

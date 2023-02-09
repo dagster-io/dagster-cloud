@@ -17,7 +17,7 @@ def _download_from_s3(filename: str, local_filepath: str):
     # Lazy import boto3 to avoid a hard dependency during module load
     import boto3
 
-    s3 = boto3.client("s3")  # type: ignore[attr-defined]
+    s3 = boto3.client("s3")
 
     # TODO: move the bucket and prefix to pex_metdata
     s3_bucket_name = os.environ["DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_BUCKET"]
