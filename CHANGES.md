@@ -6,6 +6,7 @@
 
 - Alerts can now be configured for Agent downtime on hybrid deployments. Check out the alerting documentation to learn more: https://docs.dagster.io/dagster-cloud/account/setting-up-alerts#setting-up-alerts-in-dagster-cloud.
 - Users with Editor permissions can now edit deployment settings within the Dagster Cloud UI. Previously, they could only edit deployment settings using the dagster-cloud CLI.
+- Serverless runs are now isolated by default. Isolated runs receive more memeory and compute, but take longer to start. https://docs.dagster.io/dagster-cloud/deployment/serverless#run-isolation
 
 ### Bugfixes
 
