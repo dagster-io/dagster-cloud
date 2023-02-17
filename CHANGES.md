@@ -1,5 +1,16 @@
 # Dagster Cloud Changelog
 
+# 1.1.19
+
+### New
+
+- Alerts can now be configured to notify on code location load error. Just create a new alert policy from the UI, and the option will be available.
+
+### Bugfixes
+
+- Fixed an issue where Serverless code location updates sometimes timed out while using the ENABLE_FAST_DEPLOYS flag.
+- Fixed an issue where copying permissions from a deployment with only organization admins when creating a new deployment would raise an error message.
+
 # 1.1.18
 
 ### New

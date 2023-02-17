@@ -307,11 +307,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _check_running_multipex_server(self, multipex_server: DagsterCloudGrpcServer):
         self._logger.info(
-            f"Checking for service {multipex_server.server_handle.name} is ready for existing"
+            f"Checking whether service {multipex_server.server_handle.name} is ready for existing"
             " multipex server..."
         )
-        self.client.wait_for_service(
-            multipex_server.server_handle, container_name=CONTAINER_NAME, logger=self._logger
+        self.client.check_service_has_running_task(
+            multipex_server.server_handle.name, container_name=CONTAINER_NAME, logger=self._logger
         )
         super()._check_running_multipex_server(multipex_server)
 
@@ -325,7 +325,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self._logger.info(
             f"Waiting for service {server_handle.name} to be ready for multipex server..."
         )
-        task_arn = self.client.wait_for_service(
+        task_arn = self.client.wait_for_new_service(
             server_handle, container_name=CONTAINER_NAME, logger=self._logger
         )
         self._wait_for_server_process(
@@ -347,7 +347,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self._logger.info(
             f"Waiting for service {server_handle.name} to be ready for gRPC server..."
         )
-        task_arn = self.client.wait_for_service(
+        task_arn = self.client.wait_for_new_service(
             server_handle, container_name=CONTAINER_NAME, logger=self._logger
         )
         self._wait_for_dagster_server_process(

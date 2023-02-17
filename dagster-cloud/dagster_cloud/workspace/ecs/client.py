@@ -13,7 +13,7 @@ from dagster_aws.ecs.utils import task_definitions_match
 from dagster_cloud.workspace.ecs.service import Service
 
 DEFAULT_ECS_TIMEOUT = 300
-DEFAULT_ECS_GRACE_PERIOD = 10
+DEFAULT_ECS_GRACE_PERIOD = 30
 
 STOPPED_TASK_GRACE_PERIOD = 30
 
@@ -386,36 +386,23 @@ class Client:
 
         return Service(client=self, arn=arn)
 
-    def wait_for_service(self, service, container_name, logger=None) -> str:
+    def wait_for_new_service(self, service, container_name, logger=None) -> str:
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         service_name = service.name
-        messages = []
         start_time = time.time()
-        while start_time + self.timeout > time.time():
+        while True:
             response = self.ecs.describe_services(
                 cluster=self.cluster_name,
-                # We only expect our API call to describe one service
                 services=[service_name],
             )
             if response.get("services"):
-                service = response.get("services")[0]
-                messages = [event.get("message") for event in service.get("events")]
-                # Poll until at least 1 task to starts instead of at least 1 task failing
-                # This is because IAM is eventually consistent so the first event or two
-                # will sometimes fail with "ECS was unable to assume the role" but will
-                # resolve itself with enough time:
-                # https://docs.aws.amazon.com/IAM/latest/UserGuide/troubleshoot_general.html#troubleshoot_general_eventual-consistency
-                if any(["has started 1 tasks" in message for message in messages]):
-                    return self._wait_for_task(service_name, container_name, logger=logger)
-            elif response.get("failures"):
-                failures = response.get("failures")
-                # Even if we fail, check a few more times in case it's just the ECS API
-                # being eventually consistent
-                if start_time + self.grace_period > time.time():
-                    raise Exception(
-                        f"ECS DescribeServices API returned failures: {json.dumps(failures)}"
-                    )
-            else:
+                return self.check_service_has_running_task(
+                    service_name, container_name, logger=logger
+                )
+
+            failures = response.get("failures")
+
+            if not failures:
                 # This might not be a possible state; it's unclear if the ECS API can return empty lists for both
                 # "failures" and "services":
                 # https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeServices.html
@@ -423,8 +410,15 @@ class Client:
                     "ECS DescribeServices API returned an empty response for service"
                     f" {service.arn}."
                 )
+
+            # Even if we fail, check a few more times in case it's just the ECS API
+            # being eventually consistent
+            if time.time() - start_time >= self.grace_period:
+                raise Exception(
+                    f"ECS DescribeServices API returned failures: {json.dumps(failures)}"
+                )
+
             time.sleep(10)
-        raise Exception(messages)
 
     def _raise_failed_task(self, task, container_name, logger):
         task_arn = task["taskArn"]
@@ -448,7 +442,7 @@ class Client:
         if task.get("lastStatus") == "STOPPED":
             self._raise_failed_task(task, container_name, logger)
 
-    def _wait_for_task(self, service_name, container_name, logger=None) -> str:
+    def check_service_has_running_task(self, service_name, container_name, logger=None) -> str:
         # return the ARN of the task if it starts
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         start_time = time.time()
@@ -518,7 +512,29 @@ class Client:
 
             time.sleep(10)
 
-        raise Exception(f"Timed out waiting for tasks to start for service: {service_name}")
+        # Fetch the service event logs to try to get some clue about why the service never spun
+        # up any tasks
+        service_events_str = ""
+        try:
+            response = self.ecs.describe_services(
+                cluster=self.cluster_name,
+                services=[service_name],
+            )
+            if response.get("services"):
+                service = response["services"][0]
+                service_events = [event.get("message") for event in service.get("events")]
+                service_events_str = "Service events:\n" + "\n".join(service_events)
+        except:
+            logger.exception(
+                "Error trying to get service event logs from service {service_name}".format(
+                    service_name=service_name
+                )
+            )
+
+        raise Exception(
+            f"Timed out waiting for a running task for service: {service_name}."
+            f" {service_events_str}"
+        )
 
     def _get_service_discovery_id(self, hostname):
         service_name = hostname.split("." + self.namespace)[0]

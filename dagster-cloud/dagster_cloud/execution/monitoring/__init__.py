@@ -26,7 +26,7 @@ class CloudCodeServerStatus(Enum):
 @whitelist_for_serdes
 class CloudCodeServerHeartbeat(
     NamedTuple(
-        "_CloudRunWorkerStatus",
+        "_CloudCodeServerHeartbeat",
         [
             ("location_name", str),
             ("server_status", CloudCodeServerStatus),
@@ -52,7 +52,11 @@ class CloudCodeServerHeartbeat(
 class CloudRunWorkerStatus(
     NamedTuple(
         "_CloudRunWorkerStatus",
-        [("run_id", str), ("status_type", WorkerStatus), ("message", Optional[str])],
+        [
+            ("run_id", str),
+            ("status_type", WorkerStatus),
+            ("message", Optional[str]),
+        ],
     )
 ):
     def __new__(cls, run_id: str, status_type: WorkerStatus, message: Optional[str] = None):
