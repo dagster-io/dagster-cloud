@@ -136,15 +136,24 @@ GET_RUN_RECORDS_QUERY = (
 )
 
 GET_RUN_TAGS_QUERY = """
-    query getRunTagsQuery {
+    query getRunTagsQuery($jsonTagKeys: JSONString, $valuePrefix: String, $limit: Int) {
         runs {
-            getRunTags {
+            getRunTags(jsonTagKeys: $jsonTagKeys, valuePrefix: $valuePrefix, limit: $limit) {
                 key
                 values
             }
         }
     }
 """
+
+GET_RUN_TAG_KEYS_QUERY = """
+    query getRunTagKeysQuery {
+        runs {
+            getRunTagKeys
+        }
+    }
+"""
+
 
 ADD_RUN_TAGS_MUTATION = """
     mutation addRunTagsMutation($runId: String!, $jsonNewTags: JSONString!) {

@@ -46,6 +46,7 @@ class DagsterCloudUploadLocationData(NamedTuple):
     upload_repository_datas: List[DagsterCloudUploadRepositoryData]
     container_image: Optional[str]
     executable_path: Optional[str]
+    dagster_library_versions: Optional[Mapping[str, str]] = None
 
 
 @whitelist_for_serdes
@@ -277,11 +278,17 @@ class LoadRepositoriesResponse(
             ("container_image", Optional[str]),
             ("executable_path", Optional[str]),
             ("code_deployment_metadata", Optional[CodeDeploymentMetadata]),
+            ("dagster_library_versions", Optional[Mapping[str, str]]),
         ],
     )
 ):
     def __new__(
-        cls, repository_datas, container_image, executable_path, code_deployment_metadata=None
+        cls,
+        repository_datas,
+        container_image,
+        executable_path,
+        code_deployment_metadata=None,
+        dagster_library_versions: Optional[Mapping[str, str]] = None,
     ):
         return super(cls, LoadRepositoriesResponse).__new__(
             cls,
@@ -295,6 +302,7 @@ class LoadRepositoriesResponse(
             check.opt_inst_param(
                 code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
             ),
+            check.opt_nullable_mapping_param(dagster_library_versions, "dagster_library_versions"),
         )
 
 

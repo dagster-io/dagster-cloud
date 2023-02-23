@@ -111,7 +111,6 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             security_group_ids=security_group_ids,
             service_discovery_namespace_id=self.service_discovery_namespace_id,
             log_group=self.log_group,
-            execution_role_arn=self.execution_role_arn,
             timeout=self._ecs_timeout,
             grace_period=self._ecs_grace_period,
             launch_type=self.launch_type,
@@ -251,6 +250,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             + [f"{k}={v}" for k, v in (metadata.cloud_context_env or {}).items()],
             server_resources=self.server_resources,
             run_resources=self.run_resources,
+            task_role_arn=self.task_role_arn,
+            execution_role_arn=self.execution_role_arn,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         environment = merge_dicts(
@@ -273,6 +274,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             image=metadata.image,
             container_name=CONTAINER_NAME,
             command=command,
+            execution_role_arn=container_context.execution_role_arn,
             env=environment,
             tags={
                 "dagster/deployment_name": get_ecs_human_readable_label(deployment_name),
@@ -284,7 +286,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 ),
                 **tags,
             },
-            task_role_arn=self.task_role_arn,
+            task_role_arn=container_context.task_role_arn,
             secrets=container_context.get_secrets_dict(self.secrets_manager),
             sidecars=self._get_grpc_server_sidecars(),
             logger=self._logger,

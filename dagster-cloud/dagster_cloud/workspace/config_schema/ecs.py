@@ -64,5 +64,22 @@ ECS_CONTAINER_CONTEXT_CONFIG = {
             "from the current process)"
         ),
     ),
+    "task_role_arn": Field(
+        StringSource,
+        is_required=False,
+        description=(
+            "ARN of the IAM role for launched tasks. See"
+            " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html. "
+        ),
+    ),
+    "execution_role_arn": Field(
+        StringSource,
+        is_required=False,
+        description=(
+            "ARN of the task execution role for the ECS container and Fargate agent to make AWS API"
+            " calls on your behalf. See"
+            " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html. "
+        ),
+    ),
     **SHARED_ECS_CONFIG,
 }

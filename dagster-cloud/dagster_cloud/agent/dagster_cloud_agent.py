@@ -701,7 +701,7 @@ class DagsterCloudAgent:
                 launcher = scoped_instance.get_run_launcher_for_run(run)
 
                 if is_isolated_run(run):
-                    launcher.launch_run(LaunchRunContext(pipeline_run=run, workspace=None))
+                    launcher.launch_run(LaunchRunContext(dagster_run=run, workspace=None))
                 else:
                     scoped_instance.report_engine_event(
                         f"Launching {run.run_id} without an isolated run environment.",

@@ -17,7 +17,7 @@ class CloudProcessRunLauncher(RunLauncher):
         super().__init__()
 
     def launch_run(self, context: LaunchRunContext) -> None:
-        run = context.pipeline_run
+        run = context.dagster_run
         pipeline_code_origin = check.not_none(context.pipeline_code_origin)
 
         run_args = ExecuteRunArgs(

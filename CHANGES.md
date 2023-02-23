@@ -1,5 +1,13 @@
 # Dagster Cloud Changelog
 
+# 1.1.20
+### New
+
+- ECS Hybrid agents can now change the IAM roles used to spin up tasks for different code locations within the same deployment. See [the docs](https://docs.dagster.io/dagster-cloud/deployment/agents/amazon-ecs/configuration-reference#amazon-ecs-agent-configuration-reference) for an example of how to set the IAM roles for a particular code location in a `dagster_cloud.yaml` file.
+### Breaking Changes
+
+- The `dagster-cloud serverless build-python-executable` command now automatically falls back to using a docker environment to build the Python dependencies, if the current environment cannot build the dependencies. This may happen when some packages do not publish a compatible Linux wheel in PyPI. The `--build-in-linux-docker` flag has been removed and replaced with a `--build-method` flag. This can be be set to `docker-fallback` (default), `local` to use the local environment only, or `docker` to only use the docker environment and skip the local environment.
+
 # 1.1.19
 
 ### New

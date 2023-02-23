@@ -43,6 +43,7 @@ from dagster._utils.error import SerializableErrorInfo, serializable_error_info_
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from typing_extensions import Self
 
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
@@ -565,10 +566,11 @@ class DagsterCloudUserCodeLauncher(
 
         return DagsterCloudUploadLocationData(
             upload_repository_datas=upload_repo_datas,
-            container_image=deserialize_as(
-                client.get_current_image(), GetCurrentImageResult
-            ).current_image,
+            container_image=list_repositories_response.container_image
+            # fallback to grpc call for versions that do not include it in response
+            or deserialize_as(client.get_current_image(), GetCurrentImageResult).current_image,
             executable_path=list_repositories_response.executable_path,
+            dagster_library_versions=list_repositories_response.dagster_library_versions,
         )
 
     def _update_location_error(
@@ -833,6 +835,9 @@ class DagsterCloudUserCodeLauncher(
     @abstractmethod
     def run_launcher(self) -> RunLauncher:
         pass
+
+    def __enter__(self) -> Self:
+        return self
 
     def __exit__(self, exception_type, exception_value, traceback):
         if self._reconcile_grpc_metadata_thread:

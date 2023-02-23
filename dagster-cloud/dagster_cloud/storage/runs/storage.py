@@ -1,5 +1,17 @@
 import json
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 import dagster._check as check
 from dagster._core.errors import (
@@ -20,7 +32,6 @@ from dagster._core.snap import (
 from dagster._core.storage.pipeline_run import (
     DagsterRun,
     JobBucket,
-    PipelineRunsFilter,
     RunPartitionData,
     RunRecord,
     RunsFilter,
@@ -56,6 +67,7 @@ from .queries import (
     GET_RUN_GROUPS_QUERY,
     GET_RUN_PARTITION_DATA_QUERY,
     GET_RUN_RECORDS_QUERY,
+    GET_RUN_TAG_KEYS_QUERY,
     GET_RUN_TAGS_QUERY,
     GET_RUNS_COUNT_QUERY,
     GET_RUNS_QUERY,
@@ -67,8 +79,8 @@ from .queries import (
 )
 
 
-def _get_filters_input(filters: Optional[PipelineRunsFilter]) -> Optional[Dict[str, Any]]:
-    filters = check.opt_inst_param(filters, "filters", PipelineRunsFilter)
+def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]]:
+    filters = check.opt_inst_param(filters, "filters", RunsFilter)
 
     if filters is None:
         return None
@@ -98,8 +110,8 @@ def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
     check.dict_param(graphene_run_record, "graphene_run_record")
     return RunRecord(
         storage_id=check.int_elem(graphene_run_record, "storageId"),
-        pipeline_run=check.inst(
-            deserialize_json_to_dagster_namedtuple(
+        dagster_run=check.inst(
+            deserialize_json_to_dagster_namedtuple(  # type: ignore  # (untyped deserialize)
                 check.str_elem(graphene_run_record, "serializedPipelineRun")
             ),
             DagsterRun,
@@ -193,7 +205,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_runs(
         self,
-        filters: Optional[PipelineRunsFilter] = None,
+        filters: Optional[RunsFilter] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
         bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
@@ -209,7 +221,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return [deserialize_as(run, DagsterRun) for run in res["data"]["runs"]["getRuns"]]
 
-    def get_runs_count(self, filters: Optional[PipelineRunsFilter] = None) -> int:
+    def get_runs_count(self, filters: Optional[RunsFilter] = None) -> int:
         res = self._execute_query(
             GET_RUNS_COUNT_QUERY,
             variables={
@@ -237,7 +249,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_run_groups(
         self,
-        filters: Optional[PipelineRunsFilter] = None,
+        filters: Optional[RunsFilter] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> Mapping[str, RunGroupInfo]:
@@ -271,7 +283,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_run_records(
         self,
-        filters: Optional[PipelineRunsFilter] = None,
+        filters: Optional[RunsFilter] = None,
         limit: Optional[int] = None,
         order_by: Optional[str] = None,
         ascending: bool = False,
@@ -291,12 +303,30 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return [_run_record_from_graphql(record) for record in res["data"]["runs"]["getRunRecords"]]
 
-    def get_run_tags(self) -> List[Tuple[str, Set[str]]]:
-        res = self._execute_query(GET_RUN_TAGS_QUERY)
+    def get_run_tags(
+        self,
+        tag_keys: Optional[Sequence[str]] = None,
+        value_prefix: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Sequence[Tuple[str, Set[str]]]:
+        res = self._execute_query(
+            GET_RUN_TAGS_QUERY,
+            variables={
+                "jsonTagKeys": json.dumps(check.list_param(tag_keys, "tag_keys", of_type=str))
+                if tag_keys
+                else None,
+                "valuePrefix": check.opt_str_param(value_prefix, "value_prefix"),
+                "limit": check.opt_int_param(limit, "limit"),
+            },
+        )
         return [
             (run_tag["key"], set(run_tag["values"]))
             for run_tag in res["data"]["runs"]["getRunTags"]
         ]
+
+    def get_run_tag_keys(self) -> Sequence[str]:
+        res = self._execute_query(GET_RUN_TAG_KEYS_QUERY)
+        return [run_tag_key for run_tag_key in res["data"]["runs"]["getRunTagKeys"]]
 
     def add_run_tags(self, run_id: str, new_tags: Mapping[str, str]):
         self._execute_query(

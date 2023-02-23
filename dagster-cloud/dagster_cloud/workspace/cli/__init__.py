@@ -3,14 +3,14 @@ import sys
 import tempfile
 import zlib
 from contextlib import contextmanager
-from typing import Any, Dict
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 import requests
 from dagster._core.host_representation import InProcessRepositoryLocation
 from dagster._core.host_representation.origin import InProcessRepositoryLocationOrigin
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster._serdes import serialize_dagster_namedtuple
-from dagster._utils.error import serializable_error_info_from_exc_info
+from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud_cli import gql, ui
 from dagster_cloud_cli.config_utils import DEPLOYMENT_METADATA_OPTIONS, dagster_cloud_options
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
@@ -70,7 +70,7 @@ def snapshot_command(
         )
 
         # 1. Record any serialization errors, if any
-        if error_info:
+        if error_info or repository_location is None:
             upload_workspace_entry = DagsterCloudUploadWorkspaceEntry(
                 location_name=location_data.name,
                 deployment_metadata=deployment_metadata,
@@ -95,6 +95,7 @@ def snapshot_command(
                 upload_repository_datas=upload_repository_datas,
                 container_image=location_data.image,
                 executable_path=repository_location.executable_path,
+                dagster_library_versions=repository_location.get_dagster_library_versions(),
             )
 
             # 4. Construct DagsterCloudUploadWorkspaceEntry, upload via file upload endpoint
@@ -138,7 +139,9 @@ def snapshot_command(
 
 
 @contextmanager
-def get_location_or_load_error(location_data: gql.CliInputCodeLocation):
+def get_location_or_load_error(
+    location_data: gql.CliInputCodeLocation,
+) -> Iterator[Tuple[Optional[InProcessRepositoryLocation], Optional[SerializableErrorInfo]]]:
     loadable_target_origin = LoadableTargetOrigin(
         executable_path=location_data.executable_path
         if location_data.executable_path

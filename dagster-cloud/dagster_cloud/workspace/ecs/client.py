@@ -33,7 +33,6 @@ class Client:
         cluster_name: str,
         service_discovery_namespace_id: str,
         log_group: str,
-        execution_role_arn: str,
         subnet_ids: Optional[List[str]] = None,
         security_group_ids: Optional[List[str]] = None,
         ecs_client=None,
@@ -53,7 +52,6 @@ class Client:
             service_discovery_namespace_id, "service_discovery_namespace_id"
         )
         self.log_group = check.str_param(log_group, "log_group")
-        self.execution_role_arn = check.str_param(execution_role_arn, "execution_role_arn")
         self.timeout = check.int_param(timeout, "timeout")
         self.grace_period = check.int_param(grace_period, "grace_period")
         self.launch_type = check.str_param(launch_type, "launch_type")
@@ -102,6 +100,7 @@ class Client:
         family,
         image,
         command,
+        execution_role_arn,
         container_name=None,
         task_role_arn=None,
         env=None,
@@ -137,7 +136,7 @@ class Client:
             },
             secrets=secrets,
             environment=environment,
-            execution_role_arn=self.execution_role_arn,
+            execution_role_arn=execution_role_arn,
             task_role_arn=task_role_arn,
             sidecars=sidecars,
             requires_compatibilities=[self.launch_type],
@@ -184,6 +183,7 @@ class Client:
         name,
         image,
         command,
+        execution_role_arn,
         family=None,
         container_name=None,
         task_role_arn=None,
@@ -208,6 +208,7 @@ class Client:
             family=family,
             image=image,
             container_name=container_name,
+            execution_role_arn=execution_role_arn,
             task_role_arn=task_role_arn,
             command=command,
             env=env or {},
@@ -298,11 +299,12 @@ class Client:
 
         return services
 
-    def run_task(self, name, image, command):
+    def run_task(self, name, image, command, execution_role_arn):
         task_definition_arn = self.register_task_definition(
             family=name,
             image=image,
             command=command,
+            execution_role_arn=execution_role_arn,
         )
 
         task_arn = (
