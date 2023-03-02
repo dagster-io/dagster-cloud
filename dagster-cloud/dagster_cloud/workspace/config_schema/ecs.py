@@ -34,6 +34,20 @@ SHARED_ECS_CONFIG = {
             }
         )
     ),
+    "runtime_platform": Field(
+        Shape(
+            {
+                "cpuArchitecture": Field(StringSource, is_required=False),
+                "operatingSystemFamily": Field(StringSource, is_required=False),
+            }
+        ),
+        is_required=False,
+        description=(
+            "The operating system that the task definition is running on. See"
+            " https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs.html#ECS.Client.register_task_definition"
+            " for the available options."
+        ),
+    ),
 }
 
 

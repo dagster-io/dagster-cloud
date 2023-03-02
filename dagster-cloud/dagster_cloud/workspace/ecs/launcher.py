@@ -60,6 +60,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         launch_type: Optional[str] = None,
         server_resources: Optional[Mapping[str, str]] = None,
         run_resources: Optional[Mapping[str, str]] = None,
+        runtime_platform: Optional[Mapping[str, Any]] = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -104,6 +105,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         self.server_resources = check.opt_mapping_param(server_resources, "server_resources")
         self.run_resources = check.opt_mapping_param(run_resources, "run_resources")
+
+        self.runtime_platform = check.opt_mapping_param(runtime_platform, "runtime_platform")
 
         self.client = Client(
             cluster_name=self.cluster,
@@ -252,6 +255,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             run_resources=self.run_resources,
             task_role_arn=self.task_role_arn,
             execution_role_arn=self.execution_role_arn,
+            runtime_platform=self.runtime_platform,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         environment = merge_dicts(
@@ -293,6 +297,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             cpu=self._get_service_cpu_override(container_context),
             memory=self._get_service_memory_override(container_context),
             allow_ecs_exec=self._get_enable_ecs_exec(),
+            runtime_platform=container_context.runtime_platform,
         )
         self._logger.info(
             "Created a new service at hostname {} for {}:{}, waiting for server to be ready..."
@@ -417,6 +422,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "requires_compatibilities": [self.launch_type],
                 **({"task_role_arn": self.task_role_arn} if self.task_role_arn else {}),
                 **({"sidecars": sidecars} if sidecars else {}),
+                **({"runtime_platform": self.task_role_arn} if self.runtime_platform else {}),
             },
             secrets=self.secrets,
             secrets_tag=self.secrets_tag,

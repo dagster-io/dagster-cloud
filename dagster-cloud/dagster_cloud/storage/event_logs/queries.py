@@ -72,8 +72,17 @@ EVENT_RECORD_FRAGMENT = (
     """
 )
 
+CACHED_STATUS_DATA_FRAGMENT = """
+fragment CachedStatusDataFragment on AssetStatusCacheValue {
+    latestStorageId
+    partitionsDefId
+    serializedMaterializedPartitionSubset
+}
+"""
+
 ASSET_ENTRY_FRAGMENT = (
     EVENT_RECORD_FRAGMENT
+    + CACHED_STATUS_DATA_FRAGMENT
     + """
     fragment AssetEntryFragment on AssetEntry {
         assetKey {
@@ -85,6 +94,9 @@ ASSET_ENTRY_FRAGMENT = (
         lastRunId
         assetDetails {
             lastWipeTimestamp
+        }
+        cachedStatus {
+            ...CachedStatusDataFragment
         }
     }
     """
@@ -239,9 +251,9 @@ GET_ASSET_RUN_IDS_QUERY = """
     """
 
 UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION = """
-    mutation updateAssetCachedStatusData($cacheData: AssetStatusCacheValueInput!) {
+    mutation updateAssetCachedStatusData($assetKey: String!, $cacheValues: AssetStatusCacheValueInput!) {
         eventLogs {
-            UpdateAssetCachedStatusData(cacheData: $cacheData) {
+            UpdateAssetCachedStatusData(assetKey: $assetKey, cacheValues: $cacheValues) {
                 ok
             }
         }
@@ -260,6 +272,14 @@ GET_MATERIALIZATION_COUNT_BY_PARTITION = """
                     }
                 }
             }
+        }
+    }
+    """
+
+GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS = """
+    query getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations($assetKey: String!) {
+        eventLogs {
+            getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations(assetKey: $assetKey)
         }
     }
     """

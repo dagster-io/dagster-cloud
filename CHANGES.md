@@ -1,5 +1,17 @@
 # Dagster Cloud Changelog
 
+# 1.1.21
+
+### New
+
+- The ECS Agent now allows you to set the `runtimePlatform` for task definitions of the tasks that it creates, allowing you to create tasks using a Windows Docker image.
+- Additional information about the code servers and run workers managed by an agent can be viewed in the agent statuses section.
+
+### Bugfixes
+
+- Fixed a GraphQL error that occurred when a freshness policy sensor ran with a time-partitioned asset
+- Fixed a `dagster-cloud` GitHub workflow bug to gracefully handle the case when the commit author is not a GitHub user.
+
 # 1.1.20
 ### New
 

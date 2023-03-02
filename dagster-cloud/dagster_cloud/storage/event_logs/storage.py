@@ -55,6 +55,7 @@ from .queries import (
     GET_DYNAMIC_PARTITIONS_QUERY,
     GET_EVENT_RECORDS_QUERY,
     GET_EVENT_TAGS_FOR_ASSET,
+    GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_RECORDS_FOR_RUN_QUERY,
@@ -197,7 +198,6 @@ def _event_record_from_graphql(graphene_event_record: Dict) -> EventLogRecord:
 
 def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
     check.dict_param(graphene_asset_entry, "graphene_asset_entry")
-
     return AssetEntry(
         asset_key=AssetKey(graphene_asset_entry["assetKey"]["path"]),
         last_materialization_record=_event_record_from_graphql(
@@ -211,12 +211,20 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
         )
         if graphene_asset_entry["assetDetails"]
         else None,
+        cached_status=AssetStatusCacheValue(
+            latest_storage_id=graphene_asset_entry["cachedStatus"]["latestStorageId"],
+            partitions_def_id=graphene_asset_entry["cachedStatus"]["partitionsDefId"],
+            serialized_materialized_partition_subset=graphene_asset_entry["cachedStatus"][
+                "serializedMaterializedPartitionSubset"
+            ],
+        )
+        if graphene_asset_entry["cachedStatus"]
+        else None,
     )
 
 
 def _asset_record_from_graphql(graphene_asset_record: Dict) -> AssetRecord:
     check.dict_param(graphene_asset_record, "graphene_asset_record")
-
     return AssetRecord(
         storage_id=graphene_asset_record["storageId"],
         asset_entry=_asset_entry_from_graphql(graphene_asset_record["assetEntry"]),
@@ -521,18 +529,17 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def update_asset_cached_status_data(
         self, asset_key: AssetKey, cache_values: AssetStatusCacheValue
     ) -> None:
-        res = self._execute_query(
+        self._execute_query(
             UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
             variables={
-                "cacheData": {
-                    "assetKey": asset_key.to_string(),
+                "assetKey": asset_key.to_string(),
+                "cacheValues": {
                     "latestStorageId": cache_values.latest_storage_id,
                     "partitionsDefId": cache_values.partitions_def_id,
                     "serializedMaterializedPartitionSubset": cache_values.serialized_materialized_partition_subset,
-                }
+                },
             },
         )
-        return res
 
     def get_materialization_count_by_partition(
         self,
@@ -565,6 +572,19 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 ] = graphene_partition_count["materializationCount"]
 
         return materialization_count_by_partition
+
+    def get_latest_asset_partition_materialization_attempts_without_materializations(
+        self, asset_key: AssetKey
+    ) -> Mapping[str, str]:
+        res = self._execute_query(
+            GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
+            variables={
+                "assetKey": asset_key.to_string(),
+            },
+        )
+        return res["data"]["eventLogs"][
+            "getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations"
+        ]
 
     def get_event_tags_for_asset(
         self,

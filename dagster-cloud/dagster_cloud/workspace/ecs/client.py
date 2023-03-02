@@ -109,6 +109,7 @@ class Client:
         logger=None,
         cpu=None,
         memory=None,
+        runtime_platform=None,
     ):
         container_name = container_name or family
 
@@ -142,6 +143,7 @@ class Client:
             requires_compatibilities=[self.launch_type],
             cpu=cpu,
             memory=memory,
+            runtime_platform=runtime_platform,
         )
 
         try:
@@ -196,6 +198,7 @@ class Client:
         cpu=None,
         memory=None,
         allow_ecs_exec=False,
+        runtime_platform=None,
     ):
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
 
@@ -217,6 +220,7 @@ class Client:
             logger=logger,
             cpu=cpu,
             memory=memory,
+            runtime_platform=runtime_platform,
         )
 
         service_registry_arn = None
