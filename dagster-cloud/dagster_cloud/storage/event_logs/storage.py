@@ -10,6 +10,7 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Tuple,
     Union,
     cast,
 )
@@ -216,6 +217,12 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
             partitions_def_id=graphene_asset_entry["cachedStatus"]["partitionsDefId"],
             serialized_materialized_partition_subset=graphene_asset_entry["cachedStatus"][
                 "serializedMaterializedPartitionSubset"
+            ],
+            serialized_failed_partition_subset=graphene_asset_entry["cachedStatus"][
+                "serializedFailedPartitionSubset"
+            ],
+            earliest_in_progress_materialization_event_id=graphene_asset_entry["cachedStatus"][
+                "earliestInProgressMaterializationEventId"
             ],
         )
         if graphene_asset_entry["cachedStatus"]
@@ -537,6 +544,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     "latestStorageId": cache_values.latest_storage_id,
                     "partitionsDefId": cache_values.partitions_def_id,
                     "serializedMaterializedPartitionSubset": cache_values.serialized_materialized_partition_subset,
+                    "serializedFailedPartitionSubset": cache_values.serialized_failed_partition_subset,
+                    "earliestInProgressMaterializationEventId": cache_values.earliest_in_progress_materialization_event_id,
                 },
             },
         )
@@ -575,7 +584,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_latest_asset_partition_materialization_attempts_without_materializations(
         self, asset_key: AssetKey
-    ) -> Mapping[str, str]:
+    ) -> Mapping[str, Tuple[str, int]]:
         res = self._execute_query(
             GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
             variables={

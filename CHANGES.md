@@ -1,5 +1,20 @@
 # Dagster Cloud Changelog
 
+# 1.2.0 Cloud Changelog
+
+### New
+
+- Added a new Users tab on the Cloud Settings page with a number of permissions improvements:
+
+  - A way to see all the permissions for each user and deployment in a single place
+  - A way to set permissions for all branch deployments (there's a separate "Branch deployments" column in the UI that can set its own permissions)
+  - A new Launcher role that can launch and terminate runs and backfills, but can take no other writes (Only available on Enterprise plans)
+  - Setting permissions per code location within a deployment (Only available on Enterprise plans)
+
+  This new tab replaces the old Permissions tab. See [the docs](https://docs.dagster.io/master/dagster-cloud/account/managing-users) for more information.
+
+- Added Gitlab integration for adding code locations to Serverless deployments
+
 # 1.1.21
 
 ### New
@@ -13,9 +28,11 @@
 - Fixed a `dagster-cloud` GitHub workflow bug to gracefully handle the case when the commit author is not a GitHub user.
 
 # 1.1.20
+
 ### New
 
 - ECS Hybrid agents can now change the IAM roles used to spin up tasks for different code locations within the same deployment. See [the docs](https://docs.dagster.io/dagster-cloud/deployment/agents/amazon-ecs/configuration-reference#amazon-ecs-agent-configuration-reference) for an example of how to set the IAM roles for a particular code location in a `dagster_cloud.yaml` file.
+
 ### Breaking Changes
 
 - The `dagster-cloud serverless build-python-executable` command now automatically falls back to using a docker environment to build the Python dependencies, if the current environment cannot build the dependencies. This may happen when some packages do not publish a compatible Linux wheel in PyPI. The `--build-in-linux-docker` flag has been removed and replaced with a `--build-method` flag. This can be be set to `docker-fallback` (default), `local` to use the local environment only, or `docker` to only use the docker environment and skip the local environment.
