@@ -2,7 +2,7 @@ import os
 import subprocess
 from typing import Optional
 
-from dagster._serdes import deserialize_as
+from dagster._serdes import deserialize_value
 from dagster._utils.interrupts import capture_interrupts
 from dagster_cloud_cli.core.workspace import PexMetadata
 from typer import Option, Typer, echo
@@ -42,7 +42,7 @@ def execute_run(
     ),
 ):
     with capture_interrupts():
-        pex_metadata = deserialize_as(pex_metadata_json, PexMetadata)
+        pex_metadata = deserialize_value(pex_metadata_json, PexMetadata)
         executable = PexS3Registry(local_pex_files_dir).get_pex_executable(pex_metadata)
 
         subprocess.run(

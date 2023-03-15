@@ -9,7 +9,7 @@ import requests
 from dagster._core.host_representation import InProcessRepositoryLocation
 from dagster._core.host_representation.origin import InProcessRepositoryLocationOrigin
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
-from dagster._serdes import serialize_dagster_namedtuple
+from dagster._serdes import serialize_value
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud_cli import gql, ui
 from dagster_cloud_cli.config_utils import DEPLOYMENT_METADATA_OPTIONS, dagster_cloud_options
@@ -83,7 +83,7 @@ def snapshot_command(
                 DagsterCloudUploadRepositoryData(
                     repository_name=repository_name,
                     code_pointer=code_pointer,
-                    serialized_repository_data=serialize_dagster_namedtuple(
+                    serialized_repository_data=serialize_value(
                         repository_location.get_repository(repository_name).external_repository_data
                     ),
                 )
@@ -111,9 +111,7 @@ def snapshot_command(
             with tempfile.TemporaryDirectory() as temp_dir:
                 dst = os.path.join(temp_dir, "workspace_entry.tmp")
                 with open(dst, "wb") as f:
-                    serialized_workspace_entry = serialize_dagster_namedtuple(
-                        upload_workspace_entry
-                    )
+                    serialized_workspace_entry = serialize_value(upload_workspace_entry)
                     f.write(zlib.compress(serialized_workspace_entry.encode("utf-8")))
 
                 with open(dst, "rb") as f:

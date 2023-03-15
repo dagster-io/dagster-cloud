@@ -1,6 +1,16 @@
 # Dagster Cloud Changelog
 
-# 1.2.0 Cloud Changelog
+# 1.2.2
+
+### Bugfixes
+
+- Fixed an issue where some SAML SSO apps that didn’t set the RelayState field failed to work with Dagster Cloud
+
+# 1.2.1 Cloud
+
+No changes (keeping pace with `dagster` package)
+
+# 1.2.0
 
 ### New
 

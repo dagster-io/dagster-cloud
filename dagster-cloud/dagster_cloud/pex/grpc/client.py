@@ -8,7 +8,8 @@ import grpc
 from dagster._core.errors import DagsterUserCodeProcessError, DagsterUserCodeUnreachableError
 from dagster._grpc.client import DEFAULT_GRPC_TIMEOUT
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
-from dagster._serdes import deserialize_json_to_dagster_namedtuple, serialize_dagster_namedtuple
+from dagster._serdes import serialize_value
+from dagster._serdes.serdes import deserialize_value
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 
 from .__generated__ import MultiPexApiStub, multi_pex_api_pb2
@@ -37,7 +38,7 @@ class MultiPexGrpcClient:
         res = self._query(
             "CreatePexServer",
             multi_pex_api_pb2.CreatePexServerRequest,
-            create_pex_server_args=serialize_dagster_namedtuple(create_pex_server_args),
+            create_pex_server_args=serialize_value(create_pex_server_args),
         )
         return self._response_or_error(res.create_pex_server_response, CreatePexServerResponse)
 
@@ -46,7 +47,7 @@ class MultiPexGrpcClient:
         res = self._query(
             "GetPexServers",
             multi_pex_api_pb2.GetPexServersRequest,
-            get_pex_servers_args=serialize_dagster_namedtuple(get_pex_servers_args),
+            get_pex_servers_args=serialize_value(get_pex_servers_args),
         )
         return self._response_or_error(res.get_pex_servers_response, GetPexServersResponse)
 
@@ -57,7 +58,7 @@ class MultiPexGrpcClient:
         res = self._query(
             "ShutdownPexServer",
             multi_pex_api_pb2.ShutdownPexServerRequest,
-            shutdown_pex_server_args=serialize_dagster_namedtuple(shutdown_pex_server_args),
+            shutdown_pex_server_args=serialize_value(shutdown_pex_server_args),
         )
         return self._response_or_error(res.shutdown_pex_server_response, ShutdownPexServerResponse)
 
@@ -75,7 +76,7 @@ class MultiPexGrpcClient:
             yield channel
 
     def _response_or_error(self, response, response_type):
-        deserialized_response = deserialize_json_to_dagster_namedtuple(response)
+        deserialized_response = deserialize_value(response, (response_type, SerializableErrorInfo))
         if isinstance(deserialized_response, SerializableErrorInfo):
             raise DagsterUserCodeProcessError.from_error_info(deserialized_response)
         check.invariant(isinstance(deserialized_response, response_type))

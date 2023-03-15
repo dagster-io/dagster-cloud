@@ -4,6 +4,8 @@ import logging
 import os
 import shutil
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, NamedTuple, Optional
 from uuid import uuid4
 
@@ -43,7 +45,7 @@ class PexExecutable(
             ("all_paths", List[str]),
             ("environ", Dict[str, str]),
             ("working_directory", Optional[str]),
-            ("venv_directory", Optional[str]),
+            ("venv_dirs", List[str]),
         ],
     )
 ):
@@ -53,7 +55,7 @@ class PexExecutable(
         all_paths: List[str],
         environ: Dict[str, str],
         working_directory: Optional[str],
-        venv_directory: Optional[str],
+        venv_dirs: List[str],
     ):
         return super(PexExecutable, cls).__new__(
             cls,
@@ -61,8 +63,21 @@ class PexExecutable(
             check.list_param(all_paths, "all_paths", str),
             check.dict_param(environ, "environ", str, str),
             check.opt_str_param(working_directory, "working_directory"),
-            check.opt_str_param(venv_directory, "venv_directory"),
+            check.list_param(venv_dirs, "venv_dirs"),
         )
+
+
+@dataclass
+class PexVenv:
+    path: Path
+    site_packages: Path
+    bin: Path
+    entrypoint: Path
+    pex_filename: str
+
+
+class PexInstallationError(Exception):
+    pass
 
 
 class PexS3Registry:
@@ -111,80 +126,106 @@ class PexS3Registry:
         if not source_pex_filepath:
             raise ValueError("Invalid pex_tag has no source pex: %r" % pex_metadata.pex_tag)
 
-        # we unpack the pex files into a venv
-        pex_venv_dir = self.venv_dir_for(pex_metadata.pex_tag)
+        # we unpack each pex file into its own venv
+        source_venv = self.venv_for(source_pex_filepath)
+        deps_venvs = []
+        for deps_filepath in deps_pex_filepaths:
+            deps_venvs.append(self.venv_for(deps_filepath))
 
-        if not os.path.exists(pex_venv_dir):
-            venv_installed = self.install_venv(
-                pex_venv_dir, source_pex_filepath, deps_pex_filepaths
-            )
-        else:
-            venv_installed = True
-
-        if venv_installed:
-            # unpacking a venv from a pex provides this pex script as the entrypoint
-            entrypoint = os.path.join(pex_venv_dir, "pex")
-
-            # inject the venv's bin directory into the path
-            bin_path = os.path.join(pex_venv_dir, "bin")
-            env = {"PATH": bin_path + ":" + os.environ["PATH"]}
-        else:
-            # TODO: remove fallback, once we're sure pex venv is reliable
-            logging.info("Ignoring failure to install venv")
-            entrypoint = source_pex_filepath
-            env = {"PEX_PATH": ":".join(deps_pex_filepaths)}
-
+        entrypoint = str(source_venv.entrypoint)
+        pythonpaths = ":".join(
+            [str(source_venv.site_packages)]
+            + [str(deps_venv.site_packages) for deps_venv in deps_venvs]
+        )
+        bin_paths = ":".join(
+            [str(source_venv.bin)] + [str(deps_venv.bin) for deps_venv in deps_venvs]
+        )
         working_dir = self.get_working_dir_for_pex(entrypoint)
-
+        env = {
+            "PATH": bin_paths + ":" + os.environ["PATH"],
+            "PYTHONPATH": pythonpaths,
+        }
         return PexExecutable(
             entrypoint,
             [source_pex_filepath] + deps_pex_filepaths,
             env,
             working_dir,
-            venv_directory=pex_venv_dir if venv_installed else None,
+            venv_dirs=[str(source_venv.path)] + [str(deps_venv.path) for deps_venv in deps_venvs],
         )
 
-    def venv_dir_for(self, pex_tag: str):
+    def venv_for(self, pex_filepath) -> PexVenv:
+        _, pex_filename = os.path.split(pex_filepath)
+        venv_dir = self.venv_dir_for(pex_filepath)
+        if os.path.exists(venv_dir):
+            logging.info("Reusing existing venv %r for %r", venv_dir, pex_filepath)
+        else:
+            installed = self.install_venv(venv_dir, pex_filepath)
+            if not installed or not os.path.exists(venv_dir):
+                raise PexInstallationError("Could not install venv", pex_filepath)
+        venv_path = Path(venv_dir).absolute()
+        return PexVenv(
+            path=venv_path,
+            site_packages=self.get_site_packages_dir_for_venv(venv_path),
+            bin=venv_path / "bin",
+            entrypoint=venv_path / "pex",
+            pex_filename=pex_filename,
+        )
+
+    def venv_dir_for(self, pex_filepath: str):
         # Use a short name for better stack traces
-        short_hash = hashlib.shake_256(pex_tag.encode("utf-8")).hexdigest(6)
+        short_hash = hashlib.shake_256(pex_filepath.encode("utf-8")).hexdigest(6)
         venv_root = os.getenv("VENVS_ROOT", "/venvs")
         return os.path.join(venv_root, short_hash)
 
-    def install_venv(
-        self, venv_dir: str, source_pex_filepath: str, deps_pex_filepaths: List[str]
-    ) -> bool:
-        # Installs all the deps and source pex packages into a venv at venv_dir
-        pex_path = ":".join(deps_pex_filepaths)
+    def install_venv(self, venv_dir: str, pex_filepath: str) -> bool:
+        # Unpacks the pex file into a venv at venv_dir
         try:
             subprocess.check_output(
                 [
                     "pex-tools",
-                    source_pex_filepath,
+                    pex_filepath,
                     "venv",
-                    venv_dir,
                     # multiple packages sometimes provide the same file, eg dbt/__init__.py is in
                     # both dbt_core and dbt_duckdb
                     "--collisions-ok",
+                    # since we combine multiple venvs, we need non hermetic scripts
+                    "--non-hermetic-scripts",
+                    venv_dir,
                 ],
                 stderr=subprocess.STDOUT,
-                env={**os.environ, "PEX_PATH": pex_path},
             )
         except subprocess.CalledProcessError as err:
             shutil.rmtree(venv_dir, ignore_errors=True)  # don't leave invalid dir behind
             logging.exception(
-                "Failure to unpack pex files %r, %r into a venv: %r",
-                source_pex_filepath,
-                pex_path,
+                "Failure to unpack pex file %r into a venv: %r",
+                pex_filepath,
                 err.output,
             )
             return False
         logging.info(
-            "Unpacked pex files %r, %r into venv at %r",
-            source_pex_filepath,
-            deps_pex_filepaths,
+            "Unpacked pex file %r into venv at %r",
+            pex_filepath,
             venv_dir,
         )
         return True
+
+    def get_site_packages_dir_for_venv(self, venv_path: Path) -> Path:
+        python = venv_path / "bin" / "python3"
+        proc = subprocess.run(
+            [python, "-c", "import site; print(site.getsitepackages()[0])"],
+            capture_output=True,
+            check=False,
+        )
+        if not proc.returncode:
+            return Path(proc.stdout.decode("utf-8").strip()).absolute()
+        else:
+            logging.error(
+                "Cannot determine site-packages for venv at %r: %s\n%s",
+                venv_path,
+                proc.stdout.decode("utf-8"),
+                proc.stderr.decode("utf-8"),
+            )
+            raise PexInstallationError("Cannot determine site-packages", venv_path, proc.stderr)
 
     def get_working_dir_for_pex(self, pex_path: str) -> Optional[str]:
         # A special 'working_directory' package may be included the source package.

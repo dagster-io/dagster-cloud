@@ -123,7 +123,7 @@ def protoc(generated_dir: str):
                 "-t",
                 "py37",
                 "-t",
-                "py38",
+                "py310",
                 generated_dir,
             ]
         )

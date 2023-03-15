@@ -16,7 +16,7 @@ from dagster._grpc.__generated__.api_pb2_grpc import (
 from dagster._grpc.server import server_termination_target
 from dagster._grpc.types import GetCurrentRunsResult
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
-from dagster._serdes import deserialize_as, serialize_dagster_namedtuple
+from dagster._serdes import deserialize_value, serialize_value
 from dagster._utils.error import serializable_error_info_from_exc_info
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
@@ -50,7 +50,9 @@ class MultiPexApiServer(MultiPexApiServicer):
         self.__cleanup_thread.start()
 
     def CreatePexServer(self, request, _context):
-        create_pex_server_args = deserialize_as(request.create_pex_server_args, CreatePexServerArgs)
+        create_pex_server_args = deserialize_value(
+            request.create_pex_server_args, CreatePexServerArgs
+        )
         try:
             self._pex_manager.create_pex_server(
                 create_pex_server_args.server_handle,
@@ -62,11 +64,11 @@ class MultiPexApiServer(MultiPexApiServicer):
             response = serializable_error_info_from_exc_info(sys.exc_info())
 
         return multi_pex_api_pb2.CreatePexServerReply(
-            create_pex_server_response=serialize_dagster_namedtuple(response)
+            create_pex_server_response=serialize_value(response)
         )
 
     def GetPexServers(self, request, _context):
-        get_pex_servers_args = deserialize_as(request.get_pex_servers_args, GetPexServersArgs)
+        get_pex_servers_args = deserialize_value(request.get_pex_servers_args, GetPexServersArgs)
         try:
             pex_server_handles = self._pex_manager.get_pex_servers(
                 get_pex_servers_args.deployment_name,
@@ -77,11 +79,11 @@ class MultiPexApiServer(MultiPexApiServicer):
             response = serializable_error_info_from_exc_info(sys.exc_info())
 
         return multi_pex_api_pb2.GetPexServersReply(
-            get_pex_servers_response=serialize_dagster_namedtuple(response)
+            get_pex_servers_response=serialize_value(response)
         )
 
     def ShutdownPexServer(self, request, _context):
-        shutdown_pex_server_args = deserialize_as(
+        shutdown_pex_server_args = deserialize_value(
             request.shutdown_pex_server_args, ShutdownPexServerArgs
         )
         try:
@@ -90,7 +92,7 @@ class MultiPexApiServer(MultiPexApiServicer):
         except:
             response = serializable_error_info_from_exc_info(sys.exc_info())
         return multi_pex_api_pb2.ShutdownPexServerReply(
-            shutdown_pex_server_response=serialize_dagster_namedtuple(response)
+            shutdown_pex_server_response=serialize_value(response)
         )
 
     def Ping(self, request, _context):
@@ -228,7 +230,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         all_run_ids = []
         for handle_id, client in self._pex_manager.get_all_pex_grpc_clients_map().items():
             try:
-                run_ids = deserialize_as(
+                run_ids = deserialize_value(
                     client.get_current_runs(), GetCurrentRunsResult
                 ).current_runs
                 all_run_ids.extend(run_ids)
@@ -242,7 +244,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
                 )
 
         return api_pb2.GetCurrentRunsReply(
-            serialized_current_runs=serialize_dagster_namedtuple(
+            serialized_current_runs=serialize_value(
                 GetCurrentRunsResult(current_runs=all_run_ids, serializable_error_info=None)
             )
         )

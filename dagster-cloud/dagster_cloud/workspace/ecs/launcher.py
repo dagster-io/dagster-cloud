@@ -12,7 +12,6 @@ from dagster import (
     StringSource,
     _check as check,
 )
-from dagster._core.launcher import RunLauncher
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils.merger import merge_dicts
 from dagster_aws.ecs.container_context import EcsContainerContext
@@ -437,7 +436,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             run_resources=self.run_resources,
         )
 
-    def run_launcher(self) -> RunLauncher:
+    def run_launcher(self) -> CloudEcsRunLauncher:
         launcher = CloudEcsRunLauncher(**self._run_launcher_kwargs())
         launcher.register_instance(self._instance)
 

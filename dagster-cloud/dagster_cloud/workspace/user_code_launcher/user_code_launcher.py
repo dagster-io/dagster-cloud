@@ -38,7 +38,7 @@ from dagster._core.instance import MayHaveInstanceWeakref
 from dagster._core.launcher import RunLauncher
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import GetCurrentImageResult
-from dagster._serdes import deserialize_as, serialize_dagster_namedtuple, whitelist_for_serdes
+from dagster._serdes import deserialize_value, serialize_value, whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import raise_http_error
@@ -448,13 +448,11 @@ class DagsterCloudUserCodeLauncher(
 
     def _update_workspace_entry(
         self, deployment_name: str, workspace_entry: DagsterCloudUploadWorkspaceEntry
-    ):
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             dst = os.path.join(temp_dir, "workspace_entry.tmp")
             with open(dst, "wb") as f:
-                f.write(
-                    zlib.compress(serialize_dagster_namedtuple(workspace_entry).encode("utf-8"))
-                )
+                f.write(zlib.compress(serialize_value(workspace_entry).encode("utf-8")))
 
             with open(dst, "rb") as f:
                 self._logger.info(
@@ -476,7 +474,7 @@ class DagsterCloudUserCodeLauncher(
                 )
                 raise_http_error(resp)
 
-            response = deserialize_as(resp.text, DagsterCloudUploadWorkspaceResponse)
+            response = deserialize_value(resp.text, DagsterCloudUploadWorkspaceResponse)
             self._logger.info(
                 "Workspace entry for"
                 f" {deployment_name}:{workspace_entry.location_name} {response.message}"
@@ -515,7 +513,7 @@ class DagsterCloudUserCodeLauncher(
                 )
                 raise_http_error(resp)
 
-            response = deserialize_as(resp.text, DagsterCloudUploadWorkspaceResponse)
+            response = deserialize_value(resp.text, DagsterCloudUploadWorkspaceResponse)
             check.invariant(response.updated, "update failed after job snapshots uploaded")
             self._logger.info(
                 "Workspace entry for"
@@ -568,7 +566,7 @@ class DagsterCloudUserCodeLauncher(
             upload_repository_datas=upload_repo_datas,
             container_image=list_repositories_response.container_image
             # fallback to grpc call for versions that do not include it in response
-            or deserialize_as(client.get_current_image(), GetCurrentImageResult).current_image,
+            or deserialize_value(client.get_current_image(), GetCurrentImageResult).current_image,
             executable_path=list_repositories_response.executable_path,
             dagster_library_versions=list_repositories_response.dagster_library_versions,
         )
@@ -1631,7 +1629,7 @@ class DagsterCloudUserCodeLauncher(
             )
             if not response.serialized_job_data:
                 error = (
-                    deserialize_as(response.serialized_error, SerializableErrorInfo)
+                    deserialize_value(response.serialized_error, SerializableErrorInfo)
                     if response.serialized_error
                     else "no captured error"
                 )

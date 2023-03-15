@@ -2,7 +2,7 @@ import logging
 import sys
 import threading
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Union
+from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence, Set, Tuple, Union
 
 import dagster._check as check
 import grpc
@@ -68,7 +68,9 @@ class CloudRunWorkerStatus(
         )
 
     @classmethod
-    def from_check_run_health_result(cls, run_id: str, result: CheckRunHealthResult):
+    def from_check_run_health_result(
+        cls, run_id: str, result: CheckRunHealthResult
+    ) -> "CloudRunWorkerStatus":
         check.inst_param(result, "result", CheckRunHealthResult)
         return CloudRunWorkerStatus(run_id, result.status, result.msg)
 
@@ -121,8 +123,10 @@ def _is_grpc_unknown_error(error: Exception) -> bool:
     return cause.code() == grpc.StatusCode.UNKNOWN  # type: ignore  # (bad stubs)
 
 
-def get_cloud_run_worker_statuses(instance: DagsterCloudAgentInstance, deployment_names, logger):
-    statuses = {}
+def get_cloud_run_worker_statuses(
+    instance: DagsterCloudAgentInstance, deployment_names: Iterable[str], logger: logging.Logger
+) -> Mapping[str, Sequence[CloudRunWorkerStatus]]:
+    statuses: Dict[str, Sequence[CloudRunWorkerStatus]] = {}
 
     # protected with a lock inside the method
     active_grpc_server_handles = instance.user_code_launcher.get_active_grpc_server_handles()
@@ -171,7 +175,7 @@ def get_cloud_run_worker_statuses(instance: DagsterCloudAgentInstance, deploymen
             instance.ref_for_deployment(deployment_name)
         ) as scoped_instance:
             runs = scoped_instance.get_runs(RunsFilter(statuses=IN_PROGRESS_RUN_STATUSES))
-            statuses_for_deployment = []
+            statuses_for_deployment: List[CloudRunWorkerStatus] = []
             for run in runs:
                 if is_isolated_run(run):
                     launcher = scoped_instance.run_launcher
@@ -275,10 +279,10 @@ def get_cloud_run_worker_statuses(instance: DagsterCloudAgentInstance, deploymen
 def run_worker_monitoring_thread(
     instance: DagsterCloudAgentInstance,
     deployments_to_check: Set[str],
-    statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
+    statuses_dict: Dict[str, Sequence[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
     shutdown_event: threading.Event,
-):
+) -> None:
     logger = logging.getLogger("dagster_cloud")
     check.inst_param(instance, "instance", DagsterCloudAgentInstance)
     logger.debug("Run Monitor thread has started")
@@ -293,10 +297,10 @@ def run_worker_monitoring_thread(
 def run_worker_monitoring_thread_iteration(
     instance: DagsterCloudAgentInstance,
     deployments_to_check: Set[str],
-    statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
+    statuses_dict: Dict[str, Sequence[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
     logger: logging.Logger,
-):
+) -> None:
     try:
         # Check the deployment names
         with run_worker_monitoring_lock:
@@ -319,7 +323,7 @@ def start_run_worker_monitoring_thread(
     deployments_to_check: Set[str],
     statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
-):
+) -> Tuple[threading.Thread, threading.Event]:
     shutdown_event = threading.Event()
     thread = threading.Thread(
         target=run_worker_monitoring_thread,

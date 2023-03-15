@@ -46,3 +46,12 @@ ADD_AGENT_HEARTBEATS_MUTATION = """
         }
     }
 """
+
+GET_AGENTS_QUERY = """
+    query Agents($heartbeatedSince: Float) {
+        agents(heartbeatedSince: $heartbeatedSince) {
+            id
+            status
+        }
+    }
+"""

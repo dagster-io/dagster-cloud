@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Sequence
+from typing import TYPE_CHECKING, Iterable, Optional, Sequence
 
 import dagster._check as check
 from dagster._core.definitions.run_request import InstigatorType
@@ -12,8 +12,8 @@ from dagster._core.storage.schedules.base import ScheduleStorage
 from dagster._serdes import (
     ConfigurableClass,
     ConfigurableClassData,
-    deserialize_as,
-    serialize_dagster_namedtuple,
+    deserialize_value,
+    serialize_value,
 )
 from dagster_cloud_cli.core.errors import GraphQLStorageError
 
@@ -27,8 +27,11 @@ from .queries import (
     UPDATE_JOB_TICK_MUTATION,
 )
 
+if TYPE_CHECKING:
+    from dagster_cloud.instance import DagsterCloudAgentInstance  # noqa: F401
 
-class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
+
+class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], ConfigurableClass):
     def __init__(self, inst_data=None, override_graphql_client=None):
         """Initialize this class directly only for test (using `override_graphql_client`).
         Use the ConfigurableClass machinery to init from instance yaml.
@@ -81,7 +84,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         )
 
         return [
-            deserialize_as(state, InstigatorState)
+            deserialize_value(state, InstigatorState)
             for state in res["data"]["schedules"]["jobStates"]
         ]
 
@@ -98,13 +101,13 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         if state is None:
             return None
 
-        return deserialize_as(state, InstigatorState)
+        return deserialize_value(state, InstigatorState)
 
     def add_instigator_state(self, state: InstigatorState):
         self._execute_query(
             ADD_JOB_STATE_MUTATION,
             variables={
-                "serializedJobState": serialize_dagster_namedtuple(
+                "serializedJobState": serialize_value(
                     check.inst_param(state, "state", InstigatorState)
                 )
             },
@@ -114,7 +117,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         self._execute_query(
             UPDATE_JOB_STATE_MUTATION,
             variables={
-                "serializedJobState": serialize_dagster_namedtuple(
+                "serializedJobState": serialize_value(
                     check.inst_param(state, "state", InstigatorState)
                 )
             },
@@ -146,14 +149,14 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
         )
 
         return [
-            deserialize_as(tick, InstigatorTick) for tick in res["data"]["schedules"]["jobTicks"]
+            deserialize_value(tick, InstigatorTick) for tick in res["data"]["schedules"]["jobTicks"]
         ]
 
     def create_tick(self, tick_data: TickData):
         res = self._execute_query(
             CREATE_JOB_TICK_MUTATION,
             variables={
-                "serializedJobTickData": serialize_dagster_namedtuple(
+                "serializedJobTickData": serialize_value(
                     check.inst_param(tick_data, "tick_data", TickData)
                 )
             },
@@ -167,7 +170,7 @@ class GraphQLScheduleStorage(ScheduleStorage, ConfigurableClass):
             UPDATE_JOB_TICK_MUTATION,
             variables={
                 "tickId": tick.tick_id,
-                "serializedJobTickData": serialize_dagster_namedtuple(
+                "serializedJobTickData": serialize_value(
                     check.inst_param(tick.tick_data, "tick_data", TickData)
                 ),
             },

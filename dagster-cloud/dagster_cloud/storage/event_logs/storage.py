@@ -34,10 +34,9 @@ from dagster._core.storage.pipeline_run import PipelineRunStatsSnapshot
 from dagster._serdes import (
     ConfigurableClass,
     ConfigurableClassData,
-    deserialize_json_to_dagster_namedtuple,
-    serialize_dagster_namedtuple,
+    serialize_value,
 )
-from dagster._serdes.serdes import deserialize_as
+from dagster._serdes.serdes import deserialize_value
 from dagster._utils import datetime_as_float
 from dagster._utils.error import SerializableErrorInfo
 from dagster._utils.merger import merge_dicts
@@ -105,7 +104,7 @@ def _input_for_dagster_event(dagster_event: Optional[DagsterEvent]):
             json.dumps(dagster_event.logging_tags) if dagster_event.logging_tags else None
         ),
         "eventSpecificData": (
-            serialize_dagster_namedtuple(dagster_event.event_specific_data)
+            serialize_value(dagster_event.event_specific_data)
             if dagster_event.event_specific_data
             else None
         ),
@@ -120,8 +119,8 @@ def _event_log_entry_from_graphql(graphene_event_log_entry: Dict) -> EventLogEnt
 
     return EventLogEntry(
         error_info=(
-            deserialize_json_to_dagster_namedtuple(
-                check.str_elem(graphene_event_log_entry, "errorInfo")
+            deserialize_value(
+                check.str_elem(graphene_event_log_entry, "errorInfo"), SerializableErrorInfo
             )
             if graphene_event_log_entry.get("errorInfo") is not None
             else None
@@ -133,8 +132,9 @@ def _event_log_entry_from_graphql(graphene_event_log_entry: Dict) -> EventLogEnt
         step_key=check.opt_str_elem(graphene_event_log_entry, "stepKey"),
         pipeline_name=check.opt_str_elem(graphene_event_log_entry, "pipelineName"),
         dagster_event=(
-            deserialize_json_to_dagster_namedtuple(
-                check.str_elem(graphene_event_log_entry, "dagsterEvent")
+            deserialize_value(
+                check.str_elem(graphene_event_log_entry, "dagsterEvent"),
+                DagsterEvent,
             )
             if graphene_event_log_entry.get("dagsterEvent") is not None
             else None
@@ -352,24 +352,24 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 start_time=check.opt_float_elem(stats, "startTime"),
                 end_time=check.opt_float_elem(stats, "endTime"),
                 materialization_events=[
-                    deserialize_as(materialization_event, EventLogEntry)
+                    deserialize_value(materialization_event, EventLogEntry)
                     for materialization_event in check.opt_list_elem(
                         stats, "materializationEvents", of_type=str
                     )
                 ],
                 expectation_results=[
-                    deserialize_as(expectation_result, ExpectationResult)
+                    deserialize_value(expectation_result, ExpectationResult)
                     for expectation_result in check.opt_list_elem(
                         stats, "expectationResults", of_type=str
                     )
                 ],
                 attempts=check.opt_int_elem(stats, "attempts"),
                 attempts_list=[
-                    deserialize_as(marker, RunStepMarker)
+                    deserialize_value(marker, RunStepMarker)
                     for marker in check.opt_list_elem(stats, "attemptsList", of_type=str)
                 ],
                 markers=[
-                    deserialize_as(marker, RunStepMarker)
+                    deserialize_value(marker, RunStepMarker)
                     for marker in check.opt_list_elem(stats, "markers", of_type=str)
                 ],
             )

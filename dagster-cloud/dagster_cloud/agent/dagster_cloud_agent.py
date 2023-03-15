@@ -18,9 +18,8 @@ from dagster._core.launcher.base import LaunchRunContext
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import CancelExecutionRequest
 from dagster._serdes import (
-    deserialize_as,
-    deserialize_json_to_dagster_namedtuple,
-    serialize_dagster_namedtuple,
+    deserialize_value,
+    serialize_value,
 )
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.interrupts import raise_interrupts_as
@@ -276,7 +275,7 @@ class DagsterCloudAgent:
         serialized_agent_heartbeats = [
             {
                 "deploymentName": deployment_name,
-                "serializedAgentHeartbeat": serialize_dagster_namedtuple(
+                "serializedAgentHeartbeat": serialize_value(
                     AgentHeartbeat(
                         timestamp=curr_time.float_timestamp,
                         agent_id=agent_uuid,
@@ -338,7 +337,7 @@ class DagsterCloudAgent:
 
         for entry in entries:
             location_name = entry["locationName"]
-            deployment_metadata = deserialize_as(
+            deployment_metadata = deserialize_value(
                 entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
             )
             if entry["hasOutdatedData"]:
@@ -475,7 +474,7 @@ class DagsterCloudAgent:
                     location_key = (deployment_name, location_name)
 
                     all_locations.add(location_key)
-                    deployment_metadata = deserialize_as(
+                    deployment_metadata = deserialize_value(
                         entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
                     )
 
@@ -803,9 +802,7 @@ class DagsterCloudAgent:
             )
         else:
             try:
-                request = cast(
-                    DagsterCloudApiRequest, deserialize_json_to_dagster_namedtuple(request_body)
-                )
+                request = deserialize_value(request_body, DagsterCloudApiRequest)
                 self._logger.info(
                     "Received request {request}.".format(
                         request=request,
@@ -870,7 +867,7 @@ class DagsterCloudAgent:
         if request_api not in DagsterCloudApi.__members__:
             return None
 
-        request = cast(DagsterCloudApiRequest, deserialize_json_to_dagster_namedtuple(request_body))
+        request = deserialize_value(request_body, DagsterCloudApiRequest)
         location_origin = self._get_location_origin_from_request(request)
         if not location_origin:
             return None
@@ -1006,7 +1003,7 @@ def upload_api_response(
     with tempfile.TemporaryDirectory() as temp_dir:
         dst = os.path.join(temp_dir, "api_response.tmp")
         with open(dst, "wb") as f:
-            f.write(zlib.compress(serialize_dagster_namedtuple(upload_response).encode("utf-8")))
+            f.write(zlib.compress(serialize_value(upload_response).encode("utf-8")))
 
         with open(dst, "rb") as f:
             resp = instance.requests_session.post(

@@ -42,9 +42,8 @@ from dagster._daemon.types import DaemonHeartbeat
 from dagster._serdes import (
     ConfigurableClass,
     ConfigurableClassData,
-    deserialize_as,
-    deserialize_json_to_dagster_namedtuple,
-    serialize_dagster_namedtuple,
+    deserialize_value,
+    serialize_value,
 )
 from dagster._utils import utc_datetime_from_timestamp
 from dagster._utils.merger import merge_dicts
@@ -110,10 +109,8 @@ def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
     check.dict_param(graphene_run_record, "graphene_run_record")
     return RunRecord(
         storage_id=check.int_elem(graphene_run_record, "storageId"),
-        dagster_run=check.inst(
-            deserialize_json_to_dagster_namedtuple(  # type: ignore  # (untyped deserialize)
-                check.str_elem(graphene_run_record, "serializedPipelineRun")
-            ),
+        dagster_run=deserialize_value(
+            check.str_elem(graphene_run_record, "serializedPipelineRun"),
             DagsterRun,
         ),
         create_timestamp=utc_datetime_from_timestamp(
@@ -182,7 +179,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         check.inst_param(pipeline_run, "pipeline_run", DagsterRun)
         res = self._execute_query(
             ADD_RUN_MUTATION,
-            variables={"serializedPipelineRun": serialize_dagster_namedtuple(pipeline_run)},
+            variables={"serializedPipelineRun": serialize_value(pipeline_run)},
         )
 
         result = res["data"]["runs"]["addRun"]
@@ -219,7 +216,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "bucketBy": _get_bucket_input(bucket_by),
             },
         )
-        return [deserialize_as(run, DagsterRun) for run in res["data"]["runs"]["getRuns"]]
+        return [deserialize_value(run, DagsterRun) for run in res["data"]["runs"]["getRuns"]]
 
     def get_runs_count(self, filters: Optional[RunsFilter] = None) -> int:
         res = self._execute_query(
@@ -238,7 +235,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         if run_group_or_error["__typename"] == "SerializedRunGroup":
             return (
                 run_group_or_error["rootRunId"],
-                [deserialize_as(run, DagsterRun) for run in run_group_or_error["serializedRuns"]],
+                [
+                    deserialize_value(run, DagsterRun)
+                    for run in run_group_or_error["serializedRuns"]
+                ],
             )
         elif run_group_or_error["__typename"] == "RunNotFoundError":
             raise DagsterRunNotFoundError(invalid_run_id=run_group_or_error["runId"])
@@ -266,7 +266,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         run_groups: Dict[str, RunGroupInfo] = {}
         for run_group in raw_run_groups:
             run_groups[run_group["rootRunId"]] = {
-                "runs": [deserialize_as(run, DagsterRun) for run in run_group["serializedRuns"]],
+                "runs": [deserialize_value(run, DagsterRun) for run in run_group["serializedRuns"]],
                 "count": run_group["count"],
             }
         return run_groups
@@ -279,7 +279,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         if run is None:
             return None
 
-        return deserialize_as(run, DagsterRun)
+        return deserialize_value(run, DagsterRun)
 
     def get_run_records(
         self,
@@ -360,7 +360,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         self._execute_query(
             ADD_PIPELINE_SNAPSHOT_MUTATION,
             variables={
-                "serializedPipelineSnapshot": serialize_dagster_namedtuple(
+                "serializedPipelineSnapshot": serialize_value(
                     check.inst_param(pipeline_snapshot, "pipeline_snapshot", PipelineSnapshot)
                 ),
                 "snapshotId": snapshot_id,
@@ -375,7 +375,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "pipelineSnapshotId": check.str_param(pipeline_snapshot_id, "pipeline_snapshot_id")
             },
         )
-        return deserialize_as(res["data"]["runs"]["getPipelineSnapshot"], PipelineSnapshot)
+        return deserialize_value(res["data"]["runs"]["getPipelineSnapshot"], PipelineSnapshot)
 
     def has_execution_plan_snapshot(self, execution_plan_snapshot_id: str) -> bool:
         res = self._execute_query(
@@ -394,7 +394,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         self._execute_query(
             ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION,
             variables={
-                "serializedExecutionPlanSnapshot": serialize_dagster_namedtuple(
+                "serializedExecutionPlanSnapshot": serialize_value(
                     check.inst_param(
                         execution_plan_snapshot, "execution_plan_snapshot", ExecutionPlanSnapshot
                     )
@@ -417,7 +417,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 )
             },
         )
-        return deserialize_as(
+        return deserialize_value(
             res["data"]["runs"]["getExecutionPlanSnapshot"], ExecutionPlanSnapshot
         )
 
@@ -429,7 +429,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             },
         )
         return [
-            deserialize_as(result, RunPartitionData)
+            deserialize_value(result, RunPartitionData)
             for result in res["data"]["runs"]["getRunPartitionData"]
         ]
 
@@ -437,7 +437,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         self._execute_query(
             ADD_DAEMON_HEARTBEAT_MUTATION,
             variables={
-                "serializedDaemonHeartbeat": serialize_dagster_namedtuple(
+                "serializedDaemonHeartbeat": serialize_value(
                     check.inst_param(daemon_heartbeat, "daemon_heartbeat", DaemonHeartbeat)
                 )
             },
@@ -451,7 +451,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def get_daemon_heartbeats(self) -> Dict[str, DaemonHeartbeat]:
         res = self._execute_query(GET_DAEMON_HEARTBEATS_QUERY)
         return {
-            key: deserialize_as(heartbeat, DaemonHeartbeat)
+            key: deserialize_value(heartbeat, DaemonHeartbeat)
             for key, heartbeat in json.loads(res["data"]["runs"]["getDaemonHeartbeats"]).items()
         }
 
@@ -483,7 +483,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             },
         )
         return [
-            deserialize_as(backfill, PartitionBackfill)
+            deserialize_value(backfill, PartitionBackfill)
             for backfill in res["data"]["runs"]["getBackfills"]
         ]
 
@@ -491,24 +491,20 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         """Get a single partition backfill"""
         res = self._execute_query(GET_BACKFILL_QUERY, variables={"backfillId": backfill_id})
         backfill = res["data"]["runs"]["getBackfill"]
-        return deserialize_as(backfill, PartitionBackfill)
+        return deserialize_value(backfill, PartitionBackfill)
 
     def add_backfill(self, partition_backfill: PartitionBackfill):
         """Add partition backfill to run storage"""
         self._execute_query(
             ADD_BACKFILL_MUTATION,
-            variables={
-                "serializedPartitionBackfill": serialize_dagster_namedtuple(partition_backfill)
-            },
+            variables={"serializedPartitionBackfill": serialize_value(partition_backfill)},
         )
 
     def update_backfill(self, partition_backfill: PartitionBackfill):
         """Update a partition backfill in run storage"""
         self._execute_query(
             UPDATE_BACKFILL_MUTATION,
-            variables={
-                "serializedPartitionBackfill": serialize_dagster_namedtuple(partition_backfill)
-            },
+            variables={"serializedPartitionBackfill": serialize_value(partition_backfill)},
         )
 
     def supports_kvs(self):
@@ -526,6 +522,6 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             MUTATE_JOB_ORIGIN,
             variables={
                 "runId": run.run_id,
-                "serializedJobOrigin": serialize_dagster_namedtuple(job_origin),
+                "serializedJobOrigin": serialize_value(job_origin),
             },
         )

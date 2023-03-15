@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
 
 import dagster._seven as _seven
 import requests
@@ -19,8 +19,13 @@ from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from requests.adapters import HTTPAdapter
 
+if TYPE_CHECKING:
+    from dagster_cloud.instance import DagsterCloudAgentInstance  # noqa: F401
 
-class CloudComputeLogManager(CloudStorageComputeLogManager, ConfigurableClass):
+
+class CloudComputeLogManager(
+    CloudStorageComputeLogManager["DagsterCloudAgentInstance"], ConfigurableClass
+):
     def __init__(
         self,
         local_dir=None,
