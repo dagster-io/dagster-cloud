@@ -1,7 +1,7 @@
 import logging
 import sys
 import time
-from typing import Any, Collection, Dict, List, NamedTuple, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import docker
 from dagster import (
@@ -11,12 +11,14 @@ from dagster import (
 )
 from dagster._core.utils import parse_env_var
 from dagster._serdes import ConfigurableClass
+from dagster._serdes.config_class import ConfigurableClassData
 from dagster._utils import find_free_port
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
 from docker.models.containers import Container
+from typing_extensions import Self
 
 from ..config_schema.docker import SHARED_DOCKER_CONFIG
 from ..user_code_launcher import (
@@ -31,13 +33,13 @@ from .utils import unique_docker_resource_name
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
 MULTIPEX_SERVER_LABEL = "dagster_multipex_server"
+AGENT_LABEL = "dagster_agent_id"
 
 IMAGE_PULL_LOG_INTERVAL = 15
 
 
 class DagsterDockerContainer(NamedTuple):
-    """
-    We use __str__ on server handles to serialize them to the run tags. Wrap the docker container
+    """We use __str__ on server handles to serialize them to the run tags. Wrap the docker container
     object so that we can serialize it to a string.
     """
 
@@ -102,8 +104,8 @@ class DockerUserCodeLauncher(
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
 
-    @staticmethod
-    def from_config_value(inst_data, config_value):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
         return DockerUserCodeLauncher(inst_data=inst_data, **config_value)
 
     def _create_container(
@@ -133,7 +135,7 @@ class DockerUserCodeLauncher(
 
     def _get_standalone_dagster_server_handles_for_location(
         self, deployment_name: str, location_name: str
-    ) -> Collection[Container]:
+    ) -> List[DagsterDockerContainer]:
         client = docker.client.from_env()
         return [
             DagsterDockerContainer(container=container)
@@ -143,6 +145,7 @@ class DockerUserCodeLauncher(
                     "label": [
                         GRPC_SERVER_LABEL,
                         deterministic_label_for_location(deployment_name, location_name),
+                        self._instance.instance_uuid,
                     ]
                 },
             )
@@ -150,7 +153,7 @@ class DockerUserCodeLauncher(
 
     def _get_multipex_server_handles_for_location(
         self, deployment_name: str, location_name: str
-    ) -> Collection[Container]:
+    ) -> List[DagsterDockerContainer]:
         client = docker.client.from_env()
         return [
             DagsterDockerContainer(container=container)
@@ -160,6 +163,7 @@ class DockerUserCodeLauncher(
                     "label": [
                         MULTIPEX_SERVER_LABEL,
                         deterministic_label_for_location(deployment_name, location_name),
+                        f"{AGENT_LABEL}={self._instance.instance_uuid}",
                     ]
                 },
             )
@@ -177,7 +181,7 @@ class DockerUserCodeLauncher(
         container_context: DockerContainerContext,
         command: List[str],
         additional_env: Dict[str, str],
-        labels: List[str],
+        labels: Dict[str, str],
     ) -> Tuple[Container, ServerEndpoint]:
         client = docker.client.from_env()
 
@@ -275,19 +279,21 @@ class DockerUserCodeLauncher(
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(grpc_port)
             environment = metadata.get_multipex_server_env()
-            labels = [
-                MULTIPEX_SERVER_LABEL,
-                deterministic_label_for_location(deployment_name, location_name),
-            ]
+            labels = {
+                MULTIPEX_SERVER_LABEL: "",
+                deterministic_label_for_location(deployment_name, location_name): "",
+                AGENT_LABEL: self._instance.instance_uuid,
+            }
         else:
             command = metadata.get_grpc_server_command()
             environment = metadata.get_grpc_server_env(
                 grpc_port, location_name, self._instance.ref_for_deployment(deployment_name)
             )
-            labels = [
-                GRPC_SERVER_LABEL,
-                deterministic_label_for_location(deployment_name, location_name),
-            ]
+            labels = {
+                GRPC_SERVER_LABEL: "",
+                deterministic_label_for_location(deployment_name, location_name): "",
+                AGENT_LABEL: self._instance.instance_uuid,
+            }
 
         container, server_endpoint = self._launch_container(
             deployment_name,
@@ -334,16 +340,20 @@ class DockerUserCodeLauncher(
         container.remove(force=True)
         self._logger.info("Removed container {container_id}".format(container_id=container.id))
 
-    def _cleanup_servers(self) -> None:
+    def get_agent_id_for_server(self, handle: DagsterDockerContainer) -> Optional[str]:
+        return handle.container.labels.get(AGENT_LABEL)
+
+    def _list_server_handles(self) -> List[DagsterDockerContainer]:
         client = docker.client.from_env()
-
-        containers = client.containers.list(all=True, filters={"label": GRPC_SERVER_LABEL})
-        for container in containers:
-            self._remove_server_handle(DagsterDockerContainer(container=container))
-
-        containers = client.containers.list(all=True, filters={"label": MULTIPEX_SERVER_LABEL})
-        for container in containers:
-            self._remove_server_handle(DagsterDockerContainer(container=container))
+        return [
+            DagsterDockerContainer(container=container)
+            for container in client.containers.list(all=True, filters={"label": GRPC_SERVER_LABEL})
+        ] + [
+            DagsterDockerContainer(container=container)
+            for container in client.containers.list(
+                all=True, filters={"label": MULTIPEX_SERVER_LABEL}
+            )
+        ]
 
     def run_launcher(self):
         launcher = DockerRunLauncher(

@@ -185,7 +185,7 @@ def get_cloud_run_worker_statuses(
                         )
                     )
                 else:
-                    if scoped_instance.agent_replicas_enabled:
+                    if scoped_instance.agent_replicas_enabled:  # type: ignore  # (instance subclass)
                         # Not currently supported for non isolated run monitoring
                         continue
 

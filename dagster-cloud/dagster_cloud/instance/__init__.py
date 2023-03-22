@@ -2,7 +2,7 @@ import copy
 import uuid
 from contextlib import ExitStack
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
 import yaml
 from dagster import (
@@ -27,6 +27,11 @@ from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from ..auth.constants import get_organization_name_from_agent_token
 from ..storage.client import dagster_cloud_api_config
 from ..util import get_env_names_from_config, is_isolated_run
+
+if TYPE_CHECKING:
+    from dagster_cloud.workspace.user_code_launcher.user_code_launcher import (
+        DagsterCloudUserCodeLauncher,
+    )
 
 
 class DagsterCloudInstance(DagsterInstance):
@@ -110,7 +115,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
         return new_api_config
 
-    def ref_for_deployment(self, deployment_name: str):
+    def ref_for_deployment(self, deployment_name: str) -> InstanceRef:
         my_ref = self.get_ref()
         my_custom_instance_class_data = my_ref.custom_instance_class_data
         new_class_data = _cached_inject_deployment(my_custom_instance_class_data, deployment_name)
@@ -291,21 +296,24 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         )
 
     @property
-    def user_code_launcher(self):
+    def user_code_launcher(self) -> "DagsterCloudUserCodeLauncher":
         # Lazily load in case the user code launcher requires dependencies (like dagster-k8s)
         # that we don't neccesarily need to load in every context that loads a
         # DagsterCloudAgentInstance (for example, a step worker)
+        from dagster_cloud.workspace.user_code_launcher.user_code_launcher import (
+            DagsterCloudUserCodeLauncher,
+        )
+
         if not self._user_code_launcher:
             self._user_code_launcher = self._exit_stack.enter_context(
-                self._user_code_launcher_data.rehydrate()
+                self._user_code_launcher_data.rehydrate(as_type=DagsterCloudUserCodeLauncher)  # type: ignore  # (possible none)
             )
             self._user_code_launcher.register_instance(self)
         return self._user_code_launcher
 
     @property
     def run_launcher(self) -> RunLauncher:
-        """
-        The agent has two run launchers, isolated and non-isolated. Use get_run_launcher_for_run to
+        """The agent has two run launchers, isolated and non-isolated. Use get_run_launcher_for_run to
         get the appropriate one. This method will always return the isolated run launcher, which
         is required for some OSS peices like the k8s executor.
         """
@@ -324,7 +332,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             return launcher
 
     @staticmethod
-    def get():  # pylint: disable=arguments-differ
+    def get():
         instance = DagsterInstance.get()
         if not isinstance(instance, DagsterCloudAgentInstance):
             raise DagsterInvariantViolationError(
@@ -350,7 +358,7 @@ instance_class:
     def _agent_replicas_config_schema(cls):
         return {"enabled": Field(bool, is_required=False, default_value=False)}
 
-    def get_required_daemon_types(self):
+    def get_required_daemon_types(self) -> Sequence[str]:
         return []
 
     @staticmethod
@@ -409,20 +417,20 @@ instance_class:
 
         return defaults
 
-    def dispose(self):
+    def dispose(self) -> None:
         super().dispose()
         self._exit_stack.close()
 
     @property
-    def should_start_background_run_thread(self):
+    def should_start_background_run_thread(self) -> bool:
         return self.agent_replicas_enabled
 
     @property
-    def agent_replicas_enabled(self):
+    def agent_replicas_enabled(self) -> bool:
         return self._agent_replicas_config.get("enabled", False)
 
     @property
-    def dagster_cloud_run_worker_monitoring_interval_seconds(self):
+    def dagster_cloud_run_worker_monitoring_interval_seconds(self) -> int:
         return 30
 
 

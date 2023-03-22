@@ -48,6 +48,7 @@ from dagster._serdes import (
 from dagster._utils import utc_datetime_from_timestamp
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import GraphQLStorageError
+from typing_extensions import Self
 
 from .queries import (
     ADD_BACKFILL_MUTATION,
@@ -157,8 +158,8 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def config_type(cls):
         return {}
 
-    @staticmethod
-    def from_config_value(inst_data: ConfigurableClassData, config_value):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
         return GraphQLRunStorage(inst_data=inst_data)
 
     @property
@@ -473,7 +474,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
     ):
-        """Get a list of partition backfills"""
+        """Get a list of partition backfills."""
         res = self._execute_query(
             GET_BACKFILLS_QUERY,
             variables={
@@ -488,20 +489,20 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         ]
 
     def get_backfill(self, backfill_id: str) -> PartitionBackfill:
-        """Get a single partition backfill"""
+        """Get a single partition backfill."""
         res = self._execute_query(GET_BACKFILL_QUERY, variables={"backfillId": backfill_id})
         backfill = res["data"]["runs"]["getBackfill"]
         return deserialize_value(backfill, PartitionBackfill)
 
     def add_backfill(self, partition_backfill: PartitionBackfill):
-        """Add partition backfill to run storage"""
+        """Add partition backfill to run storage."""
         self._execute_query(
             ADD_BACKFILL_MUTATION,
             variables={"serializedPartitionBackfill": serialize_value(partition_backfill)},
         )
 
     def update_backfill(self, partition_backfill: PartitionBackfill):
-        """Update a partition backfill in run storage"""
+        """Update a partition backfill in run storage."""
         self._execute_query(
             UPDATE_BACKFILL_MUTATION,
             variables={"serializedPartitionBackfill": serialize_value(partition_backfill)},

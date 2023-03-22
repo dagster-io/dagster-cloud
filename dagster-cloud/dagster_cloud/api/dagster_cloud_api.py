@@ -7,8 +7,8 @@ import pendulum
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
 from dagster._core.host_representation import (
+    CodeLocationOrigin,
     ExternalRepositoryData,
-    RepositoryLocationOrigin,
 )
 from dagster._core.storage.pipeline_run import DagsterRun
 from dagster._serdes import whitelist_for_serdes
@@ -22,8 +22,7 @@ DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
 
 @whitelist_for_serdes
 class DagsterCloudUploadRepositoryData(NamedTuple):
-    """
-    Serialized object uploaded by the Dagster Cloud agent with information pulled
+    """Serialized object uploaded by the Dagster Cloud agent with information pulled
     from a gRPC server about an individual repository - the data field is serialized since the
     agent may be running older code that doesn't know how to deserialize it, so it passes
     it serialized up to the host cloud, which is always up to date.
@@ -36,8 +35,7 @@ class DagsterCloudUploadRepositoryData(NamedTuple):
 
 @whitelist_for_serdes
 class DagsterCloudUploadLocationData(NamedTuple):
-    """
-    Serialized object uploaded by the Dagster Cloud agent with information pulled
+    """Serialized object uploaded by the Dagster Cloud agent with information pulled
     about a successfully loaded repository location, including information about
     each repository as well as shared metadata like the image to use when launching
     runs in this location.
@@ -51,8 +49,7 @@ class DagsterCloudUploadLocationData(NamedTuple):
 
 @whitelist_for_serdes
 class DagsterCloudUploadWorkspaceEntry(NamedTuple):
-    """
-    Serialized object uploaded by the Dagster Cloud agent with information about
+    """Serialized object uploaded by the Dagster Cloud agent with information about
     a repository location - either the serialized DagsterCloudUploadLocationData
     if the location loaded succesfully, or a SerializableErrorInfo describing the
     error if it was not.
@@ -135,7 +132,7 @@ class DagsterCloudApiThreadTelemetry(
         return self.thread_end_handle_api_request_timestamp - self.thread_start_run_timestamp
 
 
-@whitelist_for_serdes
+@whitelist_for_serdes(old_storage_names={"CheckForWorkspaceUpdatesRequest"})
 class DagsterCloudApiSuccess(
     NamedTuple(
         "_DagsterCloudApiSuccess", [("thread_telemetry", Optional[DagsterCloudApiThreadTelemetry])]
@@ -236,12 +233,12 @@ class DagsterCloudApiGrpcResponse(
 
 @whitelist_for_serdes
 class LoadRepositoriesArgs(
-    NamedTuple("_LoadRepositoryArgs", [("location_origin", RepositoryLocationOrigin)])
+    NamedTuple("_LoadRepositoryArgs", [("location_origin", CodeLocationOrigin)])
 ):
     def __new__(cls, location_origin):
         return super(cls, LoadRepositoriesArgs).__new__(
             cls,
-            check.inst_param(location_origin, "location_origin", RepositoryLocationOrigin),
+            check.inst_param(location_origin, "location_origin", CodeLocationOrigin),
         )
 
 

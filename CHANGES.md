@@ -1,5 +1,12 @@
 # Dagster Cloud Changelog
 
+# 1.2.3
+
+### Bugfixes
+
+- Removed a pinned package to fix a dependency incompatibility between `dagster-cloud` and `black`.
+- Fixed a UI bug which prevented adding a code location through the GitHub integration multiple times.
+
 # 1.2.2
 
 ### Bugfixes

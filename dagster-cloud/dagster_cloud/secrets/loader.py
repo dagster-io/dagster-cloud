@@ -1,7 +1,9 @@
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from dagster._core.secrets import SecretsLoader
 from dagster._serdes import ConfigurableClass
+from dagster._serdes.config_class import ConfigurableClassData
+from typing_extensions import Self
 
 SECRETS_QUERY = """
 query Secrets($locationName: String) {
@@ -51,6 +53,6 @@ class DagsterCloudSecretsLoader(SecretsLoader, ConfigurableClass):
     def config_type(cls):
         return {}
 
-    @staticmethod
-    def from_config_value(inst_data, config_value):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
         return DagsterCloudSecretsLoader(inst_data=inst_data, **config_value)

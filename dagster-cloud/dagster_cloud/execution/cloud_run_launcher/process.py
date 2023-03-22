@@ -1,12 +1,15 @@
+import os
 import time
 
 import dagster._check as check
 from dagster._core.launcher import RunLauncher
 from dagster._core.launcher.base import LaunchRunContext
+from dagster._core.utils import parse_env_var
 from dagster._grpc.types import ExecuteRunArgs
+from dagster._serdes.ipc import open_ipc_subprocess
 
 from dagster_cloud.execution.utils import TaskStatus
-from dagster_cloud.execution.utils.process import check_on_process, kill_process, launch_process
+from dagster_cloud.execution.utils.process import check_on_process, kill_process
 
 PID_TAG = "process/pid"
 
@@ -25,9 +28,21 @@ class CloudProcessRunLauncher(RunLauncher):
             pipeline_run_id=run.run_id,
             instance_ref=self._instance.get_ref(),
         )
-
         args = run_args.get_command_args()
-        pid = launch_process(args)
+
+        kwargs = {}
+        if (
+            run.pipeline_code_origin
+            and run.pipeline_code_origin.repository_origin.container_context
+            and run.pipeline_code_origin.repository_origin.container_context.get("env_vars")
+        ):
+            kwargs["env"] = {**os.environ}
+            for kev in run.pipeline_code_origin.repository_origin.container_context["env_vars"]:
+                key, value = parse_env_var(kev)
+                kwargs["env"][key] = value
+
+        p = open_ipc_subprocess(args, **kwargs)
+        pid = p.pid
 
         self._run_ids.add(run.run_id)
 

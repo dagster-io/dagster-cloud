@@ -7,7 +7,7 @@ from setuptools import find_packages, setup
 def get_version() -> str:
     version: Dict[str, str] = {}
     with open(Path(__file__).parent / "dagster_cloud/version.py", encoding="utf8") as fp:
-        exec(fp.read(), version)  # pylint: disable=W0122
+        exec(fp.read(), version)
 
     return version["__version__"]
 
@@ -40,8 +40,8 @@ setup(
     packages=find_packages(exclude=["dagster_cloud_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.2.2",
-        "dagster-cloud-cli==1.2.2",
+        "dagster==1.2.3",
+        "dagster-cloud-cli==1.2.3",
         "pex",
         "questionary",
         "requests",
@@ -62,11 +62,11 @@ setup(
             "types-PyYAML",
             "types-requests",
             "dagster-cloud-test-infra",
-            "dagster_k8s==0.18.2",
+            "dagster_k8s==0.18.3",
         ],
-        "docker": ["docker", "dagster_docker==0.18.2"],
-        "kubernetes": ["kubernetes", "dagster_k8s==0.18.2"],
-        "ecs": ["dagster_aws==0.18.2", "boto3"],
+        "docker": ["docker", "dagster_docker==0.18.3"],
+        "kubernetes": ["kubernetes", "dagster_k8s==0.18.3"],
+        "ecs": ["dagster_aws==0.18.3", "boto3"],
         "sandbox": ["supervisor"],
         "pex": ["boto3"],
         "serverless": ["boto3"],

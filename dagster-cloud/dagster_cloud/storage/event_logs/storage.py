@@ -41,6 +41,7 @@ from dagster._utils import datetime_as_float
 from dagster._utils.error import SerializableErrorInfo
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import GraphQLStorageError
+from typing_extensions import Self
 
 from dagster_cloud.storage.event_logs.utils import truncate_event
 
@@ -69,6 +70,7 @@ from .queries import (
     STORE_EVENT_MUTATION,
     UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
     UPGRADE_EVENT_LOG_STORAGE_MUTATION,
+    WIPE_ASSET_CACHED_STATUS_DATA_MUTATION,
     WIPE_ASSET_MUTATION,
     WIPE_EVENT_LOG_STORAGE_MUTATION,
 )
@@ -254,8 +256,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def config_type(cls):
         return {}
 
-    @staticmethod
-    def from_config_value(inst_data: ConfigurableClassData, config_value):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
         return GraphQLEventLogStorage(inst_data=inst_data)
 
     @property
@@ -549,6 +551,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 },
             },
         )
+
+    def wipe_asset_cached_status(self, asset_key: AssetKey) -> None:
+        res = self._execute_query(
+            WIPE_ASSET_CACHED_STATUS_DATA_MUTATION, variables={"assetKey": asset_key.to_string()}
+        )
+        return res
 
     def get_materialization_count_by_partition(
         self,

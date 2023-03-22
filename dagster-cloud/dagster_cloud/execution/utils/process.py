@@ -8,9 +8,7 @@ from . import TaskStatus
 
 
 def launch_process(args: Sequence[str]) -> int:
-    """
-    Launch a process and return the PID
-    """
+    """Launch a process and return the PID."""
     p = open_ipc_subprocess(args)
     pid = p.pid
     return pid

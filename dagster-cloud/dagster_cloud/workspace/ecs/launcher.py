@@ -208,8 +208,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
 
-    @staticmethod
-    def from_config_value(inst_data: ConfigurableClassData, config_value: Dict[str, Any]):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Dict[str, Any]):
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property
@@ -237,13 +237,16 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(PORT)
             additional_env = metadata.get_multipex_server_env()
-            tags = {"dagster/multipex_server": "1"}
+            tags = {
+                "dagster/multipex_server": "1",
+                "dagster/agent_id": self._instance.instance_uuid,
+            }
         else:
             command = metadata.get_grpc_server_command()
             additional_env = metadata.get_grpc_server_env(
                 PORT, location_name, self._instance.ref_for_deployment(deployment_name)
             )
-            tags = {"dagster/grpc_server": "1"}
+            tags = {"dagster/grpc_server": "1", "dagster/agent_id": self._instance.instance_uuid}
 
         container_context = EcsContainerContext(
             secrets=self.secrets,
@@ -383,6 +386,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 deployment_name, location_name
             ),
             "dagster/multipex_server": "1",
+            "dagster/agent_id": self._instance.instance_uuid,
         }
         services = self.client.list_services()
         location_services = [
@@ -398,6 +402,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 deployment_name, location_name
             ),
             "dagster/grpc_server": "1",
+            "dagster/agent_id": self._instance.instance_uuid,
         }
         services = self.client.list_services()
         location_services = [
@@ -405,11 +410,16 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         ]
         return location_services
 
-    def _cleanup_servers(self):
-        for service in self.client.list_services():
-            if "dagster/location_name" in service.tags.keys():
-                self._remove_server_handle(service)
-        self._logger.info("Finished cleaning up servers.")
+    def _list_server_handles(self) -> List[EcsServerHandleType]:
+        return [
+            service
+            for service in self.client.list_services()
+            if "dagster/location_name" in service.tags.keys()
+        ]
+
+    def get_agent_id_for_server(self, handle: EcsServerHandleType) -> Optional[str]:
+        # Need to get container for server handle, then get the agent tag from that.
+        return handle.tags.get("dagster/agent_id")
 
     def _run_launcher_kwargs(self) -> Dict[str, Any]:
         sidecars = self._get_grpc_server_sidecars()

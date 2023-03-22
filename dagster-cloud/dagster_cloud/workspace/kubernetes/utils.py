@@ -32,8 +32,7 @@ def _sanitize_k8s_resource_name(name):
 
 
 def unique_k8s_resource_name(deployment_name, location_name):
-    """
-    https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
+    """https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names.
 
     K8s resource names are restricted, so we must sanitize the location name to not include disallowed characters.
     """
@@ -43,8 +42,7 @@ def unique_k8s_resource_name(deployment_name, location_name):
 
 
 def get_k8s_human_readable_label(name):
-    """
-    https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set
+    """https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set.
 
     K8s label values are restricted, so we must sanitize the location name to not include disallowed characters.
     These are purely to help humans debug, so they don't need to be unique.
@@ -58,7 +56,7 @@ def get_k8s_human_readable_label(name):
     )
 
 
-def construct_repo_location_service(deployment_name, location_name, service_name):
+def construct_code_location_service(deployment_name, location_name, service_name):
     return client.V1Service(
         metadata=client.V1ObjectMeta(
             name=service_name,
@@ -76,7 +74,7 @@ def construct_repo_location_service(deployment_name, location_name, service_name
     )
 
 
-def construct_repo_location_deployment(
+def construct_code_location_deployment(
     instance,
     deployment_name,
     location_name,
@@ -165,6 +163,7 @@ def construct_repo_location_deployment(
                 "location_hash": deterministic_label_for_location(deployment_name, location_name),
                 "location_name": get_k8s_human_readable_label(location_name),
                 "deployment_name": get_k8s_human_readable_label(deployment_name),
+                "agent_id": instance.instance_uuid,
             },
         },
         "spec": {  # DeploymentSpec
@@ -212,9 +211,8 @@ def wait_for_deployment_complete(
     timeout,
     image_pull_grace_period,
 ):
-    """
-    Translated from
-    https://github.com/kubernetes/kubectl/blob/ac49920c0ccb0dd0899d5300fc43713ee2dfcdc9/pkg/polymorphichelpers/rollout_status.go#L75-L91
+    """Translated from
+    https://github.com/kubernetes/kubectl/blob/ac49920c0ccb0dd0899d5300fc43713ee2dfcdc9/pkg/polymorphichelpers/rollout_status.go#L75-L91.
     """
     api = client.AppsV1Api(client.ApiClient())
     core_api = client.CoreV1Api()

@@ -18,6 +18,7 @@ from dagster._utils import ensure_file
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from requests.adapters import HTTPAdapter
+from typing_extensions import Self
 
 if TYPE_CHECKING:
     from dagster_cloud.instance import DagsterCloudAgentInstance  # noqa: F401
@@ -53,8 +54,8 @@ class CloudComputeLogManager(
             "local_dir": Field(StringSource, is_required=False),
         }
 
-    @staticmethod
-    def from_config_value(inst_data, config_value):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
         return CloudComputeLogManager(inst_data=inst_data, **config_value)
 
     @property
@@ -79,9 +80,7 @@ class CloudComputeLogManager(
     def cloud_storage_has_logs(
         self, log_key: Sequence[str], io_type: ComputeIOType, partial: bool = False
     ) -> bool:
-        """
-        Returns whether the cloud storage contains logs for a given log key
-        """
+        """Returns whether the cloud storage contains logs for a given log key."""
         return False
 
     def upload_to_cloud_storage(

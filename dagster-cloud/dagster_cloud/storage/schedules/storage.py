@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Iterable, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Optional, Sequence
 
 import dagster._check as check
 from dagster._core.definitions.run_request import InstigatorType
@@ -16,6 +16,7 @@ from dagster._serdes import (
     serialize_value,
 )
 from dagster_cloud_cli.core.errors import GraphQLStorageError
+from typing_extensions import Self
 
 from .queries import (
     ADD_JOB_STATE_MUTATION,
@@ -47,8 +48,8 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
     def config_type(cls):
         return {}
 
-    @staticmethod
-    def from_config_value(inst_data: ConfigurableClassData, config_value):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
         return GraphQLScheduleStorage(inst_data=inst_data)
 
     @property

@@ -12,8 +12,8 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
 import dagster._check as check
 import pendulum
 from dagster import DagsterInstance
-from dagster._core.host_representation import RepositoryLocationOrigin
-from dagster._core.host_representation.origin import RegisteredRepositoryLocationOrigin
+from dagster._core.host_representation import CodeLocationOrigin
+from dagster._core.host_representation.origin import RegisteredCodeLocationOrigin
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import CancelExecutionRequest
@@ -177,7 +177,7 @@ class DagsterCloudAgent:
             result = instance.graphql_client.execute(DEPLOYMENT_INFO_QUERY)
             deployment_name = result["data"]["deploymentInfo"]["deploymentName"]
             instance = self._exit_stack.enter_context(
-                DagsterInstance.from_ref(instance.ref_for_deployment(deployment_name))
+                DagsterInstance.from_ref(instance.ref_for_deployment(deployment_name))  # type: ignore  # (instance subclass)
             )
 
         self._check_initial_deployment_names(instance)
@@ -535,7 +535,7 @@ class DagsterCloudAgent:
     def _get_location_origin_from_request(
         self,
         request: DagsterCloudApiRequest,
-    ) -> Optional[RepositoryLocationOrigin]:
+    ) -> Optional[CodeLocationOrigin]:
         """Derive the location from the specific argument passed in to a dagster_cloud_api call."""
         api_name = request.request_api
         if api_name in {
@@ -543,7 +543,7 @@ class DagsterCloudAgent:
             DagsterCloudApi.GET_SUBSET_EXTERNAL_PIPELINE_RESULT,
         }:
             external_pipeline_origin = request.request_args.pipeline_origin
-            return external_pipeline_origin.external_repository_origin.repository_location_origin
+            return external_pipeline_origin.external_repository_origin.code_location_origin
         elif api_name in {
             DagsterCloudApi.GET_EXTERNAL_PARTITION_CONFIG,
             DagsterCloudApi.GET_EXTERNAL_PARTITION_TAGS,
@@ -552,11 +552,11 @@ class DagsterCloudAgent:
             DagsterCloudApi.GET_EXTERNAL_SCHEDULE_EXECUTION_DATA,
             DagsterCloudApi.GET_EXTERNAL_SENSOR_EXECUTION_DATA,
         }:
-            return request.request_args.repository_origin.repository_location_origin
+            return request.request_args.repository_origin.code_location_origin
         elif api_name == DagsterCloudApi.GET_EXTERNAL_NOTEBOOK_DATA:
-            return request.request_args.repository_location_origin
+            return request.request_args.code_location_origin
         elif api_name == DagsterCloudApi.PING_LOCATION:
-            return RegisteredRepositoryLocationOrigin(request.request_args.location_name)
+            return RegisteredCodeLocationOrigin(request.request_args.location_name)
         else:
             return None
 
@@ -570,10 +570,8 @@ class DagsterCloudAgent:
     ) -> Union[DagsterCloudApiSuccess, DagsterCloudApiGrpcResponse]:
         api_name = request.request_api
 
-        repository_location_origin = self._get_location_origin_from_request(request)
-        location_name = (
-            repository_location_origin.location_name if repository_location_origin else None
-        )
+        code_location_origin = self._get_location_origin_from_request(request)
+        location_name = code_location_origin.location_name if code_location_origin else None
 
         if api_name == DagsterCloudApi.PING_LOCATION:
             # Do nothing - this request only exists to bump TTL for the location
@@ -697,7 +695,7 @@ class DagsterCloudAgent:
                     ),
                 )
 
-                launcher = scoped_instance.get_run_launcher_for_run(run)
+                launcher = scoped_instance.get_run_launcher_for_run(run)  # type: ignore  # (instance subclass)
 
                 if is_isolated_run(run):
                     launcher.launch_run(LaunchRunContext(dagster_run=run, workspace=None))
@@ -710,7 +708,7 @@ class DagsterCloudAgent:
 
                     run_location_name = cast(
                         str,
-                        run.external_pipeline_origin.external_repository_origin.repository_location_origin.location_name,
+                        run.external_pipeline_origin.external_repository_origin.code_location_origin.location_name,
                     )
 
                     server = user_code_launcher.get_grpc_server(deployment_name, run_location_name)
@@ -749,12 +747,12 @@ class DagsterCloudAgent:
                         cls=self.__class__,
                     )
                     if is_isolated_run(run):
-                        launcher = scoped_instance.get_run_launcher_for_run(run)
+                        launcher = scoped_instance.get_run_launcher_for_run(run)  # type: ignore  # (instance subclass)
                         launcher.terminate(run.run_id)
                     else:
                         run_location_name = cast(
                             str,
-                            run.external_pipeline_origin.external_repository_origin.repository_location_origin.location_name,
+                            run.external_pipeline_origin.external_repository_origin.code_location_origin.location_name,
                         )
 
                         server = user_code_launcher.get_grpc_server(

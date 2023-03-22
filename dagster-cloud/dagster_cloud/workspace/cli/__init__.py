@@ -6,8 +6,8 @@ from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional, Tuple
 
 import requests
-from dagster._core.host_representation import InProcessRepositoryLocation
-from dagster._core.host_representation.origin import InProcessRepositoryLocationOrigin
+from dagster._core.host_representation import InProcessCodeLocation
+from dagster._core.host_representation.origin import InProcessCodeLocationOrigin
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 from dagster._serdes import serialize_value
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
@@ -58,7 +58,7 @@ def snapshot_command(
     location_data = _get_location_input(location, kwargs)
 
     # 0. Load location
-    with get_location_or_load_error(location_data) as (repository_location, error_info):
+    with get_location_or_load_error(location_data) as (code_location, error_info):
         deployment_metadata = CodeDeploymentMetadata(
             image=location_data.image,
             python_file=location_data.python_file,
@@ -70,7 +70,7 @@ def snapshot_command(
         )
 
         # 1. Record any serialization errors, if any
-        if error_info or repository_location is None:
+        if error_info or code_location is None:
             upload_workspace_entry = DagsterCloudUploadWorkspaceEntry(
                 location_name=location_data.name,
                 deployment_metadata=deployment_metadata,
@@ -84,18 +84,18 @@ def snapshot_command(
                     repository_name=repository_name,
                     code_pointer=code_pointer,
                     serialized_repository_data=serialize_value(
-                        repository_location.get_repository(repository_name).external_repository_data
+                        code_location.get_repository(repository_name).external_repository_data
                     ),
                 )
-                for repository_name, code_pointer in repository_location.repository_code_pointer_dict.items()
+                for repository_name, code_pointer in code_location.repository_code_pointer_dict.items()
             ]
 
             # 3. Construct DagsterCloudUploadLocationData
             upload_location_data = DagsterCloudUploadLocationData(
                 upload_repository_datas=upload_repository_datas,
                 container_image=location_data.image,
-                executable_path=repository_location.executable_path,
-                dagster_library_versions=repository_location.get_dagster_library_versions(),
+                executable_path=code_location.executable_path,
+                dagster_library_versions=code_location.get_dagster_library_versions(),
             )
 
             # 4. Construct DagsterCloudUploadWorkspaceEntry, upload via file upload endpoint
@@ -139,7 +139,7 @@ def snapshot_command(
 @contextmanager
 def get_location_or_load_error(
     location_data: gql.CliInputCodeLocation,
-) -> Iterator[Tuple[Optional[InProcessRepositoryLocation], Optional[SerializableErrorInfo]]]:
+) -> Iterator[Tuple[Optional[InProcessCodeLocation], Optional[SerializableErrorInfo]]]:
     loadable_target_origin = LoadableTargetOrigin(
         executable_path=location_data.executable_path
         if location_data.executable_path
@@ -150,9 +150,9 @@ def get_location_or_load_error(
         working_directory=location_data.working_directory or os.getcwd(),
         attribute=location_data.attribute,
     )
-    origin = InProcessRepositoryLocationOrigin(loadable_target_origin)
+    origin = InProcessCodeLocationOrigin(loadable_target_origin)
     try:
-        with InProcessRepositoryLocation(origin) as location:
+        with InProcessCodeLocation(origin) as location:
             yield (location, None)
     except Exception:
         load_error = serializable_error_info_from_exc_info(sys.exc_info())

@@ -2,9 +2,7 @@ from enum import Enum
 
 
 class TaskStatus(Enum):
-    """
-    Enum for the status of a task.
-    """
+    """Enum for the status of a task."""
 
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"

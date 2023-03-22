@@ -128,12 +128,12 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         )
 
     def _query(self, api_name: str, request, context):
-        return self._pex_manager.get_pex_grpc_client(  # pylint:disable=protected-access
+        return self._pex_manager.get_pex_grpc_client(  # noqa: SLF001
             self._get_handle_from_metadata(context)
         )._get_response(api_name, request)
 
     def _streaming_query(self, api_name: str, request, context):
-        return self._pex_manager.get_pex_grpc_client(  # pylint:disable=protected-access
+        return self._pex_manager.get_pex_grpc_client(  # noqa: SLF001
             self._get_handle_from_metadata(context)
         )._get_streaming_response(api_name, request)
 
@@ -204,9 +204,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         return self._query("StartRun", request, context)
 
     def GetCurrentRuns(self, request, context):
-        """
-        Collect all run ids across all pex servers.
-        """
+        """Collect all run ids across all pex servers."""
         metadict = dict(context.invocation_metadata())
 
         if "deployment" in metadict:

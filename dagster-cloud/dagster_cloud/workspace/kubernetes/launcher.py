@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Collection, Dict, NamedTuple, Set, Tuple
+from typing import Any, Collection, Dict, List, NamedTuple, Optional, Set, Tuple, cast
 
 import kubernetes
 import kubernetes.client as client
@@ -13,11 +13,14 @@ from dagster import (
     _check as check,
 )
 from dagster._serdes import ConfigurableClass
+from dagster._serdes.config_class import ConfigurableClassData
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.models import k8s_snake_case_dict
+from kubernetes.client.models.v1_deployment_list import V1DeploymentList
 from kubernetes.client.rest import ApiException
+from typing_extensions import Self
 
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 
@@ -31,8 +34,8 @@ from ..user_code_launcher import (
 from ..user_code_launcher.utils import deterministic_label_for_location
 from .utils import (
     SERVICE_PORT,
-    construct_repo_location_deployment,
-    construct_repo_location_service,
+    construct_code_location_deployment,
+    construct_code_location_service,
     unique_k8s_resource_name,
     wait_for_deployment_complete,
 )
@@ -215,8 +218,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
 
-    @staticmethod
-    def from_config_value(inst_data, config_value):
+    @classmethod
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
         return K8sUserCodeLauncher(
             inst_data=inst_data,
             **config_value,
@@ -231,7 +234,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             yield self._k8s_apps_api_client
             return
 
-        with client.ApiClient() as api_client:  # pylint: disable=not-context-manager
+        with client.ApiClient() as api_client:
             yield client.AppsV1Api(api_client)
 
     def _resolve_container_context(self, metadata: CodeDeploymentMetadata) -> K8sContainerContext:
@@ -267,7 +270,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             with self._get_apps_api_instance() as api_instance:
                 api_response = api_instance.create_namespaced_deployment(
                     container_context.namespace,
-                    body=construct_repo_location_deployment(
+                    body=construct_code_location_deployment(
                         self._instance,
                         deployment_name,
                         location_name,
@@ -296,7 +299,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         try:
             api_response = self._get_core_api_client().create_namespaced_service(
                 namespace,
-                construct_repo_location_service(deployment_name, location_name, resource_name),
+                construct_code_location_service(deployment_name, location_name, resource_name),
             )
             self._logger.info(
                 "Created service {} in namespace {}".format(
@@ -362,7 +365,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 deployments = api_instance.list_namespaced_deployment(
                     namespace,
                     label_selector=(
-                        f"location_hash={deterministic_label_for_location(deployment_name, location_name)}"
+                        f"location_hash={deterministic_label_for_location(deployment_name, location_name)},agent_id={self._instance.instance_uuid}"
                     ),
                 ).items
                 for deployment in deployments:
@@ -370,23 +373,42 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
         return handles
 
-    def _cleanup_servers(self) -> None:
-        with self._get_apps_api_instance() as api_instance:
-            # search all used namespaces for to clean out
-            # note: this will only clean the launchers default namespace on startup
-            namespaces = set(
-                namespace for used in self._used_namespaces.values() for namespace in used
-            )
+    def _list_server_handles(self) -> List[K8sHandle]:
+        namespaces: Set[str] = set()
+        if self._namespace:
             namespaces.add(self._namespace)
+        for _, namespace_items in self._used_namespaces.items():
+            for namespace in namespace_items:
+                namespaces.add(namespace)
+        handles: List[K8sHandle] = []
+        with self._get_apps_api_instance() as api_instance:
             for namespace in namespaces:
                 deployments = api_instance.list_namespaced_deployment(
                     namespace,
                     label_selector="managed_by=K8sUserCodeLauncher",
                 ).items
                 for deployment in deployments:
-                    self._remove_server_handle(
-                        K8sHandle(namespace=namespace, name=deployment.metadata.name)
-                    )
+                    handles.append(K8sHandle(namespace, deployment.metadata.name))
+        self._logger.info(f"Listing server handles: {handles}")
+        return handles
+
+    def get_agent_id_for_server(self, handle: K8sHandle) -> Optional[str]:
+        with self._get_apps_api_instance() as api_instance:
+            deployments = cast(
+                V1DeploymentList,
+                api_instance.list_namespaced_deployment(
+                    handle.namespace,
+                    label_selector="managed_by=K8sUserCodeLauncher",
+                    field_selector=f"metadata.name={handle.name}",
+                ),
+            ).items
+            if not deployments:
+                self._logger.warning(
+                    f"Attempted to retrieve agent_id for server with handle {handle}; but no"
+                    " deployments found."
+                )
+                return None
+            return deployments.pop().metadata.labels.get("agent_id")
 
     def _remove_server_handle(self, server_handle: K8sHandle) -> None:
         with self._get_apps_api_instance() as api_instance:

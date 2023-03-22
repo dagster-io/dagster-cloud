@@ -93,9 +93,7 @@ class MultiPexManager(AbstractContextManager):
             }
 
     def is_server_active(self, server_handle_id: str) -> bool:
-        """
-        Server is present and not pending shutdown
-        """
+        """Server is present and not pending shutdown."""
         with self._pex_servers_lock:
             return (
                 server_handle_id in self._pex_servers

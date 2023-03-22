@@ -1,3 +1,5 @@
+# The following allows logging calls with extra arguments
+# ruff: noqa: PLE1205
 import logging
 import os
 import sys
@@ -22,6 +24,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
 )
 
 import dagster._check as check
@@ -31,8 +34,8 @@ from dagster._core.definitions.selector import JobSelector
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.host_representation import ExternalRepositoryOrigin
 from dagster._core.host_representation.origin import (
-    RegisteredRepositoryLocationOrigin,
-    RepositoryLocationOrigin,
+    CodeLocationOrigin,
+    RegisteredCodeLocationOrigin,
 )
 from dagster._core.instance import MayHaveInstanceWeakref
 from dagster._core.launcher import RunLauncher
@@ -41,10 +44,11 @@ from dagster._grpc.types import GetCurrentImageResult
 from dagster._serdes import deserialize_value, serialize_value, whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.merger import merge_dicts
-from dagster_cloud_cli.core.errors import raise_http_error
+from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from typing_extensions import Self
 
+from dagster_cloud.agent.queries import GET_AGENTS_QUERY
 from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadLocationData,
     DagsterCloudUploadRepositoryData,
@@ -70,6 +74,7 @@ from dagster_cloud.util import diff_serializable_namedtuple_map
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25
+ACTIVE_AGENT_HEARTBEAT_INTERVAL = 600
 
 
 USER_CODE_LAUNCHER_RECONCILE_SLEEP_SECONDS = 1
@@ -303,6 +308,7 @@ class DagsterCloudUserCodeLauncher(
         self._upload_locations: Set[DeploymentAndLocation] = set()
 
         self._logger = logging.getLogger("dagster_cloud.user_code_launcher")
+        self._event_logger = logging.getLogger("cloud-events")
         self._started: bool = False
         self._run_worker_monitoring_thread = None
         self._run_worker_monitoring_thread_shutdown_event = None
@@ -319,7 +325,6 @@ class DagsterCloudUserCodeLauncher(
             "server_process_startup_timeout",
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
-
         super().__init__()
 
     def get_active_grpc_server_handles(self) -> List[ServerHandle]:
@@ -329,6 +334,24 @@ class DagsterCloudUserCodeLauncher(
                 for s in self._grpc_servers.values()
                 if not isinstance(s, SerializableErrorInfo)
             ] + list(self._pending_delete_grpc_server_handles)
+
+    def get_active_agent_ids(self) -> Set[str]:
+        try:
+            result = self._instance.organization_scoped_graphql_client().execute(
+                GET_AGENTS_QUERY,
+                {"heartbeatedSince": time.time() - ACTIVE_AGENT_HEARTBEAT_INTERVAL},
+            )
+        except:
+            self._logger.exception(
+                "Could not connect to graphql server to "
+                "retrieve active agent_ids. Just returning this agent as an active ID."
+            )
+            return set([self._instance.instance_uuid])
+        if "errors" in result:
+            raise GraphQLStorageError(result["errors"])
+        else:
+            self._logger.info(f"Active agent ids response: {result}")
+            return set(agent_data["id"] for agent_data in result["data"]["agents"])
 
     @property
     def server_ttl_enabled_for_full_deployments(self) -> bool:
@@ -439,8 +462,8 @@ class DagsterCloudUserCodeLauncher(
             for deployment_name in deployment_names
         }
 
-    def supports_origin(self, repository_location_origin: RepositoryLocationOrigin) -> bool:
-        return isinstance(repository_location_origin, RegisteredRepositoryLocationOrigin)
+    def supports_origin(self, code_location_origin: CodeLocationOrigin) -> bool:
+        return isinstance(code_location_origin, RegisteredCodeLocationOrigin)
 
     @property
     def supports_reload(self) -> bool:
@@ -525,7 +548,7 @@ class DagsterCloudUserCodeLauncher(
         deployment_name: str,
         location_name: str,
     ) -> DagsterCloudUploadLocationData:
-        location_origin = self._get_repository_location_origin(location_name)
+        location_origin = self._get_code_location_origin(location_name)
         client = self.get_grpc_endpoint(deployment_name, location_name).create_client()
 
         list_repositories_response = sync_list_repositories_grpc(client)
@@ -812,22 +835,55 @@ class DagsterCloudUserCodeLauncher(
             with self._grpc_servers_lock:
                 self._pending_delete_grpc_server_handles.discard(server_handle)
 
-    @abstractmethod
-    def _cleanup_servers(self):
+    def _cleanup_servers(self, active_agent_ids: Set[str]) -> None:
         """Remove all servers, across all deployments and locations."""
+        for handle in self._list_server_handles():
+            self._logger.info(f"Attempting to cleanup server {handle}")
+            if self._can_cleanup_server(handle, active_agent_ids):
+                try:
+                    self._logger.info(f"Can remove server {handle}. Cleaning up.")
+                    self._remove_server_handle(handle)
+                except:
+                    self._logger.exception("Error cleaning up server")
+            else:
+                self._logger.info(f"Cannot remove server {handle}. Not cleaning up.")
 
+    @abstractmethod
     def _list_server_handles(self) -> List[ServerHandle]:
         """Return a list of all server handles across all deployments and locations."""
-        raise NotImplementedError()
+
+    @abstractmethod
+    def get_agent_id_for_server(self, handle: ServerHandle) -> Optional[str]:
+        """Returns the agent_id that created a particular GRPC server."""
+
+    def _can_cleanup_server(self, handle: ServerHandle, active_agent_ids: Set[str]) -> bool:
+        """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active).
+        """
+        agent_id_for_server = self.get_agent_id_for_server(handle)
+        self._logger.info(
+            f"For server {handle}; agent_id is {agent_id_for_server} while current agent_id is"
+            f" {self._instance.instance_uuid}."
+        )
+        self._logger.info(f"All active agent ids: {active_agent_ids}")
+        return (
+            not agent_id_for_server
+            or self._instance.instance_uuid == agent_id_for_server
+            or agent_id_for_server not in cast(Set[str], active_agent_ids)
+        )
 
     def _graceful_cleanup_servers(self):  # ServerHandles
+        active_agent_ids = self.get_active_agent_ids()
         if not self.supports_get_current_runs_for_server_handle:
-            return self._cleanup_servers()
+            return self._cleanup_servers(active_agent_ids)
 
         handles = self._list_server_handles()
+        servers_to_remove: List[ServerHandle] = []
         with self._grpc_servers_lock:
-            self._pending_delete_grpc_server_handles.update(handles)
-        for server_handle in handles:
+            for handle in handles:
+                if self._can_cleanup_server(handle, active_agent_ids):
+                    servers_to_remove.append(handle)
+            self._pending_delete_grpc_server_handles.update(servers_to_remove)
+        for server_handle in servers_to_remove:
             self._graceful_remove_server_handle(server_handle)
 
     @abstractmethod
@@ -880,10 +936,8 @@ class DagsterCloudUserCodeLauncher(
             }
             self._desired_entries = merge_dicts(metadata_to_keep, desired_metadata)
 
-    def _get_repository_location_origin(
-        self, location_name: str
-    ) -> RegisteredRepositoryLocationOrigin:
-        return RegisteredRepositoryLocationOrigin(location_name)
+    def _get_code_location_origin(self, location_name: str) -> RegisteredCodeLocationOrigin:
+        return RegisteredCodeLocationOrigin(location_name)
 
     @property
     def _reconcile_interval(self):
@@ -1370,8 +1424,12 @@ class DagsterCloudUserCodeLauncher(
                 server_or_error,
                 self._actual_entries[location].code_deployment_metadata,
             )
-
-        self._logger.info(f"Finished reconciling in {time.time() - start_time} seconds.")
+        seconds = time.time() - start_time
+        self._logger.info(f"Finished reconciling in {seconds} seconds.")
+        self._event_logger.info(
+            "user_code_launcher.RECONCILED",
+            {"event_name": "user_code_launcher.RECONCILED", "duration_seconds": seconds},
+        )
 
     def has_grpc_endpoint(self, deployment_name: str, location_name: str) -> bool:
         with self._grpc_servers_lock:
@@ -1622,7 +1680,7 @@ class DagsterCloudUserCodeLauncher(
             client = self.get_grpc_endpoint(
                 deployment_name, job_selector.location_name
             ).create_client()
-            location_origin = self._get_repository_location_origin(job_selector.location_name)
+            location_origin = self._get_code_location_origin(job_selector.location_name)
             response = client.external_job(
                 ExternalRepositoryOrigin(location_origin, job_selector.repository_name),
                 job_selector.job_name,

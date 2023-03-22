@@ -21,8 +21,7 @@ def get_human_readable_label(name, length_limit, sanitize_fn):
 
 
 def deterministic_label_for_location(deployment_name, location_name):
-    """
-    Need a label here that is a unique function of location name since we use it to
+    """Need a label here that is a unique function of location name since we use it to
     search for existing deployments on update and remove them. Does not need to be human-readable.
     """
     m = hashlib.sha1()  # Creates a 40-byte hash

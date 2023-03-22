@@ -4,7 +4,7 @@ import subprocess
 import sys
 import threading
 from collections import defaultdict
-from typing import Any, Collection, Dict, Mapping, NamedTuple, Optional, Set, Tuple, Union
+from typing import Any, Collection, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple, Union
 
 import dagster._seven as seven
 from dagster import (
@@ -20,6 +20,7 @@ from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from typing_extensions import Self
 
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.pex.grpc import MultiPexGrpcClient
@@ -181,14 +182,17 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
 
-    @staticmethod
+    @classmethod
     def from_config_value(
-        inst_data: ConfigurableClassData, config_value: Mapping[str, Any]
-    ) -> "ProcessUserCodeLauncher":
+        cls, inst_data: ConfigurableClassData, config_value: Mapping[str, Any]
+    ) -> Self:
         return ProcessUserCodeLauncher(inst_data=inst_data, **config_value)
 
     def _start_new_server_spinup(
-        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
+        self,
+        deployment_name: str,
+        location_name: str,
+        metadata: CodeDeploymentMetadata,
     ) -> DagsterCloudGrpcServer:
         key = (deployment_name, location_name)
 
@@ -236,7 +240,8 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             server_process = open_ipc_subprocess(
                 subprocess_args,
                 env={
-                    **os.environ.copy(),
+                    **os.environ,
+                    **{key: str(value) for key, value in metadata.cloud_context_env.items()},
                     **additional_env,
                 },
             )
@@ -299,7 +304,20 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
     def _remove_server_handle(self, server_handle: int) -> None:
         pid = server_handle
+        process_entry = self._process_entries[pid]
         self._remove_pid(pid)
+        if self._wait_for_processes:
+            if isinstance(process_entry, ProcessUserCodeEntry):
+                try:
+                    process_entry.grpc_client.shutdown_server()
+                except DagsterUserCodeUnreachableError:
+                    # Server already shutdown
+                    pass
+            else:
+                process_entry.grpc_server_process.terminate()
+
+            if process_entry.grpc_server_process.poll() is None:
+                process_entry.grpc_server_process.communicate(timeout=30)
 
     def _remove_pid(self, pid):
         if pid in self._process_entries:
@@ -330,24 +348,11 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         return self._run_launcher
 
-    def _cleanup_servers(self):
-        while len(self._process_entries):
-            pid = next(iter(self._process_entries))
-            process_entry = self._process_entries[pid]
+    def _list_server_handles(self) -> List[int]:
+        return list(self._process_entries.keys())
 
-            self._remove_pid(pid)
-            if self._wait_for_processes:
-                if isinstance(process_entry, ProcessUserCodeEntry):
-                    try:
-                        process_entry.grpc_client.shutdown_server()
-                    except DagsterUserCodeUnreachableError:
-                        # Server already shutdown
-                        pass
-                else:
-                    process_entry.grpc_server_process.terminate()
-
-                if process_entry.grpc_server_process.poll() is None:
-                    process_entry.grpc_server_process.communicate(timeout=30)
+    def get_agent_id_for_server(self, handle: int) -> Optional[str]:
+        return self._instance.instance_uuid
 
     def __exit__(self, exception_type, exception_value, traceback):
         super().__exit__(exception_value, exception_value, traceback)

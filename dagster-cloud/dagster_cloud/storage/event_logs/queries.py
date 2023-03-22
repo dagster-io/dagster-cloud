@@ -372,6 +372,16 @@ WIPE_ASSET_MUTATION = """
     }
 """
 
+WIPE_ASSET_CACHED_STATUS_DATA_MUTATION = """
+    mutation WipeAssetCachedStatusData($assetKey: String!) {
+        eventLogs {
+            WipeAssetCachedStatusData(assetKey: $assetKey) {
+                ok
+            }
+        }
+    }
+"""
+
 GET_DYNAMIC_PARTITIONS_QUERY = """
 query getDynamicPartitions($partitionsDefName: String!) {
     eventLogs {
