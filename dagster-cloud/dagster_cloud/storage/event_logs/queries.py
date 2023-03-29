@@ -78,6 +78,7 @@ fragment CachedStatusDataFragment on AssetStatusCacheValue {
     partitionsDefId
     serializedMaterializedPartitionSubset
     serializedFailedPartitionSubset
+    serializedInProgressPartitionSubset
     earliestInProgressMaterializationEventId
 }
 """

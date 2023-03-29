@@ -1004,7 +1004,7 @@ def upload_api_response(
             f.write(zlib.compress(serialize_value(upload_response).encode("utf-8")))
 
         with open(dst, "rb") as f:
-            resp = instance.requests_session.post(
+            resp = instance.rest_requests_session.put(
                 instance.dagster_cloud_upload_api_response_url,
                 headers=instance.headers_for_deployment(deployment_name),
                 files={"api_response.tmp": f},

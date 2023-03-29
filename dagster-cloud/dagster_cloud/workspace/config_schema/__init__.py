@@ -9,7 +9,6 @@ from dagster import (
     _check as check,
 )
 from dagster._config import EvaluationError, StringSource, validate_config
-from dagster._utils import frozendict
 
 from .docker import SHARED_DOCKER_CONFIG
 from .ecs import (
@@ -43,7 +42,7 @@ def process_workspace_config(workspace_config) -> Dict[str, Any]:
     check.dict_param(workspace_config, "workspace_config")
 
     # Check if using the legacy format, see below for details
-    if isinstance(workspace_config.get("locations"), (dict, frozendict)):
+    if isinstance(workspace_config.get("locations"), dict):
         check.is_dict(workspace_config.get("locations"))
 
         validation = validate_config(LEGACY_WORKSPACE_CONFIG_SCHEMA, workspace_config)

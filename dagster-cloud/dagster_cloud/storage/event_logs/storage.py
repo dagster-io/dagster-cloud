@@ -223,6 +223,9 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
             serialized_failed_partition_subset=graphene_asset_entry["cachedStatus"][
                 "serializedFailedPartitionSubset"
             ],
+            serialized_in_progress_partition_subset=graphene_asset_entry["cachedStatus"][
+                "serializedInProgressPartitionSubset"
+            ],
             earliest_in_progress_materialization_event_id=graphene_asset_entry["cachedStatus"][
                 "earliestInProgressMaterializationEventId"
             ],
@@ -547,6 +550,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     "partitionsDefId": cache_values.partitions_def_id,
                     "serializedMaterializedPartitionSubset": cache_values.serialized_materialized_partition_subset,
                     "serializedFailedPartitionSubset": cache_values.serialized_failed_partition_subset,
+                    "serializedInProgressPartitionSubset": cache_values.serialized_in_progress_partition_subset,
                     "earliestInProgressMaterializationEventId": cache_values.earliest_in_progress_materialization_event_id,
                 },
             },

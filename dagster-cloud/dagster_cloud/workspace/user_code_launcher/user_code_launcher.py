@@ -487,7 +487,7 @@ class DagsterCloudUserCodeLauncher(
                     )
                 )
 
-                resp = self._instance.requests_session.post(
+                resp = self._instance.rest_requests_session.post(
                     self._instance.dagster_cloud_upload_workspace_entry_url,
                     headers=self._instance.headers_for_deployment(deployment_name),
                     data={},
@@ -526,7 +526,7 @@ class DagsterCloudUserCodeLauncher(
                 _ = [f.result() for f in futures]
 
             with open(dst, "rb") as f:
-                resp = self._instance.requests_session.post(
+                resp = self._instance.rest_requests_session.post(
                     self._instance.dagster_cloud_upload_workspace_entry_url,
                     headers=self._instance.headers_for_deployment(deployment_name),
                     data={},
@@ -1698,7 +1698,7 @@ class DagsterCloudUserCodeLauncher(
                 f.write(zlib.compress(response.serialized_job_data.encode("utf-8")))
 
             with open(dst, "rb") as f:
-                resp = self._instance.requests_session.post(
+                resp = self._instance.rest_requests_session.post(
                     self._instance.dagster_cloud_upload_job_snap_url,
                     headers=self._instance.headers_for_deployment(deployment_name),
                     data={},

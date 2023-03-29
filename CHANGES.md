@@ -1,5 +1,16 @@
 # Dagster Cloud Changelog
 
+# 1.2.4
+
+### New
+
+- Alerts without any tags are now more clearly indicated in the Dagster Cloud UI as affecting all jobs.
+
+### Bugfixes
+
+- Fixed an issue where loading assets with many partitions sometimes showed an error in the Dagster Cloud UI.
+- The Dagster Cloud Agent is now more resilient to network errors when uploading responses to API requests.
+
 # 1.2.3
 
 ### Bugfixes

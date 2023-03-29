@@ -99,7 +99,7 @@ class CloudComputeLogManager(
         }
         if partial:
             params["partial"] = True
-        resp = self._instance.requests_session.post(
+        resp = self._instance.rest_requests_session.post(
             self._instance.dagster_cloud_gen_logs_url_url,
             params=params,
             headers=self._instance.dagster_cloud_api_headers(DagsterCloudInstanceScope.DEPLOYMENT),

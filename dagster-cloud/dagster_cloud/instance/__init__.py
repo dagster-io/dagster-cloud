@@ -18,11 +18,14 @@ from dagster._core.launcher import DefaultRunLauncher, RunLauncher
 from dagster._core.storage.pipeline_run import DagsterRun
 from dagster._serdes import ConfigurableClassData
 from dagster_cloud_cli.core.graphql_client import (
-    create_cloud_requests_session,
+    create_graphql_requests_session,
     create_proxy_client,
     get_agent_headers,
 )
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
+from requests import Session
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from ..auth.constants import get_organization_name_from_agent_token
 from ..storage.client import dagster_cloud_api_config
@@ -42,7 +45,12 @@ class DagsterCloudInstance(DagsterInstance):
 
 class DagsterCloudAgentInstance(DagsterCloudInstance):
     def __init__(
-        self, *args, dagster_cloud_api, user_code_launcher=None, agent_replicas=None, **kwargs
+        self,
+        *args,
+        dagster_cloud_api,
+        user_code_launcher=None,
+        agent_replicas=None,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
@@ -73,7 +81,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._exit_stack = ExitStack()
 
         self._user_code_launcher = None
-        self._requests_session = None
+        self._graphql_requests_session: Optional[Session] = None
+        self._rest_requests_session: Optional[Session] = None
         self._graphql_client = None
 
         assert self.dagster_cloud_url
@@ -124,7 +133,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
     def organization_scoped_graphql_client(self):
         return create_proxy_client(
-            self.requests_session,
+            self.graphql_requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config_for_deployment(None),
             scope=DagsterCloudInstanceScope.ORGANIZATION,
@@ -132,7 +141,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
     def graphql_client_for_deployment(self, deployment_name: Optional[str]):
         return create_proxy_client(
-            self.requests_session,
+            self.graphql_requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config_for_deployment(deployment_name),
             scope=DagsterCloudInstanceScope.DEPLOYMENT,
@@ -148,18 +157,42 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self, scope: DagsterCloudInstanceScope = DagsterCloudInstanceScope.DEPLOYMENT
     ):
         return create_proxy_client(
-            self.requests_session,
+            self.graphql_requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config,
             scope=scope,
         )
 
     @property
-    def requests_session(self):
-        if self._requests_session is None:
-            self._requests_session = self._exit_stack.enter_context(create_cloud_requests_session())
+    def graphql_requests_session(self):
+        """A shared requests Session to use between GraphQL clients.
 
-        return self._requests_session
+        Retries handled in GraphQL client layer.
+        """
+        if self._graphql_requests_session is None:
+            self._graphql_requests_session = self._exit_stack.enter_context(
+                create_graphql_requests_session()
+            )
+
+        return self._graphql_requests_session
+
+    @property
+    def rest_requests_session(self):
+        """A requests session to use for non-GraphQL Rest API requests.
+
+        Retries handled by requests.
+        """
+        if self._rest_requests_session is None:
+            self._rest_requests_session = self._exit_stack.enter_context(Session())
+            adapter = HTTPAdapter(
+                max_retries=Retry(
+                    total=self.dagster_cloud_api_retries,
+                    backoff_factor=0.5,
+                )
+            )
+            self._rest_requests_session.mount("https://", adapter)
+            self._rest_requests_session.mount("http://", adapter)
+        return self._rest_requests_session
 
     @property
     def graphql_client(self):
