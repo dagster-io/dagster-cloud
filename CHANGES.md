@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 1.2.5
+
+### New
+
+- The Kubernetes agent will now include additional debug information when a new code location fails to start up after being deployed, instead of just showing a timeout error message.
+
 # 1.2.4
 
 ### New

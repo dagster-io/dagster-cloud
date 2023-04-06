@@ -1,9 +1,11 @@
 import copy
 import re
 import time
+from typing import Optional
 
 import kubernetes
 from dagster._utils.merger import merge_dicts
+from dagster_k8s.client import DagsterKubernetesClient
 from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
 
@@ -188,17 +190,47 @@ def construct_code_location_deployment(
     )
 
 
-def did_pod_image_fail(pod):
+def get_container_waiting_reason(pod) -> Optional[str]:
     if (not pod.status.container_statuses) or len(pod.status.container_statuses) == 0:
-        return False
+        return None
 
     container_waiting_state = pod.status.container_statuses[0].state.waiting
     if not container_waiting_state:
-        return False
+        return None
 
-    waiting_reason = container_waiting_state.reason
+    return container_waiting_state.reason
 
-    return waiting_reason == "ImagePullBackOff" or waiting_reason == "ErrImageNeverPull"
+
+def get_deployment_failure_debug_info(
+    k8s_deployment_name, namespace, core_api_client, pod_list, logger
+):
+    if not pod_list:
+        return (
+            "For more information about the failure, run `kubectl describe deployment"
+            f" {k8s_deployment_name}` in your cluster."
+        )
+
+    pod = pod_list[0]
+    pod_name = pod.metadata.name
+
+    kubectl_prompt = (
+        f"For more information about the failure, run `kubectl describe pod {pod_name}`"
+        f" or `kubectl describe deployment {k8s_deployment_name}` in your cluster."
+    )
+    pod_debug_info = ""
+    try:
+        api_client = DagsterKubernetesClient.production_client(core_api_override=core_api_client)
+        pod_debug_info = api_client.get_pod_debug_info(
+            pod_name, namespace, container_name="dagster"
+        )
+    except Exception:
+        logger.exception(
+            "Error trying to get debug information for failed k8s pod {pod_name}".format(
+                pod_name=pod_name
+            )
+        )
+
+    return f"{pod_debug_info}\n{kubectl_prompt}" if pod_debug_info else kubectl_prompt
 
 
 def wait_for_deployment_complete(
@@ -207,26 +239,33 @@ def wait_for_deployment_complete(
     logger,
     location_name,
     metadata,
-    existing_pods,
     timeout,
     image_pull_grace_period,
+    core_api,
 ):
     """Translated from
     https://github.com/kubernetes/kubectl/blob/ac49920c0ccb0dd0899d5300fc43713ee2dfcdc9/pkg/polymorphichelpers/rollout_status.go#L75-L91.
     """
     api = client.AppsV1Api(client.ApiClient())
-    core_api = client.CoreV1Api()
-
-    existing_pod_names = (pod.metadata.name for pod in existing_pods)
 
     start = time.time()
+
+    pod_list = []
+
     while True:
         time.sleep(2)
 
         time_elapsed = time.time() - start
 
         if time_elapsed >= timeout:
-            raise Exception(f"Timed out waiting for deployment {k8s_deployment_name}")
+            timeout_message: str = f"Timed out waiting for deployment {k8s_deployment_name}."
+            debug_info = get_deployment_failure_debug_info(
+                k8s_deployment_name, namespace, core_api, pod_list, logger
+            )
+            if debug_info:
+                timeout_message = timeout_message + "\n" + debug_info
+
+            raise Exception(timeout_message)
 
         deployment = api.read_namespaced_deployment(k8s_deployment_name, namespace)
         status = deployment.status
@@ -247,12 +286,22 @@ def wait_for_deployment_complete(
             return True
 
         pod_list = core_api.list_namespaced_pod(
-            namespace, label_selector="user-deployment={}".format(k8s_deployment_name)
-        )
+            namespace, label_selector=f"user-deployment={k8s_deployment_name}"
+        ).items
 
         if time_elapsed >= image_pull_grace_period:
-            for pod in pod_list.items:
-                if pod.metadata.name not in existing_pod_names and did_pod_image_fail(pod):
-                    raise Exception(
-                        f"Failed to pull image {metadata.image} for location {location_name}"
+            for pod in pod_list:
+                waiting_reason = get_container_waiting_reason(pod)
+                if (
+                    waiting_reason == "ImagePullBackOff"
+                    or waiting_reason == "ErrImageNeverPull"
+                    or waiting_reason == "CreateContainerConfigError"
+                ):
+                    error_message = f"Error creating deployment for {k8s_deployment_name}."
+                    debug_info = get_deployment_failure_debug_info(
+                        k8s_deployment_name, namespace, core_api, pod_list, logger
                     )
+                    if debug_info:
+                        error_message = error_message + "\n" + debug_info
+
+                    raise Exception(error_message)

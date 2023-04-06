@@ -99,7 +99,7 @@ def _input_for_dagster_event(dagster_event: Optional[DagsterEvent]):
         "pipelineName": dagster_event.pipeline_name,
         "stepHandleKey": dagster_event.step_handle.to_key() if dagster_event.step_handle else None,
         "solidHandleId": (
-            dagster_event.solid_handle.to_string() if dagster_event.solid_handle else None
+            dagster_event.node_handle.to_string() if dagster_event.node_handle else None
         ),
         "stepKindValue": dagster_event.step_kind_value,
         "loggingTags": (

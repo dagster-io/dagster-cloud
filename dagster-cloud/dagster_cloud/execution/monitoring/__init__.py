@@ -307,7 +307,7 @@ def run_worker_monitoring_thread_iteration(
             deployments_to_check_copy = deployments_to_check.copy()
 
         statuses = get_cloud_run_worker_statuses(instance, deployments_to_check_copy, logger)
-        logger.debug("Thread got statuses: {}".format(statuses))
+        logger.debug(f"Thread got statuses: {statuses}")
         with run_worker_monitoring_lock:
             statuses_dict.clear()
             for deployment_name, statuses in statuses.items():
@@ -315,7 +315,7 @@ def run_worker_monitoring_thread_iteration(
 
     except Exception:
         error_info = serializable_error_info_from_exc_info(sys.exc_info())
-        logger.error("Caught error in run monitoring thread:\n{}".format(error_info))
+        logger.error(f"Caught error in run monitoring thread:\n{error_info}")
 
 
 def start_run_worker_monitoring_thread(

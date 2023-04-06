@@ -186,7 +186,7 @@ class DagsterCloudAgent:
             instance, user_code_launcher, upload_all=user_code_launcher.upload_snapshots_on_startup
         )
 
-        self._logger.info("Started polling for requests from {}".format(instance.dagster_cloud_url))
+        self._logger.info(f"Started polling for requests from {instance.dagster_cloud_url}")
 
         while True:
             try:
@@ -196,7 +196,7 @@ class DagsterCloudAgent:
                         self._errors.appendleft((error, pendulum.now("UTC")))
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
-                self._logger.error("Caught error:\n{}".format(error_info))
+                self._logger.error(f"Caught error:\n{error_info}")
                 self._errors.appendleft((error_info, pendulum.now("UTC")))
 
             # Check for any received interrupts
@@ -767,9 +767,7 @@ class DagsterCloudAgent:
 
         else:
             check.assert_never(api_name)
-            raise Exception(
-                "Unexpected dagster cloud api call {api_name}".format(api_name=api_name)
-            )
+            raise Exception(f"Unexpected dagster cloud api call {api_name}")
 
     def _process_api_request(
         self,

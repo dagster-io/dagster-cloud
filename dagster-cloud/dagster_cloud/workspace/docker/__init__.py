@@ -214,10 +214,10 @@ class DockerUserCodeLauncher(
             )
         except docker.errors.ImageNotFound:
             last_log_time = time.time()
-            self._logger.info("Pulling image {image}...".format(image=image))
+            self._logger.info(f"Pulling image {image}...")
             for _line in docker.APIClient().pull(image, stream=True):
                 if time.time() - last_log_time > IMAGE_PULL_LOG_INTERVAL:
-                    self._logger.info("Still pulling image {image}...".format(image=image))
+                    self._logger.info(f"Still pulling image {image}...")
                     last_log_time = time.time()
 
             container = self._create_container(
@@ -245,7 +245,7 @@ class DockerUserCodeLauncher(
             socket=None,
         )
 
-        self._logger.info("Started container {container_id}".format(container_id=container.id))
+        self._logger.info(f"Started container {container.id}")
 
         return (container, endpoint)
 
@@ -338,7 +338,7 @@ class DockerUserCodeLauncher(
                 )
             )
         container.remove(force=True)
-        self._logger.info("Removed container {container_id}".format(container_id=container.id))
+        self._logger.info(f"Removed container {container.id}")
 
     def get_agent_id_for_server(self, handle: DagsterDockerContainer) -> Optional[str]:
         return handle.container.labels.get(AGENT_LABEL)

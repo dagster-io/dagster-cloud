@@ -435,9 +435,7 @@ class Client:
         try:
             logs = self.get_task_logs(task_arn, container_name=container_name)
         except:
-            logger.exception(
-                "Error trying to get logs for failed task {task_arn}".format(task_arn=task_arn)
-            )
+            logger.exception(f"Error trying to get logs for failed task {task_arn}")
 
         raise EcsServiceError(task_arn=task_arn, stopped_reason=stopped_reason, logs=logs)
 

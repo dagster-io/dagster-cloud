@@ -36,6 +36,7 @@ from .utils import (
     SERVICE_PORT,
     construct_code_location_deployment,
     construct_code_location_service,
+    get_deployment_failure_debug_info,
     unique_k8s_resource_name,
     wait_for_deployment_complete,
 )
@@ -326,6 +327,22 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             K8sHandle(namespace=namespace, name=resource_name), endpoint, metadata
         )
 
+    def _get_timeout_debug_info(
+        self,
+        server_handle,
+    ):
+        core_api = self._get_core_api_client()
+        k8s_deployment_name = server_handle.name
+        namespace = server_handle.namespace
+
+        pod_list = core_api.list_namespaced_pod(
+            namespace, label_selector=f"user-deployment={k8s_deployment_name}"
+        ).items
+
+        return get_deployment_failure_debug_info(
+            k8s_deployment_name, namespace, core_api, pod_list, self._logger
+        )
+
     def _wait_for_new_server_ready(
         self,
         deployment_name: str,
@@ -340,14 +357,15 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             self._logger,
             location_name,
             metadata,
-            existing_pods=[],
             timeout=self._deployment_startup_timeout,
             image_pull_grace_period=self._image_pull_grace_period,
+            core_api=self._get_core_api_client(),
         )
 
         self._wait_for_dagster_server_process(
             client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
+            get_timeout_debug_info=lambda: self._get_timeout_debug_info(server_handle),
         )
 
     def _get_standalone_dagster_server_handles_for_location(

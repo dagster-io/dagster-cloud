@@ -266,9 +266,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             self._get_additional_grpc_server_env(),
         )
 
-        self._logger.info(
-            "Creating a new service for {}:{}...".format(deployment_name, location_name)
-        )
+        self._logger.info(f"Creating a new service for {deployment_name}:{location_name}...")
 
         family = get_task_definition_family(
             "server", self._instance.organization_name, deployment_name, location_name
@@ -375,7 +373,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
         self.client.delete_service(server_handle)
         self._logger.info(
-            "Deleted service {} at hostname {}.".format(server_handle.name, server_handle.hostname)
+            f"Deleted service {server_handle.name} at hostname {server_handle.hostname}."
         )
 
     def _get_multipex_server_handles_for_location(

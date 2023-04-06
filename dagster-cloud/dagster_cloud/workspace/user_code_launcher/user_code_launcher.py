@@ -449,7 +449,7 @@ class DagsterCloudUserCodeLauncher(
         with self._run_worker_monitoring_lock:
             # values are immutable, don't need deepcopy
             statuses_dict = self._run_worker_statuses_dict.copy()
-        self._logger.debug("Returning statuses_dict: {}".format(statuses_dict))
+        self._logger.debug(f"Returning statuses_dict: {statuses_dict}")
 
         is_alive = self.is_run_worker_monitoring_thread_alive()
 
@@ -1224,9 +1224,7 @@ class DagsterCloudUserCodeLauncher(
                     desired_entry,
                 )
 
-                self._logger.info(
-                    "Created a new server for {location_name}".format(location_name=to_update_key)
-                )
+                self._logger.info(f"Created a new server for {to_update_key}")
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 self._logger.error(
@@ -1630,8 +1628,11 @@ class DagsterCloudUserCodeLauncher(
         client: DagsterGrpcClient,
         timeout,
         additional_check: Optional[Callable[[], None]] = None,
+        get_timeout_debug_info: Optional[Callable[[], None]] = None,
     ) -> None:
-        self._wait_for_server_process(client, timeout, additional_check)
+        self._wait_for_server_process(
+            client, timeout, additional_check, get_timeout_debug_info=get_timeout_debug_info
+        )
         # Call a method that raises an exception if there was an error importing the code
         sync_list_repositories_grpc(client)
 
@@ -1641,6 +1642,7 @@ class DagsterCloudUserCodeLauncher(
         timeout,
         additional_check: Optional[Callable[[], None]] = None,
         additional_check_interval: int = 5,
+        get_timeout_debug_info: Optional[Callable[[], None]] = None,
     ) -> None:
         start_time = time.time()
 
@@ -1656,10 +1658,19 @@ class DagsterCloudUserCodeLauncher(
                 last_error = serializable_error_info_from_exc_info(sys.exc_info())
 
             if time.time() - start_time > timeout:
+                timeout_debug_info = ""
+                if get_timeout_debug_info:
+                    try:
+                        timeout_debug_info = get_timeout_debug_info()
+                    except Exception:
+                        self._logger.exception("Failure fetching debug info after a timeout")
+
                 raise Exception(
                     f"Timed out after waiting {timeout}s for server"
-                    f" {client.host}:{client.port or client.socket}. Most recent connection error:"
-                    f" {str(last_error)}"
+                    f" {client.host}:{client.port or client.socket}."
+                    + f"\n{timeout_debug_info}"
+                    if timeout_debug_info
+                    else "" + f"\nMost recent connection error: {str(last_error)}"
                 )
 
             time.sleep(1)
