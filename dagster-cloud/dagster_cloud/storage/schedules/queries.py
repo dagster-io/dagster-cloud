@@ -1,7 +1,7 @@
 ALL_STORED_JOB_STATE_QUERY = """
-    query jobStates($repositoryOriginId: String, $repositorySelectorId: String, $jobType: InstigationType) {
+    query jobStates($repositoryOriginId: String, $repositorySelectorId: String, $jobType: InstigationType, $statuses: [String!]) {
         schedules {
-            jobStates(repositoryOriginId: $repositoryOriginId, repositorySelectorId: $repositorySelectorId, jobType: $jobType)
+            jobStates(repositoryOriginId: $repositoryOriginId, repositorySelectorId: $repositorySelectorId, jobType: $jobType, statuses: $statuses)
         }
     }
 """

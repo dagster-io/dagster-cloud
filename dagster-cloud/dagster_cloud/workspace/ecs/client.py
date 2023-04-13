@@ -109,7 +109,10 @@ class Client:
         logger=None,
         cpu=None,
         memory=None,
+        ephemeral_storage=None,
         runtime_platform=None,
+        mount_points=None,
+        volumes=None,
     ):
         container_name = container_name or family
 
@@ -143,7 +146,10 @@ class Client:
             requires_compatibilities=[self.launch_type],
             cpu=cpu,
             memory=memory,
+            ephemeral_storage=ephemeral_storage,
             runtime_platform=runtime_platform,
+            mount_points=mount_points,
+            volumes=volumes,
         )
 
         try:
@@ -197,8 +203,11 @@ class Client:
         logger=None,
         cpu=None,
         memory=None,
+        ephemeral_storage=None,
         allow_ecs_exec=False,
         runtime_platform=None,
+        mount_points=None,
+        volumes=None,
     ):
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
 
@@ -220,7 +229,10 @@ class Client:
             logger=logger,
             cpu=cpu,
             memory=memory,
+            ephemeral_storage=ephemeral_storage,
             runtime_platform=runtime_platform,
+            mount_points=mount_points,
+            volumes=volumes,
         )
 
         service_registry_arn = None

@@ -1,5 +1,11 @@
 # Dagster Cloud Changelog
 
+# 1.2.7
+
+### New
+
+- The ECS Agent now supports setting volumes and mount points
+
 # 1.2.5
 
 ### New

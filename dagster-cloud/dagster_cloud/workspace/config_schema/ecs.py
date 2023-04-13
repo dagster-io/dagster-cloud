@@ -1,4 +1,4 @@
-from dagster import Array, Field, Noneable, Permissive, Shape, StringSource
+from dagster import Array, BoolSource, Field, Noneable, Permissive, Shape, StringSource
 
 # Shared between user code launcher config and container context
 SHARED_ECS_CONFIG = {
@@ -14,6 +14,11 @@ SHARED_ECS_CONFIG = {
                     str,
                     is_required=False,
                     description="The memory override to use for the launched task.",
+                ),
+                "ephemeral_storage": Field(
+                    int,
+                    is_required=False,
+                    description="The ephemeral storage, in GiB, to use for the launched task.",
                 ),
             }
         )
@@ -31,6 +36,11 @@ SHARED_ECS_CONFIG = {
                     is_required=False,
                     description="The memory override to use for the launched task.",
                 ),
+                "ephemeral_storage": Field(
+                    int,
+                    is_required=False,
+                    description="The ephemeral storage, in GiB, to use for the launched task.",
+                ),
             }
         )
     ),
@@ -46,6 +56,38 @@ SHARED_ECS_CONFIG = {
             "The operating system that the task definition is running on. See"
             " https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ecs.html#ECS.Client.register_task_definition"
             " for the available options."
+        ),
+    ),
+    "volumes": Field(
+        Array(
+            Permissive(
+                {
+                    "name": Field(StringSource, is_required=False),
+                }
+            )
+        ),
+        is_required=False,
+        description=(
+            "List of data volume definitions for the task. See"
+            " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html"
+            " for the full list of available options."
+        ),
+    ),
+    "mount_points": Field(
+        Array(
+            Shape(
+                {
+                    "sourceVolume": Field(StringSource, is_required=False),
+                    "containerPath": Field(StringSource, is_required=False),
+                    "readOnly": Field(BoolSource, is_required=False),
+                }
+            )
+        ),
+        is_required=False,
+        description=(
+            "Mount points for data volumes in the main container of the task."
+            " See https://docs.aws.amazon.com/AmazonECS/latest/developerguide/efs-volumes.html"
+            " for more information."
         ),
     ),
 }

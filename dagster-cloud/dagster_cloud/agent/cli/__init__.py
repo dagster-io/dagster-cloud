@@ -9,6 +9,7 @@ import yaml
 from dagster._core.errors import DagsterHomeNotSetError
 from dagster._utils.interrupts import capture_interrupts
 from dagster._utils.log import default_date_format_string, default_format_string
+from dagster._utils.merger import deep_merge_dicts
 from dagster._utils.yaml_utils import load_yaml_from_globs
 from dagster_cloud_cli import ui
 from typer import Argument, Option, Typer
@@ -77,57 +78,50 @@ def run_local_agent_in_environment(
                 os.environ.update(old_env)
 
 
-DAGSTER_YAML_TEMPLATE = """
-instance_class:
-  module: dagster_cloud.instance
-  class: DagsterCloudAgentInstance
-
-dagster_cloud_api:
-  agent_token: {token}
-  deployment: {deployment}
-  {agent_label_entry}
-
-user_code_launcher:
-  module: {user_code_launcher_module}
-  class: {user_code_launcher_class}
-  {user_code_launcher_config_entry}
-"""
-
-
 def run_local_agent_in_temp_environment(
     agent_token: str,
     deployment: str,
     agent_label: Optional[str],
-    user_code_launcher_module: str,
-    user_code_launcher_class: str,
+    instance_config: Optional[str],
+    user_code_launcher_module: Optional[str],
+    user_code_launcher_class: Optional[str],
     user_code_launcher_config: Optional[str],
 ):
+    config = {
+        "instance_class": {
+            "module": "dagster_cloud.instance",
+            "class": "DagsterCloudAgentInstance",
+        },
+        "dagster_cloud_api": {},
+        "user_code_launcher": {
+            "module": "dagster_cloud.workspace.user_code_launcher",
+            "class": "ProcessUserCodeLauncher",
+        },
+    }
+    if instance_config:
+        parsed = json.loads(instance_config)
+        config = deep_merge_dicts(config, parsed)
+
+    if agent_token:
+        config["dagster_cloud_api"]["agent_token"] = agent_token
+    if deployment:
+        config["dagster_cloud_api"]["deployment"] = deployment
+    if agent_label:
+        config["dagster_cloud_api"]["agent_label"] = agent_label
+    if user_code_launcher_module:
+        config["user_code_launcher"]["module"] = user_code_launcher_module
+    if user_code_launcher_class:
+        config["user_code_launcher"]["class"] = user_code_launcher_class
+    if user_code_launcher_config:
+        try:
+            config["user_code_launcher"]["config"] = json.loads(user_code_launcher_config)
+        except json.JSONDecodeError as e:
+            raise ui.error(f"Invalid User Code Launcher config JSON:\n{e}")
+
     with TemporaryDirectory() as d:
-        config_entry = ""
-        if user_code_launcher_config:
-            try:
-                unindented_config_entry: str = yaml.dump(
-                    {"config": json.loads(user_code_launcher_config)}
-                )
-                config_entry = unindented_config_entry.replace("\n", "\n  ")
-            except json.JSONDecodeError as e:
-                raise ui.error(f"Invalid User Code Launcher config JSON:\n{e}")
-
         with open(os.path.join(d, "dagster.yaml"), "w", encoding="utf8") as f:
-            f.write(
-                DAGSTER_YAML_TEMPLATE.format(
-                    token=agent_token,
-                    deployment=deployment,
-                    agent_label_entry=f"agent_label: {agent_label}" if agent_label else "",
-                    user_code_launcher_module=user_code_launcher_module,
-                    user_code_launcher_class=user_code_launcher_class,
-                    user_code_launcher_config_entry=config_entry,
-                )
-            )
+            f.write(yaml.dump(config))
         run_local_agent_in_environment(Path(d), None)
-
-
-PROCESS_USER_CODE_LAUNCHER = "dagster_cloud.workspace.user_code_launcher.ProcessUserCodeLauncher"
 
 
 @app.command(
@@ -151,14 +145,21 @@ def run(
         None, "--agent-label", "-l", help="Optional agent label, if running ephemerally."
     ),
     user_code_launcher: str = Option(
-        PROCESS_USER_CODE_LAUNCHER,
+        None,
         "--user-code-launcher",
         help="User Code Launcher to use. Defaults to the local Process User Code Launcher.",
+        hidden=True,
+    ),
+    instance_config: str = Option(
+        None,
+        "--config",
+        help="Dagster instance config, in JSON format.",
     ),
     user_code_launcher_config: str = Option(
         None,
         "--user-code-launcher-config",
         help="Config to supply the User Code Launcher, in JSON format.",
+        hidden=True,
     ),
     agent_logging_config_path: Optional[Path] = Option(
         None,
@@ -174,22 +175,31 @@ def run(
         agent_token
         or deployment
         or agent_label
+        or instance_config
         or user_code_launcher_config
-        or user_code_launcher != PROCESS_USER_CODE_LAUNCHER
+        or user_code_launcher
     ):
-        if not agent_token or not deployment:
+        if not instance_config and (not agent_token or not deployment):
             raise ui.error("To run ephemerally, must supply both an agent token and a deployment.")
         if dagster_home:
             raise ui.error("Cannot supply both a dagster home directory and ephemeral parameters.")
 
-        user_code_launcher_module = ""
-        user_code_launcher_class = user_code_launcher
-        if "." in user_code_launcher:
-            user_code_launcher_module, user_code_launcher_class = user_code_launcher.rsplit(".", 1)
+        if user_code_launcher:
+            user_code_launcher_module = ""
+            user_code_launcher_class = user_code_launcher
+            if "." in user_code_launcher:
+                user_code_launcher_module, user_code_launcher_class = user_code_launcher.rsplit(
+                    ".", 1
+                )
+        else:
+            user_code_launcher_module = None
+            user_code_launcher_class = None
+
         run_local_agent_in_temp_environment(
             agent_token,
             deployment,
             agent_label,
+            instance_config,
             user_code_launcher_module,
             user_code_launcher_class,
             user_code_launcher_config,

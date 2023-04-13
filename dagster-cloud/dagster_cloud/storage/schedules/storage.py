@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Optional, Sequence, Set
 
 import dagster._check as check
 from dagster._core.definitions.run_request import InstigatorType
 from dagster._core.scheduler.instigation import (
     InstigatorState,
+    InstigatorStatus,
     InstigatorTick,
     TickData,
     TickStatus,
@@ -74,6 +75,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         repository_origin_id: Optional[str] = None,
         repository_selector_id: Optional[str] = None,
         instigator_type: Optional[InstigatorType] = None,
+        instigator_statuses: Optional[Set[InstigatorStatus]] = None,
     ) -> Iterable[InstigatorState]:
         res = self._execute_query(
             ALL_STORED_JOB_STATE_QUERY,
@@ -81,6 +83,9 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
                 "repositoryOriginId": repository_origin_id,
                 "repositorySelectorId": repository_selector_id,
                 "jobType": instigator_type.value if instigator_type else None,
+                "statuses": [status.value for status in instigator_statuses]
+                if instigator_statuses
+                else None,
             },
         )
 
