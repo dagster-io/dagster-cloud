@@ -1,25 +1,50 @@
+import datetime
 import io
 import os
 import pickle
-from typing import Sequence, Union
+from typing import Sequence, Tuple, Union
 
 import boto3
 import dagster._check as check
 import requests
 from dagster import InputContext, MemoizableIOManager, OutputContext, io_manager
 from dagster._utils import PICKLE_PROTOCOL
+from dateutil import parser
+
+ECS_AGENT_IP = "169.254.170.2"
 
 
 class PickledObjectServerlessIOManager(MemoizableIOManager):
     def __init__(
         self,
         s3_bucket,
-        s3_session,
-        s3_prefix=None,
+        s3_prefix,
     ):
-        self.bucket = check.str_param(s3_bucket, "s3_bucket")
-        self.s3_prefix = check.opt_str_param(s3_prefix, "s3_prefix")
-        self.s3 = s3_session
+        self._bucket = check.str_param(s3_bucket, "s3_bucket")
+        self._s3_prefix = check.str_param(s3_prefix, "s3_prefix")
+        self._boto_session, self._boto_session_expiration = self._refresh_boto_session()
+
+    def _refresh_boto_session(self) -> Tuple[boto3.Session, datetime.datetime]:
+        # We have to do this whacky way to get credentials to ensure that we get iam role
+        # we assigned to the task. If we used the default boto behavior, it could get overriden
+        # when users set AWS env vars.
+        relative_uri = os.environ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"]
+        aws_creds = requests.get(f"http://{ECS_AGENT_IP}{relative_uri}").json()
+        session = boto3.Session(
+            aws_access_key_id=aws_creds["AccessKeyId"],
+            aws_secret_access_key=aws_creds["SecretAccessKey"],
+            aws_session_token=aws_creds["Token"],
+        )
+        expiration = parser.parse(aws_creds["Expiration"])
+        return session, expiration
+
+    @property
+    def _s3(self):
+        if self._boto_session_expiration <= datetime.datetime.now(
+            self._boto_session_expiration.tzinfo
+        ) + datetime.timedelta(minutes=5):
+            self._boto_session, self._boto_session_expiration = self._refresh_boto_session()
+        return self._boto_session.client("s3")
 
     def _get_path(self, context: Union[InputContext, OutputContext]) -> str:
         path: Sequence[str]
@@ -28,7 +53,7 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
         else:
             path = ["storage", *context.get_identifier()]
 
-        return "/".join([self.s3_prefix, *path])
+        return "/".join([self._s3_prefix, *path])
 
     def has_output(self, context):
         key = self._get_path(context)
@@ -39,7 +64,7 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
         check.param_invariant(len(key) > 0, "key")
 
         # delete_object wont fail even if the item has been deleted.
-        self.s3.delete_object(Bucket=self.bucket, Key=key)
+        self._s3.delete_object(Bucket=self._bucket, Key=key)
 
     def _has_object(self, key):
         check.str_param(key, "key")
@@ -48,9 +73,9 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
         found_object = False
 
         try:
-            self.s3.get_object(Bucket=self.bucket, Key=key)
+            self._s3.get_object(Bucket=self._bucket, Key=key)
             found_object = True
-        except self.s3.exceptions.NoSuchKey:
+        except self._s3.exceptions.NoSuchKey:
             found_object = False
 
         return found_object
@@ -60,7 +85,8 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
             return None
 
         key = self._get_path(context)
-        obj = pickle.loads(self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read())
+        check.invariant(self._has_object(key), "Input not found. It may have expired.")
+        obj = pickle.loads(self._s3.get_object(Bucket=self._bucket, Key=key)["Body"].read())
 
         return obj
 
@@ -82,21 +108,11 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
 
         pickled_obj = pickle.dumps(obj, PICKLE_PROTOCOL)
         pickled_obj_bytes = io.BytesIO(pickled_obj)
-        self.s3.upload_fileobj(pickled_obj_bytes, self.bucket, key)
-
-
-ECS_AGENT_IP = "169.254.170.2"
-
-
-def _get_s3_client():
-    relative_uri = os.environ["AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"]
-    aws_creds = requests.get(f"http://{ECS_AGENT_IP}{relative_uri}").json()
-    session = boto3.Session(
-        aws_access_key_id=aws_creds["AccessKeyId"],
-        aws_secret_access_key=aws_creds["SecretAccessKey"],
-        aws_session_token=aws_creds["Token"],
-    )
-    return session.client("s3")
+        self._s3.upload_fileobj(
+            pickled_obj_bytes,
+            self._bucket,
+            key,
+        )
 
 
 @io_manager
@@ -115,5 +131,5 @@ def serverless_io_manager(init_context):
     deployment_name = init_context.instance.deployment_name
 
     return PickledObjectServerlessIOManager(
-        bucket, _get_s3_client(), s3_prefix=f"{prefix}/io_storage/{deployment_name}"
+        bucket, s3_prefix=f"{prefix}/io_storage/{deployment_name}"
     )

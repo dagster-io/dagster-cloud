@@ -186,7 +186,10 @@ class DagsterCloudAgent:
             instance, user_code_launcher, upload_all=user_code_launcher.upload_snapshots_on_startup
         )
 
-        self._logger.info(f"Started polling for requests from {instance.dagster_cloud_url}")
+        self._logger.info(
+            f"Will start polling for requests from {instance.dagster_cloud_url} once user code has"
+            " been loaded."
+        )
 
         while True:
             try:
@@ -873,6 +876,9 @@ class DagsterCloudAgent:
     def run_iteration(
         self, instance: DagsterCloudAgentInstance, user_code_launcher: DagsterCloudUserCodeLauncher
     ) -> Iterator[Optional[SerializableErrorInfo]]:
+        if not user_code_launcher.ready_to_serve_requests:
+            return
+
         num_pending_requests = len(self._pending_requests)
 
         if num_pending_requests < self._pending_requests_limit:

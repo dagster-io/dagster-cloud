@@ -508,13 +508,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             variables={"serializedPartitionBackfill": serialize_value(partition_backfill)},
         )
 
-    def supports_kvs(self):
-        return False
-
-    def kvs_get(self, keys: Set[str]):
+    def get_cursor_values(self, keys: Set[str]):
         return NotImplementedError("KVS is not supported from the user cloud")
 
-    def kvs_set(self, pairs: Mapping[str, str]):
+    def set_cursor_values(self, pairs: Mapping[str, str]):
         return NotImplementedError("KVS is not supported from the user cloud")
 
     # Migrating run history

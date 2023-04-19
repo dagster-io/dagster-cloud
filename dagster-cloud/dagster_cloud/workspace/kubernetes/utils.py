@@ -230,7 +230,7 @@ def get_deployment_failure_debug_info(
             )
         )
 
-    return f"{pod_debug_info}\n{kubectl_prompt}" if pod_debug_info else kubectl_prompt
+    return f"{pod_debug_info}\n\n{kubectl_prompt}" if pod_debug_info else kubectl_prompt
 
 
 def wait_for_deployment_complete(
@@ -263,7 +263,7 @@ def wait_for_deployment_complete(
                 k8s_deployment_name, namespace, core_api, pod_list, logger
             )
             if debug_info:
-                timeout_message = timeout_message + "\n" + debug_info
+                timeout_message = timeout_message + "\n\n" + debug_info
 
             raise Exception(timeout_message)
 

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence
 
 import boto3
@@ -220,6 +221,15 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     @property
     def inst_data(self) -> Optional[ConfigurableClassData]:
         return self._inst_data
+
+    def _write_liveness_sentinel(self) -> None:
+        # Write to a sentinel file to indicate that we've finished our initial
+        # reconciliation - this is used in serverless to indicate that we're ready to
+        # serve requests
+        Path("/opt/finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
+        self._logger.info(
+            "Wrote liveness sentinel: indicating that agent is ready to serve requests"
+        )
 
     def _get_grpc_server_sidecars(self) -> Optional[List[Dict[str, Any]]]:
         return None

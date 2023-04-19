@@ -82,6 +82,9 @@ USER_CODE_LAUNCHER_RECONCILE_SLEEP_SECONDS = 1
 # Check on pending delete servers every 30th reconcile
 PENDING_DELETE_SERVER_CHECK_INTERVAL = 30
 
+# How often to sync actual_entries with pex server liveness
+MULTIPEX_ACTUAL_ENTRIES_REFRESH_INTERVAL = 30
+
 ServerHandle = TypeVar("ServerHandle")
 
 DEPLOYMENT_INFO_QUERY = """
@@ -213,6 +216,16 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
             "agent starts up, even if the code location has not changed since the last upload."
         ),
     ),
+    "requires_healthcheck": Field(
+        BoolSource,
+        is_required=False,
+        default_value=False,
+        description=(
+            "Whether the agent update process expects a liveness sentinel to be written before an"
+            " agent is considered healthy. If using zero-downtime agent updates, this should be set"
+            " to True."
+        ),
+    ),
 }
 
 DeploymentAndLocation = Tuple[str, str]
@@ -285,6 +298,7 @@ class DagsterCloudUserCodeLauncher(
         defer_job_snapshots: bool = True,
         server_process_startup_timeout=None,
         upload_snapshots_on_startup: bool = True,
+        requires_healthcheck: bool = False,
     ):
         self._grpc_servers: Dict[
             DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
@@ -299,10 +313,12 @@ class DagsterCloudUserCodeLauncher(
         self.upload_snapshots_on_startup = check.bool_param(
             upload_snapshots_on_startup, "upload_snapshots_on_startup"
         )
+        self._requires_healthcheck = check.bool_param(requires_healthcheck, "requires_healthcheck")
 
         # periodically reconciles to make desired = actual
         self._desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
         self._actual_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
+        self._last_refreshed_actual_entries = 0
         self._metadata_lock = threading.Lock()
 
         self._upload_locations: Set[DeploymentAndLocation] = set()
@@ -837,16 +853,22 @@ class DagsterCloudUserCodeLauncher(
 
     def _cleanup_servers(self, active_agent_ids: Set[str]) -> None:
         """Remove all servers, across all deployments and locations."""
-        for handle in self._list_server_handles():
-            self._logger.info(f"Attempting to cleanup server {handle}")
-            if self._can_cleanup_server(handle, active_agent_ids):
-                try:
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for handle in self._list_server_handles():
+                self._logger.info(f"Attempting to cleanup server {handle}")
+                if self._can_cleanup_server(handle, active_agent_ids):
                     self._logger.info(f"Can remove server {handle}. Cleaning up.")
-                    self._remove_server_handle(handle)
+                    futures.append(executor.submit(self._remove_server_handle, handle))
+                else:
+                    self._logger.info(f"Cannot remove server {handle}. Not cleaning up.")
+
+            wait(futures)
+            for future in futures:
+                try:
+                    future.result()
                 except:
                     self._logger.exception("Error cleaning up server")
-            else:
-                self._logger.info(f"Cannot remove server {handle}. Not cleaning up.")
 
     @abstractmethod
     def _list_server_handles(self) -> List[ServerHandle]:
@@ -958,7 +980,7 @@ class DagsterCloudUserCodeLauncher(
                     )
                 )
 
-    def reconcile(self):
+    def reconcile(self) -> None:
         with self._metadata_lock:
             desired_entries = (
                 self._desired_entries.copy() if self._desired_entries is not None else None
@@ -970,12 +992,72 @@ class DagsterCloudUserCodeLauncher(
             # Wait for the first time the desired metadata is set before reconciling
             return
 
+        if (
+            time.time() - self._last_refreshed_actual_entries
+            > MULTIPEX_ACTUAL_ENTRIES_REFRESH_INTERVAL
+        ):
+            try:
+                self._refresh_actual_entries()
+            except:
+                self._logger.exception("Failed to refresh actual entries.")
+            self._last_refreshed_actual_entries = time.time()
+
         self._reconcile(
             desired_entries,
             upload_locations,
             check_on_pending_delete_servers=self._reconcile_count % self._reconcile_interval == 0,
         )
+        if self._reconcile_count == 0 and self._requires_healthcheck:
+            try:
+                self._write_liveness_sentinel()
+            except:
+                self._logger.exception("Failed to write liveness sentinel file.")
+
+        if self._reconcile_count == 0:
+            self._logger.info(
+                f"Started polling for requests from {self._instance.dagster_cloud_url}"
+            )
+
         self._reconcile_count += 1
+
+    @property
+    def ready_to_serve_requests(self) -> bool:
+        # thread-safe since reconcile_count is an integer
+        return self._reconcile_count > 0
+
+    def _refresh_actual_entries(self) -> None:
+        for deployment_location, server in self._multipex_servers.items():
+            if deployment_location in self._actual_entries:
+                # If a multipex server exists, we query it to make sure the pex server is still
+                # available
+                try:
+                    self._check_running_multipex_server(server)
+                except:
+                    # This is expected if ECS is currently spinning up this service after it crashed.
+                    # In this case, we want to wait for it to fully come up before we remove actual
+                    # entries. This ensures the recon loop uses the ECS replacement multiplex server
+                    # and not try to spin up a new multipex server.
+                    self._logger.info(
+                        "Multipex server entry exists but server is not running. "
+                        "Will wait for server to come up."
+                    )
+                    return
+                deployment_name, location_name = deployment_location
+                if not self._get_existing_pex_servers(deployment_name, location_name):
+                    self._logger.warning(
+                        (
+                            "Pex servers disappeared for %s, %s. Removing actual entries to"
+                            " activate reconciliation logic."
+                        ),
+                        deployment_name,
+                        location_name,
+                    )
+                    del self._actual_entries[deployment_location]
+
+    def _write_liveness_sentinel(self) -> None:
+        """Write a sentinel file to indicate that the agent is alive and grpc servers have been spun up.
+        """
+        pass
 
     def _check_for_image(self, metadata: CodeDeploymentMetadata):
         if self.requires_images and not metadata.image:
