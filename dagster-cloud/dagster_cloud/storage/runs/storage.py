@@ -87,7 +87,6 @@ def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]
     return {
         "runIds": filters.run_ids,
         "pipelineName": filters.pipeline_name,
-        "mode": filters.mode,
         "statuses": [status.value for status in filters.statuses],
         "tags": [
             merge_dicts(
