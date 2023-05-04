@@ -8,7 +8,7 @@ from .utils import get_task_definition_family
 
 class CloudEcsRunLauncher(EcsRunLauncher[DagsterCloudAgentInstance]):
     def _get_run_task_definition_family(self, run) -> str:
-        pipeline_origin = check.not_none(run.external_pipeline_origin)
+        pipeline_origin = check.not_none(run.external_job_origin)
         location_name = (
             pipeline_origin.external_repository_origin.code_location_origin.location_name
         )

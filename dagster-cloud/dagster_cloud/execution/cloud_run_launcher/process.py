@@ -21,23 +21,23 @@ class CloudProcessRunLauncher(RunLauncher):
 
     def launch_run(self, context: LaunchRunContext) -> None:
         run = context.dagster_run
-        pipeline_code_origin = check.not_none(context.pipeline_code_origin)
+        pipeline_code_origin = check.not_none(context.job_code_origin)
 
         run_args = ExecuteRunArgs(
-            pipeline_origin=pipeline_code_origin,
-            pipeline_run_id=run.run_id,
+            job_origin=pipeline_code_origin,
+            run_id=run.run_id,
             instance_ref=self._instance.get_ref(),
         )
         args = run_args.get_command_args()
 
         kwargs = {}
         if (
-            run.pipeline_code_origin
-            and run.pipeline_code_origin.repository_origin.container_context
-            and run.pipeline_code_origin.repository_origin.container_context.get("env_vars")
+            run.job_code_origin
+            and run.job_code_origin.repository_origin.container_context
+            and run.job_code_origin.repository_origin.container_context.get("env_vars")
         ):
             kwargs["env"] = {**os.environ}
-            for kev in run.pipeline_code_origin.repository_origin.container_context["env_vars"]:
+            for kev in run.job_code_origin.repository_origin.container_context["env_vars"]:
                 key, value = parse_env_var(kev)
                 kwargs["env"][key] = value
 

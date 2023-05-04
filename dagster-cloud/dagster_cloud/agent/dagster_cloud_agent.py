@@ -545,7 +545,7 @@ class DagsterCloudAgent:
             DagsterCloudApi.GET_EXTERNAL_EXECUTION_PLAN,
             DagsterCloudApi.GET_SUBSET_EXTERNAL_PIPELINE_RESULT,
         }:
-            external_pipeline_origin = request.request_args.pipeline_origin
+            external_pipeline_origin = request.request_args.job_origin
             return external_pipeline_origin.external_repository_origin.code_location_origin
         elif api_name in {
             DagsterCloudApi.GET_EXTERNAL_PARTITION_CONFIG,
@@ -711,7 +711,7 @@ class DagsterCloudAgent:
 
                     run_location_name = cast(
                         str,
-                        run.external_pipeline_origin.external_repository_origin.code_location_origin.location_name,
+                        run.external_job_origin.external_repository_origin.code_location_origin.location_name,
                     )
 
                     server = user_code_launcher.get_grpc_server(deployment_name, run_location_name)
@@ -755,7 +755,7 @@ class DagsterCloudAgent:
                     else:
                         run_location_name = cast(
                             str,
-                            run.external_pipeline_origin.external_repository_origin.code_location_origin.location_name,
+                            run.external_job_origin.external_repository_origin.code_location_origin.location_name,
                         )
 
                         server = user_code_launcher.get_grpc_server(

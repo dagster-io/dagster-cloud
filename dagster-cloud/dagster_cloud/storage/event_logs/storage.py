@@ -23,6 +23,7 @@ from dagster._core.event_api import EventLogRecord, EventRecordsFilter, RunShard
 from dagster._core.events import DagsterEvent, DagsterEventType
 from dagster._core.events.log import EventLogEntry
 from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
+from dagster._core.storage.dagster_run import DagsterRunStatsSnapshot
 from dagster._core.storage.event_log.base import (
     AssetEntry,
     AssetRecord,
@@ -30,7 +31,6 @@ from dagster._core.storage.event_log.base import (
     EventLogStorage,
 )
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
-from dagster._core.storage.pipeline_run import PipelineRunStatsSnapshot
 from dagster._serdes import (
     ConfigurableClass,
     ConfigurableClassData,
@@ -96,7 +96,7 @@ def _input_for_dagster_event(dagster_event: Optional[DagsterEvent]):
 
     return {
         "eventTypeValue": dagster_event.event_type_value,
-        "pipelineName": dagster_event.pipeline_name,
+        "pipelineName": dagster_event.job_name,
         "stepHandleKey": dagster_event.step_handle.to_key() if dagster_event.step_handle else None,
         "solidHandleId": (
             dagster_event.node_handle.to_string() if dagster_event.node_handle else None
@@ -132,7 +132,7 @@ def _event_log_entry_from_graphql(graphene_event_log_entry: Dict) -> EventLogEnt
         run_id=check.str_elem(graphene_event_log_entry, "runId"),
         timestamp=check.float_elem(graphene_event_log_entry, "timestamp"),
         step_key=check.opt_str_elem(graphene_event_log_entry, "stepKey"),
-        pipeline_name=check.opt_str_elem(graphene_event_log_entry, "pipelineName"),
+        job_name=check.opt_str_elem(graphene_event_log_entry, "pipelineName"),
         dagster_event=(
             deserialize_value(
                 check.str_elem(graphene_event_log_entry, "dagsterEvent"),
@@ -317,12 +317,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             has_more=connection_data["hasMore"],
         )
 
-    def get_stats_for_run(self, run_id: str) -> PipelineRunStatsSnapshot:
+    def get_stats_for_run(self, run_id: str) -> DagsterRunStatsSnapshot:
         res = self._execute_query(
             GET_STATS_FOR_RUN_QUERY, variables={"runId": check.str_param(run_id, "run_id")}
         )
         stats = res["data"]["eventLogs"]["getStatsForRun"]
-        return PipelineRunStatsSnapshot(
+        return DagsterRunStatsSnapshot(
             run_id=check.str_elem(stats, "runId"),
             steps_succeeded=check.int_elem(stats, "stepsSucceeded"),
             steps_failed=check.int_elem(stats, "stepsFailed"),
@@ -401,7 +401,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     "runId": event.run_id,
                     "timestamp": event.timestamp,
                     "stepKey": event.step_key,
-                    "pipelineName": event.pipeline_name,
+                    "pipelineName": event.job_name,
                     "dagsterEvent": _input_for_dagster_event(event.dagster_event),
                 }
             },

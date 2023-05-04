@@ -22,14 +22,14 @@ from dagster._core.errors import (
 )
 from dagster._core.events import DagsterEvent
 from dagster._core.execution.backfill import BulkActionStatus, PartitionBackfill
-from dagster._core.host_representation.origin import ExternalPipelineOrigin
+from dagster._core.host_representation.origin import ExternalJobOrigin
 from dagster._core.snap import (
     ExecutionPlanSnapshot,
-    PipelineSnapshot,
+    JobSnapshot,
     create_execution_plan_snapshot_id,
-    create_pipeline_snapshot_id,
+    create_job_snapshot_id,
 )
-from dagster._core.storage.pipeline_run import (
+from dagster._core.storage.dagster_run import (
     DagsterRun,
     JobBucket,
     RunPartitionData,
@@ -86,7 +86,7 @@ def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]
         return None
     return {
         "runIds": filters.run_ids,
-        "pipelineName": filters.pipeline_name,
+        "pipelineName": filters.job_name,
         "statuses": [status.value for status in filters.statuses],
         "tags": [
             merge_dicts(
@@ -345,7 +345,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["hasRun"]
 
-    def has_pipeline_snapshot(self, pipeline_snapshot_id: str) -> bool:
+    def has_job_snapshot(self, pipeline_snapshot_id: str) -> bool:
         res = self._execute_query(
             HAS_PIPELINE_SNAPSHOT_QUERY,
             variables={
@@ -354,28 +354,28 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["hasPipelineSnapshot"]
 
-    def add_pipeline_snapshot(
-        self, pipeline_snapshot: PipelineSnapshot, snapshot_id: Optional[str] = None
+    def add_job_snapshot(
+        self, pipeline_snapshot: JobSnapshot, snapshot_id: Optional[str] = None
     ) -> str:
         self._execute_query(
             ADD_PIPELINE_SNAPSHOT_MUTATION,
             variables={
                 "serializedPipelineSnapshot": serialize_value(
-                    check.inst_param(pipeline_snapshot, "pipeline_snapshot", PipelineSnapshot)
+                    check.inst_param(pipeline_snapshot, "pipeline_snapshot", JobSnapshot)
                 ),
                 "snapshotId": snapshot_id,
             },
         )
-        return snapshot_id if snapshot_id else create_pipeline_snapshot_id(pipeline_snapshot)
+        return snapshot_id if snapshot_id else create_job_snapshot_id(pipeline_snapshot)
 
-    def get_pipeline_snapshot(self, pipeline_snapshot_id: str) -> PipelineSnapshot:
+    def get_job_snapshot(self, pipeline_snapshot_id: str) -> JobSnapshot:
         res = self._execute_query(
             GET_PIPELINE_SNAPSHOT_QUERY,
             variables={
                 "pipelineSnapshotId": check.str_param(pipeline_snapshot_id, "pipeline_snapshot_id")
             },
         )
-        return deserialize_value(res["data"]["runs"]["getPipelineSnapshot"], PipelineSnapshot)
+        return deserialize_value(res["data"]["runs"]["getPipelineSnapshot"], JobSnapshot)
 
     def has_execution_plan_snapshot(self, execution_plan_snapshot_id: str) -> bool:
         res = self._execute_query(
@@ -514,7 +514,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return NotImplementedError("KVS is not supported from the user cloud")
 
     # Migrating run history
-    def replace_job_origin(self, run: DagsterRun, job_origin: ExternalPipelineOrigin):
+    def replace_job_origin(self, run: DagsterRun, job_origin: ExternalJobOrigin):
         self._execute_query(
             MUTATE_JOB_ORIGIN,
             variables={

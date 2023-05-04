@@ -15,7 +15,7 @@ from dagster._core.instance import DagsterInstance
 from dagster._core.instance.config import config_field_for_configurable_class
 from dagster._core.instance.ref import InstanceRef, configurable_class_data
 from dagster._core.launcher import DefaultRunLauncher, RunLauncher
-from dagster._core.storage.pipeline_run import DagsterRun
+from dagster._core.storage.dagster_run import DagsterRun
 from dagster._serdes import ConfigurableClassData
 from dagster_cloud_cli.core.graphql_client import (
     create_graphql_requests_session,

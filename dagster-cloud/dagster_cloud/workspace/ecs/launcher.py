@@ -224,7 +224,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _write_liveness_sentinel(self) -> None:
         # Write to a sentinel file to indicate that we've finished our initial
-        # reconciliation - this is used in serverless to indicate that we're ready to
+        # reconciliation - this is used to indicate that we're ready to
         # serve requests
         Path("/opt/finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
         self._logger.info(

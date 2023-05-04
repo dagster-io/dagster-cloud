@@ -10,7 +10,7 @@ from dagster._core.host_representation import (
     CodeLocationOrigin,
     ExternalRepositoryData,
 )
-from dagster._core.storage.pipeline_run import DagsterRun
+from dagster._core.storage.dagster_run import DagsterRun
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata

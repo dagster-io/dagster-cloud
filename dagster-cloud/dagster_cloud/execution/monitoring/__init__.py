@@ -8,7 +8,7 @@ import dagster._check as check
 import grpc
 from dagster import DagsterInstance, DagsterRunStatus
 from dagster._core.launcher import CheckRunHealthResult, WorkerStatus
-from dagster._core.storage.pipeline_run import IN_PROGRESS_RUN_STATUSES, RunsFilter
+from dagster._core.storage.dagster_run import IN_PROGRESS_RUN_STATUSES, RunsFilter
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 
