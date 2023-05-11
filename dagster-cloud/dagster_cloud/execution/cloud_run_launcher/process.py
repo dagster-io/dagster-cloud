@@ -103,11 +103,11 @@ class CloudProcessRunLauncher(RunLauncher):
         if not run:
             return False
 
+        self._instance.report_run_canceling(run)
+
         pid = self._get_pid(run)
         if not pid:
             return False
-
-        self._instance.report_run_canceling(run)
 
         kill_process(pid)
 

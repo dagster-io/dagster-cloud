@@ -71,7 +71,7 @@ def construct_code_location_service(deployment_name, location_name, service_name
         ),
         spec=client.V1ServiceSpec(
             selector={"user-deployment": service_name},
-            ports=[client.V1ServicePort(name="http", protocol="TCP", port=SERVICE_PORT)],
+            ports=[client.V1ServicePort(name="grpc", protocol="TCP", port=SERVICE_PORT)],
         ),
     )
 

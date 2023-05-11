@@ -20,10 +20,23 @@ STOPPED_TASK_GRACE_PERIOD = 30
 config = Config(retries={"max_attempts": 50, "mode": "standard"})
 
 
+def get_debug_ecs_prompt(cluster: str, task_arn: str) -> str:
+    return (
+        "For more information about the failure, check the ECS console for logs for task"
+        f" {task_arn} in cluster {cluster}."
+    )
+
+
 class EcsServiceError(Exception):
-    def __init__(self, task_arn, stopped_reason, logs):
-        log_str = "Task logs:\n" + "\n".join(logs) if logs else ""
-        message = f"ECS service failed because task {task_arn} failed: {stopped_reason}\n{log_str}"
+    def __init__(self, cluster, task_arn, stopped_reason, logs, show_debug_prompt: bool):
+        log_str = "Task logs:\n" + "\n".join(logs) if logs else "No task logs."
+
+        message = (
+            f"ECS service failed because task {task_arn} failed: {stopped_reason}\n\n{log_str}"
+        )
+
+        if show_debug_prompt:
+            message = message + f"\n\n{get_debug_ecs_prompt(cluster, task_arn)}"
         super().__init__(message)
 
 
@@ -39,6 +52,7 @@ class Client:
         timeout: int = DEFAULT_ECS_TIMEOUT,
         grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
         launch_type: str = "FARGATE",
+        show_debug_cluster_info: bool = True,
     ):
         self.ecs = ecs_client if ecs_client else boto3.client("ecs", config=config)
         self.logs = boto3.client("logs", config=config)
@@ -52,6 +66,9 @@ class Client:
             service_discovery_namespace_id, "service_discovery_namespace_id"
         )
         self.log_group = check.str_param(log_group, "log_group")
+
+        self.show_debug_cluster_info = show_debug_cluster_info
+
         self.timeout = check.int_param(timeout, "timeout")
         self.grace_period = check.int_param(grace_period, "grace_period")
         self.launch_type = check.str_param(launch_type, "launch_type")
@@ -315,7 +332,10 @@ class Client:
 
         return services
 
-    def run_task(self, name, image, command, execution_role_arn):
+    def _run_task(self, name, image, command, execution_role_arn):
+        """This is no longer used except as an integration test util
+        for testing various network configurations.
+        """
         task_definition_arn = self.register_task_definition(
             family=name,
             image=image,
@@ -449,7 +469,13 @@ class Client:
         except:
             logger.exception(f"Error trying to get logs for failed task {task_arn}")
 
-        raise EcsServiceError(task_arn=task_arn, stopped_reason=stopped_reason, logs=logs)
+        raise EcsServiceError(
+            cluster=self.cluster_name,
+            task_arn=task_arn,
+            stopped_reason=stopped_reason,
+            logs=logs,
+            show_debug_prompt=self.show_debug_cluster_info,
+        )
 
     def assert_task_not_stopped(self, task_arn, container_name, logger=None):
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
@@ -465,7 +491,7 @@ class Client:
 
         task_to_track = None
 
-        while start_time + 300 > time.time():
+        while start_time + self.timeout > time.time():
             # Check for a running task to track
             if not task_to_track:
                 running = self.ecs.list_tasks(

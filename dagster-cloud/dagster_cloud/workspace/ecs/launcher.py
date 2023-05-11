@@ -32,6 +32,7 @@ from dagster_cloud.workspace.user_code_launcher import (
 )
 from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
 
+from .client import get_debug_ecs_prompt
 from .run_launcher import CloudEcsRunLauncher
 from .utils import get_task_definition_family
 
@@ -119,11 +120,16 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             security_group_ids=security_group_ids,
             service_discovery_namespace_id=self.service_discovery_namespace_id,
             log_group=self.log_group,
+            show_debug_cluster_info=self.show_debug_cluster_info,
             timeout=self._ecs_timeout,
             grace_period=self._ecs_grace_period,
             launch_type=self.launch_type,
         )
         super(EcsUserCodeLauncher, self).__init__(**kwargs)
+
+    @property
+    def show_debug_cluster_info(self) -> bool:
+        return True
 
     @property
     def requires_images(self):
@@ -176,14 +182,19 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     is_required=False,
                     default_value=DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
                     description=(
-                        "Timeout when waiting for a code server to be ready after it is created"
+                        "Timeout when waiting for a code server to be ready after it is created."
+                        " You might want to increase this if your ECS tasks are successfully"
+                        " starting but your gRPC server is timing out."
                     ),
                 ),
                 "ecs_timeout": Field(
                     IntSource,
                     is_required=False,
                     default_value=DEFAULT_ECS_TIMEOUT,
-                    description="How long (in seconds) to poll against ECS API endpoints",
+                    description=(
+                        "How long (in seconds) to poll against ECS API endpoints. You might want to"
+                        " increase this if your ECS tasks are taking too long to start up."
+                    ),
                 ),
                 "ecs_grace_period": Field(
                     IntSource,
@@ -368,6 +379,24 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             ),
         )
 
+    def _get_timeout_debug_info(
+        self,
+        task_arn,
+    ):
+        sections = []
+
+        try:
+            logs = self.client.get_task_logs(task_arn, container_name=CONTAINER_NAME)
+            task_logs = "Task logs:\n" + "\n".join(logs) if logs else "No logs in task."
+            sections.append(task_logs)
+        except:
+            self._logger.exception("Error trying to get logs for failed task", task_arn=task_arn)
+
+        if self.show_debug_cluster_info:
+            sections.append(get_debug_ecs_prompt(self.cluster, task_arn))
+
+        return "\n\n".join(sections)
+
     def _wait_for_new_server_ready(
         self,
         _deployment_name: str,
@@ -388,6 +417,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             additional_check=lambda: self.client.assert_task_not_stopped(
                 task_arn, CONTAINER_NAME, self._logger
             ),
+            get_timeout_debug_info=lambda: self._get_timeout_debug_info(task_arn),
         )
 
     def _remove_server_handle(self, server_handle: EcsServerHandleType) -> None:

@@ -287,6 +287,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         cursor: Optional[str] = None,
         of_type: Optional[Union[DagsterEventType, Set[DagsterEventType]]] = None,
         limit: Optional[int] = None,
+        ascending: bool = True,
     ) -> EventLogConnection:
         check.invariant(not of_type or isinstance(of_type, (DagsterEventType, frozenset, set)))
 
@@ -308,6 +309,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     else None
                 ),
                 "limit": limit,
+                # only send False for back-compat since True is the default
+                **({"ascending": False} if not ascending else {}),
             },
         )
         connection_data = res["data"]["eventLogs"]["getRecordsForRun"]
