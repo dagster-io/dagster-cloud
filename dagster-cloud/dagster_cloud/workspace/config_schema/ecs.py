@@ -90,6 +90,16 @@ SHARED_ECS_CONFIG = {
             " for more information."
         ),
     ),
+    "server_sidecar_containers": Field(
+        Array(Permissive({})),
+        is_required=False,
+        description="Additional sidecar containers to include in code server task definitions.",
+    ),
+    "run_sidecar_containers": Field(
+        Array(Permissive({})),
+        is_required=False,
+        description="Additional sidecar containers to include in run task definitions.",
+    ),
 }
 
 

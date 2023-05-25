@@ -187,6 +187,7 @@ def _get_event_records_filter_input(
         ]
         if event_records_filter.tags
         else None,
+        "storageIds": event_records_filter.storage_ids,
     }
 
 

@@ -20,7 +20,7 @@ def get_human_readable_label(name, length_limit, sanitize_fn):
     return sanitize_fn(truncated_name) if sanitize_fn else truncated_name
 
 
-def deterministic_label_for_location(deployment_name, location_name):
+def deterministic_label_for_location(deployment_name: str, location_name: str) -> str:
     """Need a label here that is a unique function of location name since we use it to
     search for existing deployments on update and remove them. Does not need to be human-readable.
     """

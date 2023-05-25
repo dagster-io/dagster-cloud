@@ -64,6 +64,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         runtime_platform: Optional[Mapping[str, Any]] = None,
         mount_points: Optional[Sequence[Mapping[str, Any]]] = None,
         volumes: Optional[Sequence[Mapping[str, Any]]] = None,
+        server_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
+        run_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -113,6 +115,13 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         self.mount_points = check.opt_sequence_param(mount_points, "mount_points")
         self.volumes = check.opt_sequence_param(volumes, "volumes")
+
+        self.server_sidecar_containers = check.opt_sequence_param(
+            server_sidecar_containers, "server_sidecar_containers"
+        )
+        self.run_sidecar_containers = check.opt_sequence_param(
+            run_sidecar_containers, "run_sidecar_containers"
+        )
 
         self.client = Client(
             cluster_name=self.cluster,
@@ -242,8 +251,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             "Wrote liveness sentinel: indicating that agent is ready to serve requests"
         )
 
-    def _get_grpc_server_sidecars(self) -> Optional[List[Dict[str, Any]]]:
-        return None
+    def _get_grpc_server_sidecars(
+        self, container_context: EcsContainerContext
+    ) -> Optional[Sequence[Mapping[str, Any]]]:
+        return container_context.server_sidecar_containers
 
     def _get_service_cpu_override(self, container_context: EcsContainerContext) -> Optional[str]:
         return container_context.server_resources.get("cpu")
@@ -261,6 +272,17 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _get_additional_grpc_server_env(self) -> Dict[str, str]:
         return {}
+
+    def _get_dagster_tags(self, deployment_name: str, location_name: str) -> Dict[str, str]:
+        return {
+            "dagster/deployment_name": get_ecs_human_readable_label(deployment_name),
+            "dagster/location_name": get_ecs_human_readable_label(
+                location_name,
+            ),
+            "dagster/location_hash": deterministic_label_for_location(
+                deployment_name, location_name
+            ),
+        }
 
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
@@ -291,6 +313,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             runtime_platform=self.runtime_platform,
             mount_points=self.mount_points,
             volumes=self.volumes,
+            server_sidecar_containers=self.server_sidecar_containers,
+            run_sidecar_containers=self.run_sidecar_containers,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         environment = merge_dicts(
@@ -314,18 +338,12 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             execution_role_arn=container_context.execution_role_arn,
             env=environment,
             tags={
-                "dagster/deployment_name": get_ecs_human_readable_label(deployment_name),
-                "dagster/location_name": get_ecs_human_readable_label(
-                    location_name,
-                ),
-                "dagster/location_hash": deterministic_label_for_location(
-                    deployment_name, location_name
-                ),
+                **self._get_dagster_tags(deployment_name, location_name),
                 **tags,
             },
             task_role_arn=container_context.task_role_arn,
             secrets=container_context.get_secrets_dict(self.secrets_manager),
-            sidecars=self._get_grpc_server_sidecars(),
+            sidecars=self._get_grpc_server_sidecars(container_context),
             logger=self._logger,
             cpu=self._get_service_cpu_override(container_context),
             memory=self._get_service_memory_override(container_context),
@@ -475,15 +493,17 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         return handle.tags.get("dagster/agent_id")
 
     def _run_launcher_kwargs(self) -> Dict[str, Any]:
-        sidecars = self._get_grpc_server_sidecars()
-
         return dict(
             task_definition={
                 "log_group": self.log_group,
                 "execution_role_arn": self.execution_role_arn,
                 "requires_compatibilities": [self.launch_type],
                 **({"task_role_arn": self.task_role_arn} if self.task_role_arn else {}),
-                **({"sidecars": sidecars} if sidecars else {}),
+                **(
+                    {"sidecar_containers": self.run_sidecar_containers}
+                    if self.run_sidecar_containers
+                    else {}
+                ),
                 **({"runtime_platform": self.runtime_platform} if self.runtime_platform else {}),
                 **({"mount_points": self.mount_points} if self.mount_points else {}),
                 **({"volumes": self.volumes} if self.volumes else {}),

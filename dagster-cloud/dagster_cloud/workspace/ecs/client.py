@@ -411,6 +411,7 @@ class Client:
             launchType=self.launch_type,
             desiredCount=1,
             enableExecuteCommand=allow_ecs_exec,
+            propagateTags="SERVICE",
         )
         params["networkConfiguration"] = self.network_configuration
 
