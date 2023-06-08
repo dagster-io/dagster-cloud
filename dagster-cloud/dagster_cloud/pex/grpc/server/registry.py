@@ -19,7 +19,7 @@ def _download_from_s3(filename: str, local_filepath: str):
     # Lazy import boto3 to avoid a hard dependency during module load
     import boto3
 
-    s3 = boto3.client("s3")
+    s3 = boto3.client("s3", region_name="us-west-2")
 
     # TODO: move the bucket and prefix to pex_metdata
     s3_bucket_name = os.environ["DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_BUCKET"]
@@ -159,8 +159,8 @@ class PexS3Registry:
         if os.path.exists(venv_dir):
             logging.info("Reusing existing venv %r for %r", venv_dir, pex_filepath)
         else:
-            installed = self.install_venv(venv_dir, pex_filepath)
-            if not installed or not os.path.exists(venv_dir):
+            self.install_venv(venv_dir, pex_filepath)
+            if not os.path.exists(venv_dir):
                 raise PexInstallationError("Could not install venv", pex_filepath)
         venv_path = Path(venv_dir).absolute()
         return PexVenv(
@@ -177,7 +177,7 @@ class PexS3Registry:
         venv_root = os.getenv("VENVS_ROOT", "/venvs")
         return os.path.join(venv_root, short_hash)
 
-    def install_venv(self, venv_dir: str, pex_filepath: str) -> bool:
+    def install_venv(self, venv_dir: str, pex_filepath: str):
         # Unpacks the pex file into a venv at venv_dir
         try:
             subprocess.check_output(
@@ -194,20 +194,16 @@ class PexS3Registry:
                 ],
                 stderr=subprocess.STDOUT,
             )
-        except subprocess.CalledProcessError as err:
+        except subprocess.CalledProcessError as e:
             shutil.rmtree(venv_dir, ignore_errors=True)  # don't leave invalid dir behind
-            logging.exception(
-                "Failure to unpack pex file %r into a venv: %r",
-                pex_filepath,
-                err.output,
-            )
-            return False
+            raise PexInstallationError(
+                f"Could not install venv. Pex output: {e.output}", pex_filepath
+            ) from e
         logging.info(
             "Unpacked pex file %r into venv at %r",
             pex_filepath,
             venv_dir,
         )
-        return True
 
     def get_site_packages_dir_for_venv(self, venv_path: Path) -> Path:
         python = venv_path / "bin" / "python3"

@@ -17,7 +17,7 @@ from dagster._grpc.server import server_termination_target
 from dagster._grpc.types import GetCurrentRunsResult
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
 from dagster._serdes import deserialize_value, serialize_value
-from dagster._utils.error import serializable_error_info_from_exc_info
+from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from ..__generated__ import multi_pex_api_pb2
@@ -70,7 +70,7 @@ class MultiPexApiServer(MultiPexApiServicer):
     def GetPexServers(self, request, _context):
         get_pex_servers_args = deserialize_value(request.get_pex_servers_args, GetPexServersArgs)
         try:
-            pex_server_handles = self._pex_manager.get_pex_servers(
+            pex_server_handles = self._pex_manager.get_pex_server_handles(
                 get_pex_servers_args.deployment_name,
                 get_pex_servers_args.location_name,
             )
@@ -128,22 +128,46 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         )
 
     def _query(self, api_name: str, request, context):
-        return self._pex_manager.get_pex_grpc_client(  # noqa: SLF001
+        client_or_error = self._pex_manager.get_pex_grpc_client_or_error(
             self._get_handle_from_metadata(context)
-        )._get_response(api_name, request)
+        )
+        if isinstance(client_or_error, SerializableErrorInfo):
+            raise Exception("Server failed to start up, no available client")
+        return client_or_error._get_response(api_name, request)  # noqa: SLF001
 
     def _streaming_query(self, api_name: str, request, context):
-        return self._pex_manager.get_pex_grpc_client(  # noqa: SLF001
+        client_or_error = self._pex_manager.get_pex_grpc_client_or_error(
             self._get_handle_from_metadata(context)
-        )._get_streaming_response(api_name, request)
+        )
+        if isinstance(client_or_error, SerializableErrorInfo):
+            raise Exception("Server failed to start up, no available client")
+        return client_or_error._get_streaming_response(api_name, request)  # noqa: SLF001
 
     def ExecutionPlanSnapshot(self, request, context):
         return self._query("ExecutionPlanSnapshot", request, context)
 
     def ListRepositories(self, request, context):
-        return self._query("ListRepositories", request, context)
+        client_or_error = self._pex_manager.get_pex_grpc_client_or_error(
+            self._get_handle_from_metadata(context)
+        )
+        if isinstance(client_or_error, SerializableErrorInfo):
+            return api_pb2.ListRepositoriesReply(
+                serialized_list_repositories_response_or_error=serialize_value(client_or_error)
+            )
+        return client_or_error._get_response("ListRepositories", request)  # noqa: SLF001
 
     def Ping(self, request, context):
+        client_or_error = self._pex_manager.get_pex_grpc_client_or_error(
+            self._get_handle_from_metadata(context)
+        )
+        # This is hacky, but if the server failed to start up, it's 'ready' in the sense that it
+        # will return an error as soon as ListRepositories is called, even though the server
+        # can't serve requests. TODO Find a better way to model that in a backwards compatible way
+        # so that _wait_for_dagster_server_process returns immediately
+        if isinstance(client_or_error, SerializableErrorInfo):
+            echo = request.echo
+            return api_pb2.PingReply(echo=echo)
+
         return self._query("Ping", request, context)
 
     def GetServerId(self, request, context):

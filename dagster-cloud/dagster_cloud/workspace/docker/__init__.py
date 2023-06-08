@@ -145,7 +145,7 @@ class DockerUserCodeLauncher(
                     "label": [
                         GRPC_SERVER_LABEL,
                         deterministic_label_for_location(deployment_name, location_name),
-                        self._instance.instance_uuid,
+                        f"{AGENT_LABEL}={self._instance.instance_uuid}",
                     ]
                 },
             )

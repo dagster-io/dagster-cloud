@@ -4,6 +4,7 @@ import dagster._seven as _seven
 import requests
 from dagster import (
     Field,
+    IntSource,
     StringSource,
     _check as check,
 )
@@ -30,6 +31,7 @@ class CloudComputeLogManager(
     def __init__(
         self,
         local_dir=None,
+        upload_interval=None,
         inst_data=None,
     ):
         # proxy calls to local compute log manager (for subscriptions, etc)
@@ -42,6 +44,7 @@ class CloudComputeLogManager(
         self._upload_session.mount("https://", adapter)
 
         self._local_manager = LocalComputeLogManager(local_dir)
+        self._upload_interval = check.opt_int_param(upload_interval, "upload_interval")
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
 
     @property
@@ -52,6 +55,7 @@ class CloudComputeLogManager(
     def config_type(cls):
         return {
             "local_dir": Field(StringSource, is_required=False),
+            "upload_interval": Field(IntSource, is_required=False),
         }
 
     @classmethod
@@ -64,7 +68,7 @@ class CloudComputeLogManager(
 
     @property
     def upload_interval(self) -> Optional[int]:
-        return None
+        return self._upload_interval
 
     def delete_logs(
         self, log_key: Optional[Sequence[str]] = None, prefix: Optional[Sequence[str]] = None
@@ -86,9 +90,7 @@ class CloudComputeLogManager(
     def upload_to_cloud_storage(
         self, log_key: Sequence[str], io_type: ComputeIOType, partial=False
     ):
-        path = self.local_manager.get_captured_local_path(
-            log_key, IO_TYPE_EXTENSION[io_type], partial=partial
-        )
+        path = self.local_manager.get_captured_local_path(log_key, IO_TYPE_EXTENSION[io_type])
         ensure_file(path)
         params: Dict[str, Any] = {
             "log_key": log_key,

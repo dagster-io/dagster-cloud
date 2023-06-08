@@ -2,7 +2,18 @@ import logging
 import sys
 import threading
 from enum import Enum
-from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence, Set, Tuple, Union
+from typing import (
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 import dagster._check as check
 import grpc
@@ -56,23 +67,45 @@ class CloudRunWorkerStatus(
             ("run_id", str),
             ("status_type", WorkerStatus),
             ("message", Optional[str]),
+            ("transient", Optional[bool]),  # If the run worker failed, is there reason to retry?
+            (
+                "run_worker_id",
+                Optional[str],
+            ),  # unique identifier for a particular run worker
         ],
     )
 ):
-    def __new__(cls, run_id: str, status_type: WorkerStatus, message: Optional[str] = None):
+    def __new__(
+        cls,
+        run_id: str,
+        status_type: WorkerStatus,
+        message: Optional[str] = None,
+        transient: Optional[bool] = None,
+        run_worker_id: Optional[str] = None,
+    ):
         return super(CloudRunWorkerStatus, cls).__new__(
             cls,
             run_id=check.str_param(run_id, "run_id"),
             status_type=check.inst_param(status_type, "status_type", WorkerStatus),
             message=check.opt_str_param(message, "message"),
+            transient=check.opt_bool_param(transient, "transient", default=False),
+            run_worker_id=check.opt_str_param(run_worker_id, "run_worker_id"),
         )
 
     @classmethod
     def from_check_run_health_result(
-        cls, run_id: str, result: CheckRunHealthResult
+        cls,
+        run_id: str,
+        result: CheckRunHealthResult,
     ) -> "CloudRunWorkerStatus":
         check.inst_param(result, "result", CheckRunHealthResult)
-        return CloudRunWorkerStatus(run_id, result.status, result.msg)
+        return CloudRunWorkerStatus(
+            run_id,
+            result.status,
+            result.msg,
+            transient=result.transient,
+            run_worker_id=result.run_worker_id,
+        )
 
 
 @whitelist_for_serdes

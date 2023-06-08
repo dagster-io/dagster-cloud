@@ -100,6 +100,26 @@ SHARED_ECS_CONFIG = {
         is_required=False,
         description="Additional sidecar containers to include in run task definitions.",
     ),
+    "run_ecs_tags": Field(
+        Array(
+            {
+                "key": Field(StringSource, is_required=True),
+                "value": Field(StringSource, is_required=False),
+            }
+        ),
+        is_required=False,
+        description="Additional tags to apply to the launched ECS task.",
+    ),
+    "server_ecs_tags": Field(
+        Array(
+            {
+                "key": Field(StringSource, is_required=True),
+                "value": Field(StringSource, is_required=False),
+            }
+        ),
+        is_required=False,
+        description="Additional tags to apply to the launched ECS task for a code server.",
+    ),
 }
 
 

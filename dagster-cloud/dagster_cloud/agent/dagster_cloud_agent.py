@@ -124,14 +124,6 @@ class DagsterCloudAgent:
     def _active_deployment_names(self):
         return [deployment[0] for deployment in self._active_deployments]
 
-    @property
-    def _active_production_deployment_names(self):
-        return [
-            deployment
-            for deployment, is_branch_deployment in self._active_deployments
-            if not is_branch_deployment
-        ]
-
     def _check_initial_deployment_names(self, instance: DagsterCloudAgentInstance):
         if instance.deployment_names:
             result = instance.organization_scoped_graphql_client().execute(
@@ -265,9 +257,6 @@ class DagsterCloudAgent:
             for (error, timestamp) in self._errors
         ]
 
-        # Get a run worker status object for every deployment since AgentHeartbeat requires one
-        # - it will just always be empty for branch deployments since those didn't even check for
-        # run worker statuses
         run_worker_statuses_dict = instance.user_code_launcher.get_cloud_run_worker_statuses(
             self._active_deployment_names
         )
@@ -508,9 +497,7 @@ class DagsterCloudAgent:
             user_code_launcher.update_grpc_metadata(deployment_map)
 
         # Tell run worker monitoring which deployments it should care about
-        user_code_launcher.update_run_worker_monitoring_deployments(
-            self._active_production_deployment_names
-        )
+        user_code_launcher.update_run_worker_monitoring_deployments(self._active_deployment_names)
 
         # In the rare event that there are pending requests that are no longer in the workspace at
         # all (if, say, a location is removed while requests are enqueued), they should be forcibly

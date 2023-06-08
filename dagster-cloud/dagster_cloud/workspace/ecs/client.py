@@ -419,7 +419,10 @@ class Client:
             params["serviceRegistries"] = [{"registryArn": service_registry_arn}]
 
         if tags and self.taggable:
-            params["tags"] = [{"key": key, "value": value} for key, value in tags.items()]
+            params["tags"] = [
+                {"key": key, **({"value": value} if value is not None else {})}
+                for key, value in tags.items()
+            ]
 
         arn = self.ecs.create_service(**params).get("service").get("serviceArn")
 

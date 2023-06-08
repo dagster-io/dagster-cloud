@@ -34,7 +34,7 @@ from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label
 
 from .client import get_debug_ecs_prompt
 from .run_launcher import CloudEcsRunLauncher
-from .utils import get_task_definition_family
+from .utils import get_server_task_definition_family
 
 EcsServerHandleType = Service
 
@@ -66,6 +66,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         volumes: Optional[Sequence[Mapping[str, Any]]] = None,
         server_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
         run_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
+        server_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
+        run_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -122,6 +124,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self.run_sidecar_containers = check.opt_sequence_param(
             run_sidecar_containers, "run_sidecar_containers"
         )
+
+        self.server_ecs_tags = check.opt_sequence_param(server_ecs_tags, "server_ecs_tags")
+        self.run_ecs_tags = check.opt_sequence_param(run_ecs_tags, "run_ecs_tags")
 
         self.client = Client(
             cluster_name=self.cluster,
@@ -315,6 +320,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             volumes=self.volumes,
             server_sidecar_containers=self.server_sidecar_containers,
             run_sidecar_containers=self.run_sidecar_containers,
+            server_ecs_tags=self.server_ecs_tags,
+            run_ecs_tags=self.run_ecs_tags,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         environment = merge_dicts(
@@ -325,9 +332,18 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         self._logger.info(f"Creating a new service for {deployment_name}:{location_name}...")
 
-        family = get_task_definition_family(
-            "server", self._instance.organization_name, deployment_name, location_name
+        family = get_server_task_definition_family(
+            self._instance.organization_name, deployment_name, location_name
         )
+
+        system_tags = {**self._get_dagster_tags(deployment_name, location_name), **tags}
+        system_tag_keys = set(system_tags)
+
+        invalid_user_keys = [
+            tag["key"] for tag in container_context.server_ecs_tags if tag["key"] in system_tag_keys
+        ]
+        if invalid_user_keys:
+            raise Exception(f"Cannot override system ECS tags: {', '.join(invalid_user_keys)}")
 
         service = self.client.create_service(
             name=unique_ecs_resource_name(deployment_name, location_name),
@@ -340,6 +356,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             tags={
                 **self._get_dagster_tags(deployment_name, location_name),
                 **tags,
+                **{tag["key"]: tag.get("value") for tag in container_context.server_ecs_tags},
             },
             task_role_arn=container_context.task_role_arn,
             secrets=container_context.get_secrets_dict(self.secrets_manager),
@@ -517,6 +534,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "networkConfiguration": self.client.network_configuration,
                 "launchType": self.launch_type,
             },
+            run_ecs_tags=self.run_ecs_tags,
             container_name=CONTAINER_NAME,
             run_resources=self.run_resources,
         )

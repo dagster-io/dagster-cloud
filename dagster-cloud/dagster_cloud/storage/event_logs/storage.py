@@ -17,6 +17,7 @@ from typing import (
 from uuid import uuid4
 
 import dagster._check as check
+from dagster import DagsterInvalidInvocationError
 from dagster._core.assets import AssetDetails
 from dagster._core.definitions.events import AssetKey, ExpectationResult
 from dagster._core.event_api import EventLogRecord, EventRecordsFilter, RunShardedEventsCursor
@@ -37,7 +38,12 @@ from dagster._serdes import (
     serialize_value,
 )
 from dagster._serdes.serdes import deserialize_value
-from dagster._utils import datetime_as_float
+from dagster._utils import datetime_as_float, utc_datetime_from_timestamp
+from dagster._utils.concurrency import (
+    ConcurrencyClaimStatus,
+    ConcurrencyKeyInfo,
+    ConcurrencySlotStatus,
+)
 from dagster._utils.error import SerializableErrorInfo
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import GraphQLStorageError
@@ -47,12 +53,18 @@ from dagster_cloud.storage.event_logs.utils import truncate_event
 
 from .queries import (
     ADD_DYNAMIC_PARTITIONS_MUTATION,
+    CHECK_CONCURRENCY_CLAIM_QUERY,
+    CLAIM_CONCURRENCY_SLOT_MUTATION,
     DELETE_DYNAMIC_PARTITION_MUTATION,
     DELETE_EVENTS_MUTATION,
     ENABLE_SECONDARY_INDEX_MUTATION,
+    FREE_CONCURRENCY_SLOT_FOR_STEP_MUTATION,
+    FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
     GET_ASSET_RECORDS_QUERY,
     GET_ASSET_RUN_IDS_QUERY,
+    GET_CONCURRENCY_INFO_QUERY,
+    GET_CONCURRENCY_KEYS_QUERY,
     GET_DYNAMIC_PARTITIONS_QUERY,
     GET_EVENT_RECORDS_QUERY,
     GET_EVENT_TAGS_FOR_ASSET,
@@ -67,6 +79,7 @@ from .queries import (
     IS_ASSET_AWARE_QUERY,
     IS_PERSISTENT_QUERY,
     REINDEX_MUTATION,
+    SET_CONCURRENCY_SLOTS_MUTATION,
     STORE_EVENT_MUTATION,
     UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
     UPGRADE_EVENT_LOG_STORAGE_MUTATION,
@@ -683,5 +696,123 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def wipe_asset(self, asset_key: AssetKey):
         res = self._execute_query(
             WIPE_ASSET_MUTATION, variables={"assetKey": asset_key.to_string()}
+        )
+        return res
+
+    @property
+    def supports_global_concurrency_limits(self) -> bool:
+        return True
+
+    def set_concurrency_slots(self, concurrency_key: str, num: int) -> None:
+        check.str_param(concurrency_key, "concurrency_key")
+        check.int_param(num, "num")
+        res = self._execute_query(
+            SET_CONCURRENCY_SLOTS_MUTATION,
+            variables={"concurrencyKey": concurrency_key, "num": num},
+        )
+        result = res["data"]["eventLogs"]["SetConcurrencySlots"]
+        error = result.get("error")
+
+        if error:
+            if error["className"] == "DagsterInvalidInvocationError":
+                raise DagsterInvalidInvocationError(error["message"])
+            else:
+                raise GraphQLStorageError(res)
+        return res
+
+    def get_concurrency_keys(self) -> Set[str]:
+        res = self._execute_query(GET_CONCURRENCY_KEYS_QUERY)
+        return set(res["data"]["eventLogs"]["getConcurrencyKeys"])
+
+    def get_concurrency_info(self, concurrency_key: str) -> ConcurrencyKeyInfo:
+        check.str_param(concurrency_key, "concurrency_key")
+        res = self._execute_query(
+            GET_CONCURRENCY_INFO_QUERY,
+            variables={"concurrencyKey": concurrency_key},
+        )
+        info = res["data"]["eventLogs"]["getConcurrencyInfo"]
+        return ConcurrencyKeyInfo(
+            concurrency_key=concurrency_key,
+            slot_count=info["slotCount"],
+            active_slot_count=info["activeSlotCount"],
+            active_run_ids=set(info["activeRunIds"]),
+            pending_step_count=info["pendingStepCount"],
+            pending_run_ids=set(info["pendingStepRunIds"]),
+            assigned_step_count=info["assignedStepCount"],
+            assigned_run_ids=set(info["assignedStepRunIds"]),
+        )
+
+    def claim_concurrency_slot(
+        self, concurrency_key: str, run_id: str, step_key: str, priority: Optional[int] = None
+    ) -> ConcurrencyClaimStatus:
+        check.str_param(concurrency_key, "concurrency_key")
+        check.str_param(run_id, "run_id")
+        check.str_param(step_key, "step_key")
+        check.opt_int_param(priority, "priority")
+        res = self._execute_query(
+            CLAIM_CONCURRENCY_SLOT_MUTATION,
+            variables={
+                "concurrencyKey": concurrency_key,
+                "runId": run_id,
+                "stepKey": step_key,
+                "priority": priority,
+            },
+        )
+        claim_status = res["data"]["eventLogs"]["ClaimConcurrencySlot"]["status"]
+        return ConcurrencyClaimStatus(
+            concurrency_key=concurrency_key,
+            slot_status=ConcurrencySlotStatus(claim_status["slotStatus"]),
+            priority=claim_status["priority"],
+            assigned_timestamp=utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
+            if claim_status["assignedTimestamp"]
+            else None,
+            enqueued_timestamp=utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
+            if claim_status["enqueuedTimestamp"]
+            else None,
+        )
+
+    def check_concurrency_claim(
+        self, concurrency_key: str, run_id: str, step_key: str
+    ) -> ConcurrencyClaimStatus:
+        check.str_param(concurrency_key, "concurrency_key")
+        check.str_param(run_id, "run_id")
+        check.str_param(step_key, "step_key")
+        res = self._execute_query(
+            CHECK_CONCURRENCY_CLAIM_QUERY,
+            variables={
+                "concurrencyKey": concurrency_key,
+                "runId": run_id,
+                "stepKey": step_key,
+            },
+        )
+        claim_status = res["data"]["eventLogs"]["getCheckConcurrencyClaim"]
+        return ConcurrencyClaimStatus(
+            concurrency_key=concurrency_key,
+            slot_status=ConcurrencySlotStatus(claim_status["slotStatus"]),
+            priority=claim_status["priority"],
+            assigned_timestamp=utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
+            if claim_status["assignedTimestamp"]
+            else None,
+            enqueued_timestamp=utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
+            if claim_status["enqueuedTimestamp"]
+            else None,
+        )
+
+    def get_concurrency_run_ids(self) -> Set[str]:
+        raise NotImplementedError("Not callable from user cloud")
+
+    def free_concurrency_slots_for_run(self, run_id: str) -> None:
+        check.str_param(run_id, "run_id")
+        res = self._execute_query(
+            FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION, variables={"runId": run_id}
+        )
+        return res
+
+    def free_concurrency_slot_for_step(self, run_id: str, step_key: str) -> None:
+        check.str_param(run_id, "run_id")
+        check.opt_str_param(step_key, "step_key")
+        res = self._execute_query(
+            FREE_CONCURRENCY_SLOT_FOR_STEP_MUTATION,
+            variables={"runId": run_id, "stepKey": step_key},
         )
         return res

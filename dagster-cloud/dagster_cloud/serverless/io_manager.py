@@ -44,7 +44,7 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
             self._boto_session_expiration.tzinfo
         ) + datetime.timedelta(minutes=5):
             self._boto_session, self._boto_session_expiration = self._refresh_boto_session()
-        return self._boto_session.client("s3")
+        return self._boto_session.client("s3", region_name="us-west-2")
 
     def _get_path(self, context: Union[InputContext, OutputContext]) -> str:
         path: Sequence[str]

@@ -35,6 +35,7 @@ PYTHON_ERROR_FRAGMENT = """
 fragment PythonErrorFragment on PythonError {
   __typename
   message
+  className
   stack
   cause {
     message
@@ -417,4 +418,93 @@ DELETE_DYNAMIC_PARTITION_MUTATION = """
             }
         }
     }
+"""
+
+SET_CONCURRENCY_SLOTS_MUTATION = (
+    PYTHON_ERROR_FRAGMENT
+    + """
+mutation SetConcurrencySlots($concurrencyKey: String!, $num: Int!) {
+    eventLogs {
+        SetConcurrencySlots(concurrencyKey: $concurrencyKey, num: $num) {
+            success
+            error {
+                ...PythonErrorFragment
+            }
+        }
+    }
+}
+"""
+)
+
+GET_CONCURRENCY_KEYS_QUERY = """
+query getConcurrencyKeys {
+    eventLogs {
+        getConcurrencyKeys
+    }
+}
+"""
+
+GET_CONCURRENCY_INFO_QUERY = """
+query getConcurrencyInfo($concurrencyKey: String!) {
+    eventLogs {
+        getConcurrencyInfo(concurrencyKey: $concurrencyKey) {
+            concurrencyKey
+            slotCount
+            activeSlotCount
+            activeRunIds
+            pendingStepCount
+            pendingStepRunIds
+            assignedStepCount
+            assignedStepRunIds
+        }
+    }
+}
+"""
+
+CLAIM_CONCURRENCY_SLOT_MUTATION = """
+mutation ClaimConcurrencySlot($concurrencyKey: String!, $runId: String!, $stepKey: String!, $priority: Int!) {
+    eventLogs {
+        ClaimConcurrencySlot(concurrencyKey: $concurrencyKey, runId: $runId, stepKey: $stepKey, priority: $priority) {
+            status {
+                slotStatus
+                priority
+                assignedTimestamp
+                enqueuedTimestamp
+            }
+        }
+    }
+}
+"""
+
+CHECK_CONCURRENCY_CLAIM_QUERY = """
+query getCheckConcurrencyClaim($concurrencyKey: String!, $runId: String!, $stepKey: String!) {
+    eventLogs {
+        getCheckConcurrencyClaim(concurrencyKey: $concurrencyKey, runId: $runId, stepKey: $stepKey) {
+            slotStatus
+            priority
+            assignedTimestamp
+            enqueuedTimestamp
+        }
+    }
+}
+"""
+
+FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION = """
+mutation FreeConcurrencySlotsForRun($runId: String!) {
+    eventLogs {
+        FreeConcurrencySlotsForRun(runId: $runId) {
+            success
+        }
+    }
+}
+"""
+
+FREE_CONCURRENCY_SLOT_FOR_STEP_MUTATION = """
+mutation FreeConcurrencySlotForStep($runId: String!, $stepKey: String!) {
+    eventLogs {
+        FreeConcurrencySlotForStep(runId: $runId, stepKey: $stepKey) {
+            success
+        }
+    }
+}
 """

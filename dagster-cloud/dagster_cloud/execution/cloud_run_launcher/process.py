@@ -7,7 +7,6 @@ from dagster._core.launcher.base import LaunchRunContext
 from dagster._core.utils import parse_env_var
 from dagster._grpc.types import ExecuteRunArgs
 from dagster._serdes.ipc import open_ipc_subprocess
-
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process
 
