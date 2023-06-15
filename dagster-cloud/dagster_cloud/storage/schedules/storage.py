@@ -207,6 +207,9 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
     ) -> Sequence[AutoMaterializeAssetEvaluationRecord]:
         raise NotImplementedError("Not callable from user cloud")
 
+    def purge_asset_evaluations(self, before: float):
+        raise NotImplementedError("Not callable from user cloud")
+
     def upgrade(self):
         raise NotImplementedError("Not callable from user cloud")
 

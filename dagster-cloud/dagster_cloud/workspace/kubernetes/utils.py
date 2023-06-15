@@ -121,9 +121,11 @@ def construct_code_location_deployment(
     user_defined_resources = container_config.pop("resources", {})
     user_defined_security_context = container_config.pop("security_context", None)
 
+    container_name = container_config.get("name", "dagster")
+
     container_config = {
         **container_config,
-        "name": "dagster",
+        "name": container_name,
         "image": metadata.image,
         "env": [{"name": key, "value": value} for key, value in env.items()]
         + user_defined_env_vars,

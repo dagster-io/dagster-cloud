@@ -553,7 +553,14 @@ class DagsterCloudUserCodeLauncher(
                 raise_http_error(resp)
 
             response = deserialize_value(resp.text, DagsterCloudUploadWorkspaceResponse)
-            check.invariant(response.updated, "update failed after job snapshots uploaded")
+
+            if not response.updated:
+                # this condition is expected to be extremely unlikely
+                raise Exception(
+                    "Upload failed, job definitions changed while uploading:"
+                    f" {response.missing_job_snapshots}"
+                )
+
             self._logger.info(
                 "Workspace entry for"
                 f" {deployment_name}:{workspace_entry.location_name} {response.message}"
