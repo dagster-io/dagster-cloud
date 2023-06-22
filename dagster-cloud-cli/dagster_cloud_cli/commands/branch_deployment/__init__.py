@@ -123,3 +123,11 @@ def create_or_update(
                 author_avatar_url=author_avatar_url,
             )
         )
+
+
+@app.command(name="delete")
+@dagster_cloud_options(allow_empty=True, requires_url=True)
+def delete(url: str, api_token: str, deployment: str):
+    """Allows deletion of a branch deployment by name."""
+    with gql.graphql_client_from_url(url, api_token) as client:
+        gql.delete_branch_deployment(client, deployment=deployment)

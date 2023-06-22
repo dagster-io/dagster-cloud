@@ -660,3 +660,59 @@ def mark_cli_event(
             },
         )
         return res["data"]["markCliEvent"] == "ok"
+
+
+GET_DEPLOYMENT_BY_NAME_QUERY = """
+query DeploymentByNameQuery($deploymentName: String!) {
+    deploymentByName(name: $deploymentName) {
+        __typename
+        ... on DagsterCloudDeployment {
+            deploymentName
+            deploymentId
+            deploymentType
+        }
+    }
+}
+"""
+
+DELETE_DEPLOYMENT_MUTATION = """
+mutation CliDeleteDeployment($deploymentId: Int!) {
+    deleteDeployment(deploymentId: $deploymentId) {
+        __typename
+        ... on DagsterCloudDeployment {
+            deploymentId
+        }
+        ... on PythonError {
+            message
+            stack
+        }
+    }
+}
+"""
+
+
+def get_deployment_by_name(client: GqlShimClient, deployment: str) -> Dict[str, Any]:
+    result = client.execute(
+        GET_DEPLOYMENT_BY_NAME_QUERY, variable_values={"deploymentName": deployment}
+    )["data"]["deploymentByName"]
+    if not result["__typename"] == "DagsterCloudDeployment":
+        raise Exception(f"Unable to find deployment {deployment}")
+
+    return result
+    raise Exception(f"Unable to find deployment {deployment}")
+
+
+def delete_branch_deployment(client: GqlShimClient, deployment: str) -> Any:
+    deployment_info = get_deployment_by_name(client, deployment)
+    if not deployment_info["deploymentType"] == "BRANCH":
+        raise Exception(f"Deployment {deployment} is not a branch deployment")
+
+    result = client.execute(
+        DELETE_DEPLOYMENT_MUTATION,
+        variable_values={"deploymentId": deployment_info["deploymentId"]},
+    )
+
+    if result["data"]["deleteDeployment"]["__typename"] != "DagsterCloudDeployment":
+        raise Exception(f"Unable to delete deployment: {str(result)}")
+
+    return result["data"]["deleteDeployment"]["deploymentId"]

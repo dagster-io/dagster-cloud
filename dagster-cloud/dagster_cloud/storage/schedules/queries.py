@@ -28,7 +28,7 @@ CREATE_JOB_TICK_MUTATION = """
 """
 
 UPDATE_JOB_TICK_MUTATION = """
-    mutation updateJobTickMutation($tickId: Int! $serializedJobTickData: String!) {
+    mutation updateJobTickMutation($tickId: BigInt! $serializedJobTickData: String!) {
         schedules {
             updateJobTick(tickId: $tickId, serializedJobTickData: $serializedJobTickData) {
                 ok

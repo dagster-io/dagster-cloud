@@ -1,7 +1,7 @@
 GET_USER_CLOUD_REQUESTS_QUERY = """
-    mutation GetUserCloudRequests($forBranchDeployments: Boolean) {
+    mutation GetUserCloudRequests($forBranchDeployments: Boolean $forFullDeployments: [String!], $limit: Int) {
         userCloudAgent {
-            popUserCloudAgentRequests(limit:10, forBranchDeployments: $forBranchDeployments) {
+            popUserCloudAgentRequests(limit: $limit, forBranchDeployments: $forBranchDeployments, forFullDeployments: $forFullDeployments) {
                 requestId
                 requestApi
                 requestBody

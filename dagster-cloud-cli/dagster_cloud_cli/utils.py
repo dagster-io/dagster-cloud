@@ -84,7 +84,7 @@ def add_options(options: Dict[str, Tuple[Any, OptionInfo]]):
         def wrap_function(*args, **kwargs):
             modified_kwargs = kwargs
             if not has_kwargs and not hasattr(to_wrap, "modified_options"):
-                modified_kwargs: dict[Any, Any] = {
+                modified_kwargs: Dict[Any, Any] = {
                     k: v for k, v in kwargs.items() if k in to_wrap_sig.parameters
                 }
             return to_wrap(*args, **modified_kwargs)
