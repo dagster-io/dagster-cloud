@@ -53,6 +53,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         task_role_arn: Optional[str] = None,
         security_group_ids: Optional[List[str]] = None,
         inst_data: Optional[ConfigurableClassData] = None,
+        repository_credentials=None,
         secrets=None,
         secrets_tag=None,
         env_vars=None,
@@ -83,6 +84,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self.task_role_arn = task_role_arn
         self.log_group = log_group
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
+        self.repository_credentials = check.opt_str_param(secrets, "repository_credentials")
         self.secrets = check.opt_list_param(secrets, "secrets")
         self.env_vars = check.opt_list_param(env_vars, "env_vars")
 
@@ -160,6 +162,16 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "task_role_arn": Field(StringSource, is_required=False),
                 "log_group": Field(StringSource),
                 "service_discovery_namespace_id": Field(StringSource),
+                "repository_credentials": Field(
+                    StringSource,
+                    is_required=False,
+                    default_value=None,
+                    description=(
+                        "The arn of the secret to authenticate into your private container registry."
+                        "This does not apply if you are leveraging ECR for your images, see "
+                        "https://docs.aws.amazon.com/AmazonECS/latest/userguide/private-auth.html."
+                    ),
+                ),
                 "secrets": Field(
                     Array(
                         ScalarUnion(
@@ -359,6 +371,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 **{tag["key"]: tag.get("value") for tag in container_context.server_ecs_tags},
             },
             task_role_arn=container_context.task_role_arn,
+            repository_credentials=container_context.repository_credentials,
             secrets=container_context.get_secrets_dict(self.secrets_manager),
             sidecars=self._get_grpc_server_sidecars(container_context),
             logger=self._logger,
@@ -524,6 +537,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 **({"runtime_platform": self.runtime_platform} if self.runtime_platform else {}),
                 **({"mount_points": self.mount_points} if self.mount_points else {}),
                 **({"volumes": self.volumes} if self.volumes else {}),
+                **({"repositoryCredentials": {"credentialsProvider": self.repositoryCredentials}} if self.repositoryCredentials else {}),
             },
             secrets=self.secrets,
             secrets_tag=self.secrets_tag,
