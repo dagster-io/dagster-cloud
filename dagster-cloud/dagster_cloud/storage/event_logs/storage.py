@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from os import getenv
 from typing import (
     Any,
@@ -70,6 +71,8 @@ from .queries import (
     GET_EVENT_TAGS_FOR_ASSET,
     GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
+    GET_LATEST_STORAGE_ID_BY_PARTITION,
+    GET_LATEST_TAGS_BY_PARTITION,
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_RECORDS_FOR_RUN_QUERY,
     GET_STATS_FOR_RUN_QUERY,
@@ -610,6 +613,56 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 ] = graphene_partition_count["materializationCount"]
 
         return materialization_count_by_partition
+
+    def get_latest_storage_id_by_partition(
+        self, asset_key: AssetKey, event_type: DagsterEventType
+    ) -> Mapping[str, int]:
+        res = self._execute_query(
+            GET_LATEST_STORAGE_ID_BY_PARTITION,
+            variables={
+                "assetKey": asset_key.to_string(),
+                "eventType": event_type.value,
+            },
+        )
+        latest_storage_id_result = res["data"]["eventLogs"]["getLatestStorageIdByPartition"]
+        latest_storage_id_by_partition: Dict[str, int] = {}
+
+        for graphene_latest_storage_id in latest_storage_id_result:
+            latest_storage_id_by_partition[
+                graphene_latest_storage_id["partition"]
+            ] = graphene_latest_storage_id["storageId"]
+
+        return latest_storage_id_by_partition
+
+    def get_latest_tags_by_partition(
+        self,
+        asset_key: AssetKey,
+        event_type: DagsterEventType,
+        tag_keys: Optional[Sequence[str]] = None,
+        asset_partitions: Optional[Sequence[str]] = None,
+        before_cursor: Optional[int] = None,
+        after_cursor: Optional[int] = None,
+    ) -> Mapping[str, Mapping[str, str]]:
+        res = self._execute_query(
+            GET_LATEST_TAGS_BY_PARTITION,
+            variables={
+                "assetKey": asset_key.to_string(),
+                "eventType": event_type.value,
+                "tagKeys": tag_keys,
+                "assetPartitions": asset_partitions,
+                "beforeCursor": before_cursor,
+                "afterCursor": after_cursor,
+            },
+        )
+        latest_tags_by_partition_result = res["data"]["eventLogs"]["getLatestTagsByPartition"]
+        latest_tags_by_partition: Dict[str, Dict[str, str]] = defaultdict(dict)
+        for tag_by_partition in latest_tags_by_partition_result:
+            latest_tags_by_partition[tag_by_partition["partition"]][
+                tag_by_partition["key"]
+            ] = tag_by_partition["value"]
+
+        # convert defaultdict to dict
+        return dict(latest_tags_by_partition)
 
     def get_latest_asset_partition_materialization_attempts_without_materializations(
         self, asset_key: AssetKey

@@ -869,43 +869,26 @@ class DagsterCloudAgent:
         num_pending_requests = len(self._pending_requests)
 
         if num_pending_requests < self._pending_requests_limit:
-            if instance.includes_branch_deployments:
-                result = instance.organization_scoped_graphql_client().execute(
-                    GET_USER_CLOUD_REQUESTS_QUERY,
-                    {"forBranchDeployments": True},
+            # limit (implicit default 10) applied separately for requests to branch deployments, and for each full deployment
+            result = instance.organization_scoped_graphql_client().execute(
+                GET_USER_CLOUD_REQUESTS_QUERY,
+                {
+                    "forBranchDeployments": instance.includes_branch_deployments,
+                    "forFullDeployments": self._active_deployment_names,
+                },
+            )
+            json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
+
+            self._logger.debug(
+                "Iteration #{iteration}: Adding {num_requests} requests to be"
+                " processed. Currently {num_pending_requests} waiting for server to be ready"
+                .format(
+                    iteration=self._iteration,
+                    num_requests=len(json_requests),
+                    num_pending_requests=num_pending_requests,
                 )
-                json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
-
-                self._logger.debug(
-                    "Iteration #{iteration}: Adding {num_requests} branch deployment requests to be"
-                    " processed. Currently {num_pending_requests} waiting for server to be ready"
-                    .format(
-                        iteration=self._iteration,
-                        num_requests=len(json_requests),
-                        num_pending_requests=num_pending_requests,
-                    )
-                )
-
-                self._pending_requests.extend(json_requests)
-
-            for deployment_name in self._active_deployment_names:
-                result = instance.graphql_client_for_deployment(deployment_name).execute(
-                    GET_USER_CLOUD_REQUESTS_QUERY,
-                    {"forBranchDeployments": False},
-                )
-                json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
-
-                self._logger.debug(
-                    "Iteration #{iteration}: Adding {num_requests} deployment requests to be"
-                    " processed. Currently {num_pending_requests} waiting for server to be ready"
-                    .format(
-                        iteration=self._iteration,
-                        num_requests=len(json_requests),
-                        num_pending_requests=num_pending_requests,
-                    )
-                )
-
-                self._pending_requests.extend(json_requests)
+            )
+            self._pending_requests.extend(json_requests)
 
         else:
             self._logger.warning(

@@ -280,6 +280,47 @@ GET_MATERIALIZATION_COUNT_BY_PARTITION = """
     }
     """
 
+GET_LATEST_STORAGE_ID_BY_PARTITION = """
+    query getLatestStorageIdByPartition($assetKey: String!, $eventType: String!) {
+        eventLogs {
+            getLatestStorageIdByPartition(assetKey: $assetKey, eventType: $eventType) {
+                ... on StorageIdByPartition {
+                    partition
+                    storageId
+                }
+            }
+        }
+    }
+"""
+
+GET_LATEST_TAGS_BY_PARTITION = """
+    query getLatestTagsByPartition(
+        $assetKey: String!,
+        $eventType: String!,
+        $tagKeys: [String!],
+        $assetPartitions: [String!],
+        $beforeCursor: BigInt,
+        $afterCursor: BigInt,
+    ) {
+        eventLogs {
+            getLatestTagsByPartition(
+                assetKey: $assetKey,
+                eventType: $eventType,
+                tagKeys: $tagKeys,
+                assetPartitions: $assetPartitions,
+                beforeCursor: $beforeCursor,
+                afterCursor: $afterCursor,
+            ) {
+                ... on TagByPartition {
+                    partition
+                    key
+                    value
+                }
+            }
+        }
+    }
+"""
+
 GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS = """
     query getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations($assetKey: String!) {
         eventLogs {
