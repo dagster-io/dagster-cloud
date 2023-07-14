@@ -110,7 +110,7 @@ def wait_for_grpc_server(client, timeout=180):
         if time.time() - start_time > timeout:
             raise Exception(
                 f"Timed out after waiting {timeout}s for server. "
-                f"Most recent connection error: {str(last_error)}"
+                f"Most recent connection error: {last_error}"
             )
 
         time.sleep(1)

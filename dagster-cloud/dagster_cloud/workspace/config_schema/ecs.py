@@ -20,6 +20,15 @@ SHARED_ECS_CONFIG = {
                     is_required=False,
                     description="The ephemeral storage, in GiB, to use for the launched task.",
                 ),
+                "repository_credentials": Field(
+                    str,
+                    is_required=False,
+                    description=(
+                        "AWS SSM Secret ARN of the credentials used to pull a server's image from a"
+                        " private registry."
+                        " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/private-auth.html"
+                    ),
+                ),
             }
         )
     ),
@@ -40,6 +49,15 @@ SHARED_ECS_CONFIG = {
                     int,
                     is_required=False,
                     description="The ephemeral storage, in GiB, to use for the launched task.",
+                ),
+                "repository_credentials": Field(
+                    str,
+                    is_required=False,
+                    description=(
+                        "AWS SSM Secret ARN of the credentials used to pull a run's image from a"
+                        " private registry."
+                        " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/private-auth.html"
+                    ),
                 ),
             }
         )

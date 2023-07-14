@@ -272,6 +272,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     ) -> Optional[int]:
         return container_context.server_resources.get("ephemeral_storage")
 
+    def _get_service_repository_credentials_override(
+        self, container_context: EcsContainerContext
+    ) -> Optional[str]:
+        return container_context.server_resources.get("repository_credentials")
+
     def _get_enable_ecs_exec(self) -> bool:
         return False
 
@@ -365,6 +370,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             cpu=self._get_service_cpu_override(container_context),
             memory=self._get_service_memory_override(container_context),
             ephemeral_storage=self._get_service_ephemeral_storage_override(container_context),
+            repository_credentials=self._get_service_repository_credentials_override(
+                container_context
+            ),
             allow_ecs_exec=self._get_enable_ecs_exec(),
             runtime_platform=container_context.runtime_platform,
             mount_points=container_context.mount_points,

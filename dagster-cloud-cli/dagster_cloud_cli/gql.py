@@ -221,7 +221,7 @@ def delete_code_location(client: GqlShimClient, location_name: str) -> None:
     )
 
     if result["data"]["deleteLocation"]["__typename"] != "DeleteLocationSuccess":
-        raise Exception(f"Unable to delete location: {str(result['data']['deleteLocation'])}")
+        raise Exception(f"Unable to delete location: {result['data']['deleteLocation']}")
 
 
 RECONCILE_LOCATIONS_FROM_DOCUMENT_MUTATION = """
@@ -266,7 +266,7 @@ def reconcile_code_locations(
     elif result["data"]["reconcileLocationsFromDocument"] == "InvalidLocationError":
         raise Exception("Error in workspace config:\n" + "\n".join(result["errors"]))
     else:
-        raise Exception(f"Unable to sync locations: {str(result)}")
+        raise Exception(f"Unable to sync locations: {result}")
 
 
 GET_LOCATIONS_AS_DOCUMENT_QUERY = """
@@ -311,7 +311,7 @@ def set_deployment_settings(client: GqlShimClient, deployment_settings: Dict[str
     )
 
     if result["data"]["setDeploymentSettings"]["__typename"] != "DeploymentSettings":
-        raise Exception(f"Unable to set deployment settings: {str(result)}")
+        raise Exception(f"Unable to set deployment settings: {result}")
 
 
 DEPLOYMENT_SETTINGS_QUERY = """
@@ -327,7 +327,7 @@ def get_deployment_settings(client: GqlShimClient) -> Dict[str, Any]:
     result = client.execute(DEPLOYMENT_SETTINGS_QUERY)
 
     if result.get("data", {}).get("deploymentSettings", {}).get("settings") is None:
-        raise Exception(f"Unable to get deployment settings: {str(result)}")
+        raise Exception(f"Unable to get deployment settings: {result}")
 
     return result["data"]["deploymentSettings"]["settings"]
 
@@ -361,7 +361,7 @@ def get_alert_policies(client: GqlShimClient) -> Dict[str, Any]:
     result = client.execute(ALERT_POLICIES_QUERY)
 
     if result.get("data", {}).get("alertPolicies", {}) is None:
-        raise Exception(f"Unable to get deployment settings: {str(result)}")
+        raise Exception(f"Unable to get deployment settings: {result}")
 
     return result["data"]["alertPolicies"]
 
@@ -433,7 +433,7 @@ def set_organization_settings(client: GqlShimClient, organization_settings: Dict
     )
 
     if result["data"]["setOrganizationSettings"]["__typename"] != "OrganizationSettings":
-        raise Exception(f"Unable to set organization settings: {str(result)}")
+        raise Exception(f"Unable to set organization settings: {result}")
 
 
 ORGANIZATION_SETTINGS_QUERY = """
@@ -449,7 +449,7 @@ def get_organization_settings(client: GqlShimClient) -> Dict[str, Any]:
     result = client.execute(ORGANIZATION_SETTINGS_QUERY)
 
     if result.get("data", {}).get("organizationSettings", {}).get("settings") is None:
-        raise Exception(f"Unable to get organization settings: {str(result)}")
+        raise Exception(f"Unable to get organization settings: {result}")
 
     return result["data"]["organizationSettings"]["settings"]
 
@@ -514,7 +514,7 @@ def create_or_update_branch_deployment(
 
     name = result.get("data", {}).get("createOrUpdateBranchDeployment", {}).get("deploymentName")
     if name is None:
-        raise Exception(f"Unable to create or update branch deployment: {str(result)}")
+        raise Exception(f"Unable to create or update branch deployment: {result}")
 
     return cast(str, name)
 
@@ -575,7 +575,7 @@ def launch_run(
     )
 
     if result["data"]["launchRun"]["__typename"] != "LaunchRunSuccess":
-        raise Exception(f"Unable to launch run: {str(result)}")
+        raise Exception(f"Unable to launch run: {result}")
 
     return result["data"]["launchRun"]["run"]["runId"]
 
@@ -713,6 +713,6 @@ def delete_branch_deployment(client: GqlShimClient, deployment: str) -> Any:
     )
 
     if result["data"]["deleteDeployment"]["__typename"] != "DagsterCloudDeployment":
-        raise Exception(f"Unable to delete deployment: {str(result)}")
+        raise Exception(f"Unable to delete deployment: {result}")
 
     return result["data"]["deleteDeployment"]["deploymentId"]

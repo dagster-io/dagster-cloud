@@ -178,7 +178,7 @@ def wait_for_load(
                 error_string = "Some locations failed to load after being synced by the agent:\n" + "\n".join(
                     [
                         f"Error loading {error_location}:"
-                        f" {str(nodes_by_location[error_location]['locationOrLoadError'])}"
+                        f" {nodes_by_location[error_location]['locationOrLoadError']}"
                         for error_location in error_locations
                     ]
                 )

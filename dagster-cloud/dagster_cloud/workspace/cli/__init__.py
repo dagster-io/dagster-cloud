@@ -132,7 +132,7 @@ def snapshot_command(
             raise ui.error(
                 f"Failed to upload snapshot of location `{location_data.name}` "
                 f"in image `{location_data.image}` for code preview `{code_preview_uuid}`: "
-                f"{str(e)}"
+                f"{e}"
             )
 
 

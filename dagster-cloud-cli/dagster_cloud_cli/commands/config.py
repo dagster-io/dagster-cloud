@@ -184,8 +184,7 @@ def _setup(organization: str, deployment: str, api_token: str):
             )
         except webbrowser.Error as e:
             ui.warn(
-                f"Error launching web browser: {str(e)}\n\nTo finish authorization, visit"
-                f" {auth_url}\n"
+                f"Error launching web browser: {e}\n\nTo finish authorization, visit {auth_url}\n"
             )
 
         server = TokenServer(("localhost", port), nonce)

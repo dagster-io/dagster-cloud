@@ -144,7 +144,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         limit: Optional[int] = None,
         statuses: Optional[Sequence[TickStatus]] = None,
     ) -> Iterable[InstigatorTick]:
-        statuses = [status.value for status in statuses] if statuses else None
+        status_strs = [status.value for status in statuses] if statuses else None
         res = self._execute_query(
             GET_JOB_TICKS_QUERY,
             variables={
@@ -153,7 +153,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
                 "before": before,
                 "after": after,
                 "limit": limit,
-                "statuses": statuses,
+                "statuses": status_strs,
             },
         )
 

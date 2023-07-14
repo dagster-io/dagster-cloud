@@ -395,7 +395,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         namespaces: Set[str] = set()
         if self._namespace:
             namespaces.add(self._namespace)
-        for _, namespace_items in self._used_namespaces.items():
+        for namespace_items in self._used_namespaces.values():
             for namespace in namespace_items:
                 namespaces.add(namespace)
         handles: List[K8sHandle] = []

@@ -61,10 +61,7 @@ def upload_image(image, registry_info) -> int:
 
     username, password = base64.b64decode(aws_token).decode("utf-8").split(":")
     subprocess.check_output(
-        (
-            f"echo {str(password)} | docker login --username {str(username)} --password-stdin"
-            f" {registry}"
-        ),
+        f"echo {password} | docker login --username {username} --password-stdin {registry}",
         shell=True,
     )
     return subprocess.call(

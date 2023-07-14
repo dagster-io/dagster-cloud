@@ -46,7 +46,7 @@ from dagster._utils.error import SerializableErrorInfo, serializable_error_info_
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
-from typing_extensions import Self
+from typing_extensions import Self, TypeAlias
 
 from dagster_cloud.agent.queries import GET_AGENTS_QUERY
 from dagster_cloud.api.dagster_cloud_api import (
@@ -228,7 +228,8 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
     ),
 }
 
-DeploymentAndLocation = Tuple[str, str]
+DeploymentAndLocation: TypeAlias = Tuple[str, str]
+UserCodeLauncherEntryMap: TypeAlias = Dict[DeploymentAndLocation, UserCodeLauncherEntry]
 
 
 class ServerEndpoint(
@@ -1758,7 +1759,7 @@ class DagsterCloudUserCodeLauncher(
                     f"Timed out after waiting {timeout}s for server"
                     f" {client.host}:{client.port or client.socket}."
                     + (f"\n\n{timeout_debug_info}" if timeout_debug_info else "")
-                    + f"\n\nMost recent connection error: {str(last_error)}"
+                    + f"\n\nMost recent connection error: {last_error}"
                 )
 
             time.sleep(1)

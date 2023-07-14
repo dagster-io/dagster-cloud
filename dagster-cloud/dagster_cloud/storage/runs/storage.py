@@ -243,9 +243,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         elif run_group_or_error["__typename"] == "RunNotFoundError":
             raise DagsterRunNotFoundError(invalid_run_id=run_group_or_error["runId"])
         else:
-            raise DagsterInvariantViolationError(
-                f"Unexpected getRunGroupOrError response {str(res)}"
-            )
+            raise DagsterInvariantViolationError(f"Unexpected getRunGroupOrError response {res}")
 
     def get_run_groups(
         self,

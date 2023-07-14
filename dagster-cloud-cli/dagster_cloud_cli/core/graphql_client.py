@@ -187,7 +187,7 @@ class GqlShimClient:
             )
 
         if "errors" in result:
-            raise GraphQLStorageError(f"Error in GraphQL response: {str(result['errors'])}")
+            raise GraphQLStorageError(f"Error in GraphQL response: {result['errors']}")
         else:
             return result
 

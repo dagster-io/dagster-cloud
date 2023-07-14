@@ -262,7 +262,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
                 # If the pex server is unreachable, it may just be in the process of shutting down.
                 check.invariant(
                     not self._pex_manager.is_server_active(handle_id),
-                    f"Active server hit error:\n{str(e)}",
+                    f"Active server hit error:\n{e}",
                 )
 
         return api_pb2.GetCurrentRunsReply(
