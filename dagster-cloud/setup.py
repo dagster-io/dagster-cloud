@@ -6,7 +6,9 @@ from setuptools import find_packages, setup
 
 def get_version() -> str:
     version: Dict[str, str] = {}
-    with open(Path(__file__).parent / "dagster_cloud/version.py", encoding="utf8") as fp:
+    with open(
+        Path(__file__).parent / "dagster_cloud/version.py", encoding="utf8"
+    ) as fp:
         exec(fp.read(), version)
 
     return version["__version__"]
@@ -40,8 +42,8 @@ setup(
     packages=find_packages(exclude=["dagster_cloud_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.3.14",
-        "dagster-cloud-cli==1.3.14",
+        "dagster",
+        "dagster-cloud-cli",
         "pex",
         "questionary",
         "requests",
