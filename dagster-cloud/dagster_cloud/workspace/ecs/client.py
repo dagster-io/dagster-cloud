@@ -4,6 +4,7 @@ import time
 from typing import List, Optional
 
 import boto3
+import botocore
 import dagster._check as check
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -57,7 +58,8 @@ class Client:
         self.ecs = ecs_client if ecs_client else boto3.client("ecs", config=config)
         self.logs = boto3.client("logs", config=config)
         self.service_discovery = boto3.client("servicediscovery", config=config)
-        self.ec2 = boto3.resource("ec2", config=config)
+        self.tags_client = boto3.client("resourcegroupstaggingapi", config=config)
+        self._use_legacy_tag_filtering = False
 
         self.cluster_name = cluster_name.split("/")[-1]
         self.subnet_ids = check.opt_list_param(subnet_ids, "subnet_ids")
@@ -73,6 +75,12 @@ class Client:
         self.grace_period = check.int_param(grace_period, "grace_period")
         self.launch_type = check.str_param(launch_type, "launch_type")
         self._namespace: Optional[str] = None
+
+    @property
+    def ec2(self):
+        # Reconstruct the resource on each call because it's not threadsafe
+        # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/resources.html#multithreading-or-multiprocessing-with-resources
+        return boto3.resource("ec2", config=config)
 
     @property
     def namespace(self):
@@ -325,14 +333,58 @@ class Client:
                 Id=service_discovery_id,
             )
 
-    def list_services(self):
+    def list_services(self, tags=None, logger=None):
+        logger = logger or logging.getLogger("dagster_cloud.EcsClient")
+
         services = []
 
-        paginator = self.ecs.get_paginator("list_services")
-        for page in paginator.paginate(cluster=self.cluster_name):
-            for arn in page.get("serviceArns"):
-                service = Service(client=self, arn=arn)
-                services.append(service)
+        if tags:
+            if not self._use_legacy_tag_filtering:
+                try:
+                    paginator = self.tags_client.get_paginator("get_resources")
+                    for page in paginator.paginate(
+                        TagFilters=[
+                            {
+                                "Key": key,
+                                "Values": [value],
+                            }
+                            for key, value in tags.items()
+                        ],
+                        ResourceTypeFilters=["ecs:service"],
+                    ):
+                        for resource in page["ResourceTagMappingList"]:
+                            arn = resource["ResourceARN"]
+                            if self.cluster_name in arn:
+                                services.append(Service(client=self, arn=arn))
+                except botocore.exceptions.ClientError as error:
+                    if error.response["Error"]["Code"] == "AccessDeniedException":
+                        self._use_legacy_tag_filtering = True
+                        logger.warning(
+                            "dagster-cloud 1.4.0 includes performance enhancements that rely on the"
+                            " Resource"
+                            " Group Tagging API. To take advantage, add 'tags:GetResources'"
+                            " permissions to"
+                            " your"
+                            " task role."
+                            " https://docs.aws.amazon.com/resourcegroupstagging/latest/APIReference/overview.html"
+                        )
+                        services = self.list_services(tags)
+                    else:
+                        raise
+            else:
+                filtered_services = [
+                    service
+                    for service in self.list_services()
+                    if tags.items() <= service.tags.items()
+                ]
+                return filtered_services
+
+        else:
+            paginator = self.ecs.get_paginator("list_services")
+            for page in paginator.paginate(cluster=self.cluster_name):
+                for arn in page.get("serviceArns"):
+                    service = Service(client=self, arn=arn)
+                    services.append(service)
 
         return services
 

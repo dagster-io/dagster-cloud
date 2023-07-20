@@ -1,5 +1,7 @@
 import logging
 
+from dagster._utils.cached_method import cached_method
+
 
 class Service:
     def __init__(self, client, arn):
@@ -41,6 +43,7 @@ class Service:
         return dict([(tag["Key"], tag["Value"]) for tag in tags])
 
     @property
+    @cached_method
     def service_discovery_arn(self):
         service = self.client.ecs.describe_services(
             cluster=self.client.cluster_name,

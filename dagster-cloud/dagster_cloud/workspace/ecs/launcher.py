@@ -484,11 +484,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             "dagster/multipex_server": "1",
             "dagster/agent_id": self._instance.instance_uuid,
         }
-        services = self.client.list_services()
-        location_services = [
-            service for service in services if tags.items() <= service.tags.items()
-        ]
-        return location_services
+        return self.client.list_services(tags)
 
     def _get_standalone_dagster_server_handles_for_location(
         self, deployment_name, location_name: str
@@ -500,11 +496,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             "dagster/grpc_server": "1",
             "dagster/agent_id": self._instance.instance_uuid,
         }
-        services = self.client.list_services()
-        location_services = [
-            service for service in services if tags.items() <= service.tags.items()
-        ]
-        return location_services
+        return self.client.list_services(tags)
 
     def _list_server_handles(self) -> List[EcsServerHandleType]:
         return [
