@@ -714,7 +714,7 @@ class DagsterCloudAgent:
 
                 return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.TERMINATE_RUN:
-            # With agent replicas enabled:
+            # With isolated agents enabled:
             # Run workers now poll for run status. We don't use the run launcher to terminate.
             # Once min agent version is bumped, we can deprecate this command.
             # For backcompat, we use the run launcher to terminate unless the user opts in.
@@ -723,7 +723,7 @@ class DagsterCloudAgent:
             with DagsterInstance.from_ref(
                 instance.ref_for_deployment(deployment_name)
             ) as scoped_instance:
-                if instance.agent_replicas_enabled:
+                if instance.is_using_isolated_agents:
                     scoped_instance.report_engine_event(
                         f"{instance.agent_display_name} received request to mark run as canceling",
                         run,

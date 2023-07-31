@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Collection, Dict, List, NamedTuple, Optional, Set, Tuple, cast
 
 import kubernetes
@@ -341,6 +342,15 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
         return get_deployment_failure_debug_info(
             k8s_deployment_name, namespace, core_api, pod_list, self._logger
+        )
+
+    def _write_liveness_sentinel(self) -> None:
+        # Write to a sentinel file to indicate that we've finished our initial
+        # reconciliation - this is used to indicate that we're ready to
+        # serve requests
+        Path("/tmp/finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
+        self._logger.info(
+            "Wrote liveness sentinel: indicating that agent is ready to serve requests"
         )
 
     def _wait_for_new_server_ready(

@@ -50,6 +50,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         dagster_cloud_api,
         user_code_launcher=None,
         agent_replicas=None,
+        isolated_agents=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -87,9 +88,22 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
 
         assert self.dagster_cloud_url
 
-        self._agent_replicas_config = self._get_processed_config(
-            "agent_replicas", agent_replicas, self._agent_replicas_config_schema()
-        )
+        # Handle backcompat between isolated_agents and agent_replicas
+        if isolated_agents and agent_replicas:
+            raise Exception(
+                "Cannot provide both isolated_agents and agent_replicas configuration. Please only"
+                " provide one of these."
+            )
+        if agent_replicas:
+            self._isolated_agents = self._get_processed_config(
+                "agent_replicas", agent_replicas, self._isolated_agents_config_schema()
+            )
+        elif isolated_agents:
+            self._isolated_agents = self._get_processed_config(
+                "isolated_agents", isolated_agents, self._isolated_agents_config_schema()
+            )
+        else:
+            self._isolated_agents = None
 
         self._instance_uuid = str(uuid.uuid4())
 
@@ -384,11 +398,14 @@ instance_class:
         return {
             "dagster_cloud_api": Field(dagster_cloud_api_config(), is_required=True),
             "user_code_launcher": config_field_for_configurable_class(),
-            "agent_replicas": Field(cls._agent_replicas_config_schema(), is_required=False),
+            "isolated_agents": Field(cls._isolated_agents_config_schema(), is_required=False),
+            "agent_replicas": Field(
+                cls._isolated_agents_config_schema(), is_required=False
+            ),  # deprecated in favor of isolated_agents
         }
 
     @classmethod
-    def _agent_replicas_config_schema(cls):
+    def _isolated_agents_config_schema(cls):
         return {"enabled": Field(bool, is_required=False, default_value=False)}
 
     def get_required_daemon_types(self) -> Sequence[str]:
@@ -456,11 +473,16 @@ instance_class:
 
     @property
     def should_start_background_run_thread(self) -> bool:
-        return self.agent_replicas_enabled
+        # If using isolated agents (that is, agents cannot see each other's grpc
+        # servers), TERMINATE_RUN requests can't be served by the Dagster Cloud API,
+        # which will send requests to any agent. Only the agent with the run can
+        # terminate it - so we need to start a background run thread to monitor for
+        # runs moved into a canceling state.
+        return self.is_using_isolated_agents
 
     @property
-    def agent_replicas_enabled(self) -> bool:
-        return self._agent_replicas_config.get("enabled", False)
+    def is_using_isolated_agents(self) -> bool:
+        return self._isolated_agents is not None and self._isolated_agents.get("enabled", False)
 
     @property
     def dagster_cloud_run_worker_monitoring_interval_seconds(self) -> int:
