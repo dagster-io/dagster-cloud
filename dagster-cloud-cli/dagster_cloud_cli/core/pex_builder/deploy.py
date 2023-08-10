@@ -92,10 +92,8 @@ def build_locations(
         if published_deps_pex_info:
             published_deps_pex = published_deps_pex_info["deps_pex_name"]
             logging.info(
-                (
-                    "Found published deps.pex %r for requirements_hash %r, cache_tag %r, "
-                    "skipping rebuild."
-                ),
+                "Found published deps.pex %r for requirements_hash %r, cache_tag %r, "
+                "skipping rebuild.",
                 published_deps_pex,
                 deps_requirements.hash,
                 deps_cache_tags.deps_cache_from_tag,

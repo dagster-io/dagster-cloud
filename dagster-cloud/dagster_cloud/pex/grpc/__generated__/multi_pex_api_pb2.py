@@ -49,7 +49,7 @@ Empty = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _EMPTY,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.Empty)
     },
 )
@@ -60,7 +60,7 @@ CreatePexServerRequest = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _CREATEPEXSERVERREQUEST,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.CreatePexServerRequest)
     },
 )
@@ -71,7 +71,7 @@ CreatePexServerReply = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _CREATEPEXSERVERREPLY,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.CreatePexServerReply)
     },
 )
@@ -82,7 +82,7 @@ GetPexServersRequest = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _GETPEXSERVERSREQUEST,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.GetPexServersRequest)
     },
 )
@@ -93,7 +93,7 @@ GetPexServersReply = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _GETPEXSERVERSREPLY,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.GetPexServersReply)
     },
 )
@@ -104,7 +104,7 @@ ShutdownPexServerRequest = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _SHUTDOWNPEXSERVERREQUEST,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.ShutdownPexServerRequest)
     },
 )
@@ -115,7 +115,7 @@ ShutdownPexServerReply = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _SHUTDOWNPEXSERVERREPLY,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.ShutdownPexServerReply)
     },
 )
@@ -126,7 +126,7 @@ PingRequest = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _PINGREQUEST,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.PingRequest)
     },
 )
@@ -137,7 +137,7 @@ PingReply = _reflection.GeneratedProtocolMessageType(
     (_message.Message,),
     {
         "DESCRIPTOR": _PINGREPLY,
-        "__module__": "multi_pex_api_pb2"
+        "__module__": "multi_pex_api_pb2",
         # @@protoc_insertion_point(class_scope:multi_pex_api.PingReply)
     },
 )

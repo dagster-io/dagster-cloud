@@ -382,15 +382,13 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     def get():
         instance = DagsterInstance.get()
         if not isinstance(instance, DagsterCloudAgentInstance):
-            raise DagsterInvariantViolationError(
-                """
+            raise DagsterInvariantViolationError("""
 DagsterInstance.get() did not return a DagsterCloudAgentInstance. Make sure that your"
 `dagster.yaml` file is correctly configured to include the following:
 instance_class:
   module: dagster_cloud.instance
   class: DagsterCloudAgentInstance
-"""
-            )
+""")
         return instance
 
     @classmethod

@@ -776,7 +776,7 @@ class DagsterCloudUserCodeLauncher(
     ) -> DagsterCloudGrpcServer:
         """Create a new server for the given location using the given metadata as configuration
         and return a ServerHandle indicating where it can be found. Any waiting for the server
-        to happen should happen in _wait_for_new_server_endpoint.
+        to happen should happen in _wait_for_new_server_ready.
         """
 
     def _wait_for_new_multipex_server(
@@ -887,8 +887,7 @@ class DagsterCloudUserCodeLauncher(
         """Returns the agent_id that created a particular GRPC server."""
 
     def _can_cleanup_server(self, handle: ServerHandle, active_agent_ids: Set[str]) -> bool:
-        """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active).
-        """
+        """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active)."""
         agent_id_for_server = self.get_agent_id_for_server(handle)
         self._logger.info(
             f"For server {handle}; agent_id is {agent_id_for_server} while current agent_id is"
@@ -1053,18 +1052,15 @@ class DagsterCloudUserCodeLauncher(
                 deployment_name, location_name = deployment_location
                 if not self._get_existing_pex_servers(deployment_name, location_name):
                     self._logger.warning(
-                        (
-                            "Pex servers disappeared for %s, %s. Removing actual entries to"
-                            " activate reconciliation logic."
-                        ),
+                        "Pex servers disappeared for %s, %s. Removing actual entries to"
+                        " activate reconciliation logic.",
                         deployment_name,
                         location_name,
                     )
                     del self._actual_entries[deployment_location]
 
     def _write_liveness_sentinel(self) -> None:
-        """Write a sentinel file to indicate that the agent is alive and grpc servers have been spun up.
-        """
+        """Write a sentinel file to indicate that the agent is alive and grpc servers have been spun up."""
         pass
 
     def _check_for_image(self, metadata: CodeDeploymentMetadata):
@@ -1174,9 +1170,9 @@ class DagsterCloudUserCodeLauncher(
 
             # First check what multipex servers already exist for this location (any that are
             # no longer used will be cleaned up at the end)
-            existing_multipex_server_handles[
-                to_update_key
-            ] = self._get_multipex_server_handles_for_location(deployment_name, location_name)
+            existing_multipex_server_handles[to_update_key] = (
+                self._get_multipex_server_handles_for_location(deployment_name, location_name)
+            )
 
             if code_deployment_metadata.pex_metadata:
                 try:
@@ -1296,10 +1292,10 @@ class DagsterCloudUserCodeLauncher(
                         location_name=location_name,
                     )
                 )
-                existing_standalone_dagster_server_handles[
-                    to_update_key
-                ] = self._get_standalone_dagster_server_handles_for_location(
-                    deployment_name, location_name
+                existing_standalone_dagster_server_handles[to_update_key] = (
+                    self._get_standalone_dagster_server_handles_for_location(
+                        deployment_name, location_name
+                    )
                 )
 
                 existing_pex_server_handles[to_update_key] = self._get_existing_pex_servers(
@@ -1678,9 +1674,11 @@ class DagsterCloudUserCodeLauncher(
                 CloudCodeServerHeartbeat(
                     location_name,
                     server_status=status,
-                    error=endpoint_or_error
-                    if isinstance(endpoint_or_error, SerializableErrorInfo)
-                    else None,
+                    error=(
+                        endpoint_or_error
+                        if isinstance(endpoint_or_error, SerializableErrorInfo)
+                        else None
+                    ),
                 )
             )
 

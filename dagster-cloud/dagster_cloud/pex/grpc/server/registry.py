@@ -86,9 +86,9 @@ class PexS3Registry:
             local_pex_files_dir if local_pex_files_dir else DEFAULT_PEX_FILES_DIR
         )
         os.makedirs(self._local_pex_files_dir, exist_ok=True)
-        self.working_dirs: Dict[
-            str, str
-        ] = {}  # once unpacked, working dirs dont change so we cache them
+        self.working_dirs: Dict[str, str] = (
+            {}
+        )  # once unpacked, working dirs dont change so we cache them
 
     def get_pex_executable(self, pex_metadata: PexMetadata) -> PexExecutable:
         if "=" not in pex_metadata.pex_tag:

@@ -36,9 +36,9 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
         working_directory=kwargs.get("working_directory"),
         executable_path=kwargs.get("executable_path"),
         attribute=kwargs.get("attribute"),
-        commit_hash=kwargs["git"].get("commit_hash")
-        if "git" in kwargs
-        else kwargs.get("commit_hash"),
+        commit_hash=(
+            kwargs["git"].get("commit_hash") if "git" in kwargs else kwargs.get("commit_hash")
+        ),
         url=kwargs["git"].get("url") if "git" in kwargs else kwargs.get("git_url"),
     )
 

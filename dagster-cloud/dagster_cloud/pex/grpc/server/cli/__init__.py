@@ -22,6 +22,7 @@ def grpc(
     local_pex_files_dir: Optional[str] = Option(
         default="/tmp/pex-files", envvar="LOCAL_PEX_FILES_DIR"
     ),
+    watchdog_run_interval: Optional[int] = Option(default=30, envvar="WATCHDOG_RUN_INTERVAL"),
 ):
     run_multipex_server(
         port=port,
@@ -30,6 +31,7 @@ def grpc(
         print_fn=echo,
         max_workers=max_workers,
         local_pex_files_dir=local_pex_files_dir,
+        watchdog_run_interval=watchdog_run_interval,
     )
 
 

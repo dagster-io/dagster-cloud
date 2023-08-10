@@ -110,9 +110,9 @@ class DagsterCloudAgent:
         self._pending_requests_limit = check.int_param(
             pending_requests_limit, "pending_requests_limit"
         )
-        self._active_deployments: Set[
-            Tuple[str, bool]  # deployment_name, is_branch_deployment
-        ] = set()
+        self._active_deployments: Set[Tuple[str, bool]] = (  # deployment_name, is_branch_deployment
+            set()
+        )
 
     def __enter__(self):
         return self
@@ -141,10 +141,8 @@ class DagsterCloudAgent:
                     f"deployment{'s' if len(missing_deployment_names) > 1 else ''} {', '.join(missing_deployment_names)}"
                 )
                 raise Exception(
-                    (
-                        f"Agent is configured to serve an invalid {deployment_str}. Check your"
-                        " agent configuration to make sure it is serving the correct deployment."
-                    ),
+                    f"Agent is configured to serve an invalid {deployment_str}. Check your"
+                    " agent configuration to make sure it is serving the correct deployment.",
                 )
 
     def run_loop(
@@ -272,9 +270,11 @@ class DagsterCloudAgent:
                         timestamp=curr_time.float_timestamp,
                         agent_id=agent_uuid,
                         agent_label=instance.dagster_cloud_api_agent_label,
-                        agent_type=type(instance.user_code_launcher).__name__
-                        if instance.user_code_launcher
-                        else None,
+                        agent_type=(
+                            type(instance.user_code_launcher).__name__
+                            if instance.user_code_launcher
+                            else None
+                        ),
                         errors=errors,
                         metadata=merge_dicts(
                             {"version": __version__},
@@ -678,9 +678,11 @@ class DagsterCloudAgent:
                 scoped_instance.add_run_tags(
                     run.run_id,
                     merge_dicts(
-                        {"dagster/agent_label": instance.dagster_cloud_api_agent_label}
-                        if instance.dagster_cloud_api_agent_label
-                        else {},
+                        (
+                            {"dagster/agent_label": instance.dagster_cloud_api_agent_label}
+                            if instance.dagster_cloud_api_agent_label
+                            else {}
+                        ),
                         {"dagster/agent_id": instance.instance_uuid},
                     ),
                 )

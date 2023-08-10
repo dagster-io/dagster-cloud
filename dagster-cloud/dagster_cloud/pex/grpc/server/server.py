@@ -70,7 +70,7 @@ class MultiPexApiServer(MultiPexApiServicer):
     def GetPexServers(self, request, _context):
         get_pex_servers_args = deserialize_value(request.get_pex_servers_args, GetPexServersArgs)
         try:
-            pex_server_handles = self._pex_manager.get_pex_server_handles(
+            pex_server_handles = self._pex_manager.get_active_pex_server_handles(
                 get_pex_servers_args.deployment_name,
                 get_pex_servers_args.location_name,
             )
@@ -132,7 +132,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             self._get_handle_from_metadata(context)
         )
         if isinstance(client_or_error, SerializableErrorInfo):
-            raise Exception("Server failed to start up, no available client")
+            raise Exception(f"Code server failed: {client_or_error}")
         return client_or_error._get_response(api_name, request)  # noqa: SLF001
 
     def _streaming_query(self, api_name: str, request, context):
@@ -279,6 +279,7 @@ def run_multipex_server(
     host="localhost",
     max_workers=None,
     local_pex_files_dir: Optional[str] = "/tmp/pex-files",
+    watchdog_run_interval: Optional[int] = 30,
 ):
     server = grpc.server(
         ThreadPoolExecutor(max_workers=max_workers),
@@ -289,7 +290,9 @@ def run_multipex_server(
         ],
     )
 
-    with MultiPexManager(local_pex_files_dir=local_pex_files_dir) as pex_manager:
+    with MultiPexManager(
+        local_pex_files_dir=local_pex_files_dir, watchdog_run_interval=watchdog_run_interval
+    ) as pex_manager:
         pex_api_servicer = MultiPexApiServer(
             pex_manager=pex_manager,
         )

@@ -86,9 +86,11 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
                 "repositoryOriginId": repository_origin_id,
                 "repositorySelectorId": repository_selector_id,
                 "jobType": instigator_type.value if instigator_type else None,
-                "statuses": [status.value for status in instigator_statuses]
-                if instigator_statuses
-                else None,
+                "statuses": (
+                    [status.value for status in instigator_statuses]
+                    if instigator_statuses
+                    else None
+                ),
             },
         )
 

@@ -203,10 +203,8 @@ def build_deps_from_requirements(
         deps_requirements_file.write(requirements.requirements_txt)
 
     ui.print(
-        (
-            f"Building project dependencies for Python {requirements.python_version}, "
-            f"writing to {output_directory}"
-        ),
+        f"Building project dependencies for Python {requirements.python_version}, "
+        f"writing to {output_directory}",
     )
 
     def build_in_docker() -> None:
@@ -282,8 +280,7 @@ def build_deps_from_requirements_file(
     output_pex_path: str,
     pex_flags: List[str],
 ) -> None:
-    """Attempts to build a pex file from a requirements file and raises DepsBuildFailure on failure.
-    """
+    """Attempts to build a pex file from a requirements file and raises DepsBuildFailure on failure."""
     # We try different sets of build flags and use the first one that works
     try_flags = TRY_FLAGS.copy()
     while try_flags:

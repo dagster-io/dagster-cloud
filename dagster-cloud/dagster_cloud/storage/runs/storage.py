@@ -88,15 +88,17 @@ def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]
         "runIds": filters.run_ids,
         "pipelineName": filters.job_name,
         "statuses": [status.value for status in filters.statuses],
-        "tags": [
-            merge_dicts(
-                {"key": tag_key},
-                ({"value": tag_value} if isinstance(tag_value, str) else {"values": tag_value}),
-            )
-            for tag_key, tag_value in filters.tags.items()
-        ]
-        if filters.tags
-        else [],
+        "tags": (
+            [
+                merge_dicts(
+                    {"key": tag_key},
+                    ({"value": tag_value} if isinstance(tag_value, str) else {"values": tag_value}),
+                )
+                for tag_key, tag_value in filters.tags.items()
+            ]
+            if filters.tags
+            else []
+        ),
         "snapshotId": filters.snapshot_id,
         "updatedAfter": filters.updated_after.timestamp() if filters.updated_after else None,
         "updatedBefore": filters.updated_before.timestamp() if filters.updated_before else None,
@@ -199,6 +201,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def handle_run_event(self, run_id: str, event: DagsterEvent):
         # no-op, handled by store_event
         pass
+
+    @property
+    def supports_bucket_queries(self) -> bool:
+        return False
 
     def get_runs(
         self,
@@ -310,9 +316,11 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         res = self._execute_query(
             GET_RUN_TAGS_QUERY,
             variables={
-                "jsonTagKeys": json.dumps(check.list_param(tag_keys, "tag_keys", of_type=str))
-                if tag_keys
-                else None,
+                "jsonTagKeys": (
+                    json.dumps(check.list_param(tag_keys, "tag_keys", of_type=str))
+                    if tag_keys
+                    else None
+                ),
                 "valuePrefix": check.opt_str_param(value_prefix, "value_prefix"),
                 "limit": check.opt_int_param(limit, "limit"),
             },

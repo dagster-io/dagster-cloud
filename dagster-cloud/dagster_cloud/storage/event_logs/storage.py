@@ -178,31 +178,37 @@ def _get_event_records_filter_input(
         )
 
     return {
-        "eventType": event_records_filter.event_type.value
-        if event_records_filter.event_type
-        else None,
-        "assetKey": event_records_filter.asset_key.to_string()
-        if event_records_filter.asset_key
-        else None,
+        "eventType": (
+            event_records_filter.event_type.value if event_records_filter.event_type else None
+        ),
+        "assetKey": (
+            event_records_filter.asset_key.to_string() if event_records_filter.asset_key else None
+        ),
         "assetPartitions": event_records_filter.asset_partitions,
         "afterTimestamp": event_records_filter.after_timestamp,
         "beforeTimestamp": event_records_filter.before_timestamp,
-        "beforeCursor": event_records_filter.before_cursor.id
-        if isinstance(event_records_filter.before_cursor, RunShardedEventsCursor)
-        else event_records_filter.before_cursor,
-        "afterCursor": event_records_filter.after_cursor.id
-        if isinstance(event_records_filter.after_cursor, RunShardedEventsCursor)
-        else event_records_filter.after_cursor,
+        "beforeCursor": (
+            event_records_filter.before_cursor.id
+            if isinstance(event_records_filter.before_cursor, RunShardedEventsCursor)
+            else event_records_filter.before_cursor
+        ),
+        "afterCursor": (
+            event_records_filter.after_cursor.id
+            if isinstance(event_records_filter.after_cursor, RunShardedEventsCursor)
+            else event_records_filter.after_cursor
+        ),
         "runUpdatedAfter": run_updated_timestamp,
-        "tags": [
-            merge_dicts(
-                {"key": tag_key},
-                ({"value": tag_value} if isinstance(tag_value, str) else {"values": tag_value}),
-            )
-            for tag_key, tag_value in event_records_filter.tags.items()
-        ]
-        if event_records_filter.tags
-        else None,
+        "tags": (
+            [
+                merge_dicts(
+                    {"key": tag_key},
+                    ({"value": tag_value} if isinstance(tag_value, str) else {"values": tag_value}),
+                )
+                for tag_key, tag_value in event_records_filter.tags.items()
+            ]
+            if event_records_filter.tags
+            else None
+        ),
         "storageIds": event_records_filter.storage_ids,
     }
 
@@ -220,35 +226,39 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
     check.dict_param(graphene_asset_entry, "graphene_asset_entry")
     return AssetEntry(
         asset_key=AssetKey(graphene_asset_entry["assetKey"]["path"]),
-        last_materialization_record=_event_record_from_graphql(
-            graphene_asset_entry["lastMaterializationRecord"]
-        )
-        if graphene_asset_entry["lastMaterializationRecord"]
-        else None,
+        last_materialization_record=(
+            _event_record_from_graphql(graphene_asset_entry["lastMaterializationRecord"])
+            if graphene_asset_entry["lastMaterializationRecord"]
+            else None
+        ),
         last_run_id=graphene_asset_entry["lastRunId"],
-        asset_details=AssetDetails(
-            last_wipe_timestamp=graphene_asset_entry["assetDetails"]["lastWipeTimestamp"]
-        )
-        if graphene_asset_entry["assetDetails"]
-        else None,
-        cached_status=AssetStatusCacheValue(
-            latest_storage_id=graphene_asset_entry["cachedStatus"]["latestStorageId"],
-            partitions_def_id=graphene_asset_entry["cachedStatus"]["partitionsDefId"],
-            serialized_materialized_partition_subset=graphene_asset_entry["cachedStatus"][
-                "serializedMaterializedPartitionSubset"
-            ],
-            serialized_failed_partition_subset=graphene_asset_entry["cachedStatus"][
-                "serializedFailedPartitionSubset"
-            ],
-            serialized_in_progress_partition_subset=graphene_asset_entry["cachedStatus"][
-                "serializedInProgressPartitionSubset"
-            ],
-            earliest_in_progress_materialization_event_id=graphene_asset_entry["cachedStatus"][
-                "earliestInProgressMaterializationEventId"
-            ],
-        )
-        if graphene_asset_entry["cachedStatus"]
-        else None,
+        asset_details=(
+            AssetDetails(
+                last_wipe_timestamp=graphene_asset_entry["assetDetails"]["lastWipeTimestamp"]
+            )
+            if graphene_asset_entry["assetDetails"]
+            else None
+        ),
+        cached_status=(
+            AssetStatusCacheValue(
+                latest_storage_id=graphene_asset_entry["cachedStatus"]["latestStorageId"],
+                partitions_def_id=graphene_asset_entry["cachedStatus"]["partitionsDefId"],
+                serialized_materialized_partition_subset=graphene_asset_entry["cachedStatus"][
+                    "serializedMaterializedPartitionSubset"
+                ],
+                serialized_failed_partition_subset=graphene_asset_entry["cachedStatus"][
+                    "serializedFailedPartitionSubset"
+                ],
+                serialized_in_progress_partition_subset=graphene_asset_entry["cachedStatus"][
+                    "serializedInProgressPartitionSubset"
+                ],
+                earliest_in_progress_materialization_event_id=graphene_asset_entry["cachedStatus"][
+                    "earliestInProgressMaterializationEventId"
+                ],
+            )
+            if graphene_asset_entry["cachedStatus"]
+            else None
+        ),
     )
 
 
@@ -504,9 +514,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         res = self._execute_query(
             GET_ASSET_RECORDS_QUERY,
             variables={
-                "assetKeys": [asset_key.to_string() for asset_key in asset_keys]
-                if asset_keys
-                else []
+                "assetKeys": (
+                    [asset_key.to_string() for asset_key in asset_keys] if asset_keys else []
+                )
             },
         )
 
@@ -568,10 +578,18 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 "cacheValues": {
                     "latestStorageId": cache_values.latest_storage_id,
                     "partitionsDefId": cache_values.partitions_def_id,
-                    "serializedMaterializedPartitionSubset": cache_values.serialized_materialized_partition_subset,
-                    "serializedFailedPartitionSubset": cache_values.serialized_failed_partition_subset,
-                    "serializedInProgressPartitionSubset": cache_values.serialized_in_progress_partition_subset,
-                    "earliestInProgressMaterializationEventId": cache_values.earliest_in_progress_materialization_event_id,
+                    "serializedMaterializedPartitionSubset": (
+                        cache_values.serialized_materialized_partition_subset
+                    ),
+                    "serializedFailedPartitionSubset": (
+                        cache_values.serialized_failed_partition_subset
+                    ),
+                    "serializedInProgressPartitionSubset": (
+                        cache_values.serialized_in_progress_partition_subset
+                    ),
+                    "earliestInProgressMaterializationEventId": (
+                        cache_values.earliest_in_progress_materialization_event_id
+                    ),
                 },
             },
         )
@@ -628,9 +646,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         latest_storage_id_by_partition: Dict[str, int] = {}
 
         for graphene_latest_storage_id in latest_storage_id_result:
-            latest_storage_id_by_partition[
-                graphene_latest_storage_id["partition"]
-            ] = graphene_latest_storage_id["storageId"]
+            latest_storage_id_by_partition[graphene_latest_storage_id["partition"]] = (
+                graphene_latest_storage_id["storageId"]
+            )
 
         return latest_storage_id_by_partition
 
@@ -657,9 +675,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         latest_tags_by_partition_result = res["data"]["eventLogs"]["getLatestTagsByPartition"]
         latest_tags_by_partition: Dict[str, Dict[str, str]] = defaultdict(dict)
         for tag_by_partition in latest_tags_by_partition_result:
-            latest_tags_by_partition[tag_by_partition["partition"]][
-                tag_by_partition["key"]
-            ] = tag_by_partition["value"]
+            latest_tags_by_partition[tag_by_partition["partition"]][tag_by_partition["key"]] = (
+                tag_by_partition["value"]
+            )
 
         # convert defaultdict to dict
         return dict(latest_tags_by_partition)
@@ -816,12 +834,16 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             concurrency_key=concurrency_key,
             slot_status=ConcurrencySlotStatus(claim_status["slotStatus"]),
             priority=claim_status["priority"],
-            assigned_timestamp=utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
-            if claim_status["assignedTimestamp"]
-            else None,
-            enqueued_timestamp=utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
-            if claim_status["enqueuedTimestamp"]
-            else None,
+            assigned_timestamp=(
+                utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
+                if claim_status["assignedTimestamp"]
+                else None
+            ),
+            enqueued_timestamp=(
+                utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
+                if claim_status["enqueuedTimestamp"]
+                else None
+            ),
         )
 
     def check_concurrency_claim(
@@ -843,12 +865,16 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             concurrency_key=concurrency_key,
             slot_status=ConcurrencySlotStatus(claim_status["slotStatus"]),
             priority=claim_status["priority"],
-            assigned_timestamp=utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
-            if claim_status["assignedTimestamp"]
-            else None,
-            enqueued_timestamp=utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
-            if claim_status["enqueuedTimestamp"]
-            else None,
+            assigned_timestamp=(
+                utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
+                if claim_status["assignedTimestamp"]
+                else None
+            ),
+            enqueued_timestamp=(
+                utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
+                if claim_status["enqueuedTimestamp"]
+                else None
+            ),
         )
 
     def get_concurrency_run_ids(self) -> Set[str]:

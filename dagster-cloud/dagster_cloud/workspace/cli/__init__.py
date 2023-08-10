@@ -38,9 +38,9 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
         working_directory=kwargs.get("working_directory"),
         executable_path=kwargs.get("executable_path"),
         attribute=kwargs.get("attribute"),
-        commit_hash=kwargs["git"].get("commit_hash")
-        if "git" in kwargs
-        else kwargs.get("commit_hash"),
+        commit_hash=(
+            kwargs["git"].get("commit_hash") if "git" in kwargs else kwargs.get("commit_hash")
+        ),
         url=kwargs["git"].get("url") if "git" in kwargs else kwargs.get("git_url"),
     )
 
@@ -141,9 +141,9 @@ def get_location_or_load_error(
     location_data: gql.CliInputCodeLocation,
 ) -> Iterator[Tuple[Optional[InProcessCodeLocation], Optional[SerializableErrorInfo]]]:
     loadable_target_origin = LoadableTargetOrigin(
-        executable_path=location_data.executable_path
-        if location_data.executable_path
-        else sys.executable,
+        executable_path=(
+            location_data.executable_path if location_data.executable_path else sys.executable
+        ),
         python_file=location_data.python_file,
         package_name=location_data.package_name,
         module_name=location_data.module_name,

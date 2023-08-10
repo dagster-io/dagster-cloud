@@ -57,7 +57,7 @@ class DagsterCloudCliConfig(
     __slots__ = ()
 
     def __new__(cls, **kwargs):
-        none_defaults = {k: (kwargs[k] if k in kwargs else None) for k in cls._fields}
+        none_defaults = {k: kwargs[k] if k in kwargs else None for k in cls._fields}
         return super(DagsterCloudCliConfig, cls).__new__(cls, **none_defaults)
 
 

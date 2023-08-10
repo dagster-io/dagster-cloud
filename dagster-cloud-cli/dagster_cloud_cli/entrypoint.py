@@ -187,9 +187,9 @@ app.add_typer(workspace_app, name="workspace", no_args_is_help=True)
 _import_commands(
     deployment_app,
     workspace_app,
-    remap_fn=lambda c: _rename_command(c, f"{c.name}-locations")
-    if c.name and "location" not in c.name
-    else c,
+    remap_fn=lambda c: (
+        _rename_command(c, f"{c.name}-locations") if c.name and "location" not in c.name else c
+    ),
 )
 app.add_typer(branch_deployment_app, name="branch-deployment", no_args_is_help=True)
 app.add_typer(job_app, name="job", no_args_is_help=True)

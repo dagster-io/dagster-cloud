@@ -25,10 +25,8 @@ def process_alert_policies_config(alert_policies_config):
     for alert_policy_config in alert_policies_config["alert_policies"]:
         check.invariant(
             "tags" not in alert_policy_config or len(alert_policy_config["tags"]) > 0,
-            (
-                "When setting tags for an alert policy, the configuration "
-                "must contain at least one tag."
-            ),
+            "When setting tags for an alert policy, the configuration "
+            "must contain at least one tag.",
         )
 
         email_notification_service = alert_policy_config["notification_service"].get("email")
@@ -37,10 +35,8 @@ def process_alert_policies_config(alert_policies_config):
         if email_notification_service:
             check.invariant(
                 len(email_notification_service["email_addresses"]) > 0,
-                (
-                    "When creating an alert policy to send email alerts, "
-                    "the configuration must contain at least one email address."
-                ),
+                "When creating an alert policy to send email alerts, "
+                "the configuration must contain at least one email address.",
             )
 
 
