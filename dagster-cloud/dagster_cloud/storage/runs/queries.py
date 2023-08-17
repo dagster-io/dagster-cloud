@@ -49,6 +49,14 @@ GET_RUNS_QUERY = """
     }
 """
 
+GET_RUN_IDS_QUERY = """
+    query getRunsIdsQuery($filters: RunsFilter, $cursor: String, $limit: Int) {
+        runs {
+            getRunIds(filters: $filters, cursor: $cursor, limit: $limit)
+        }
+    }
+"""
+
 GET_RUNS_COUNT_QUERY = """
     query getRunsCountQuery($filters: RunsFilter) {
         runs {
@@ -106,18 +114,6 @@ GET_RUN_GROUP_QUERY = """
     }
 """
 
-
-GET_RUN_GROUPS_QUERY = """
-    query getRunGroupsQuery($filters: RunsFilter, $cursor: String, $limit: Int) {
-        runs {
-            getRunGroups(filters: $filters, cursor: $cursor, limit: $limit) {
-                rootRunId
-                serializedRuns
-                count
-            }
-        }
-    }
-"""
 
 GET_RUN_RECORDS_QUERY = RUN_ROW_FRAGMENT + """
     query getRunRecordsQuery($filters: RunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean, $bucketBy: RunBucket) {

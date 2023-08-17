@@ -308,21 +308,21 @@ class PingLocationArgs(NamedTuple("_PingLocationArgs", [("location_name", str)])
     pass
 
 
-@whitelist_for_serdes
-class LaunchRunArgs(NamedTuple("_LaunchRunArgs", [("pipeline_run", DagsterRun)])):
-    def __new__(cls, pipeline_run):
+@whitelist_for_serdes(storage_field_names={"dagster_run": "pipeline_run"})
+class LaunchRunArgs(NamedTuple("_LaunchRunArgs", [("dagster_run", DagsterRun)])):
+    def __new__(cls, dagster_run):
         return super(cls, LaunchRunArgs).__new__(
             cls,
-            check.inst_param(pipeline_run, "pipeline_run", DagsterRun),
+            check.inst_param(dagster_run, "dagster_run", DagsterRun),
         )
 
 
-@whitelist_for_serdes
-class TerminateRunArgs(NamedTuple("_TerminateRunArgs", [("pipeline_run", DagsterRun)])):
-    def __new__(cls, pipeline_run):
+@whitelist_for_serdes(storage_field_names={"dagster_run": "pipeline_run"})
+class TerminateRunArgs(NamedTuple("_TerminateRunArgs", [("dagster_run", DagsterRun)])):
+    def __new__(cls, dagster_run):
         return super(cls, TerminateRunArgs).__new__(
             cls,
-            check.inst_param(pipeline_run, "pipeline_run", DagsterRun),
+            check.inst_param(dagster_run, "dagster_run", DagsterRun),
         )
 
 

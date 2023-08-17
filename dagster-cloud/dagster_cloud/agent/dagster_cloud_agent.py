@@ -664,7 +664,7 @@ class DagsterCloudAgent:
             response = client.external_notebook_data(request.request_args.notebook_path)
             return DagsterCloudApiGrpcResponse(response.decode())
         elif api_name == DagsterCloudApi.LAUNCH_RUN:
-            run = request.request_args.pipeline_run
+            run = request.request_args.dagster_run
 
             with DagsterInstance.from_ref(
                 instance.ref_for_deployment(deployment_name)
@@ -720,7 +720,7 @@ class DagsterCloudAgent:
             # Run workers now poll for run status. We don't use the run launcher to terminate.
             # Once min agent version is bumped, we can deprecate this command.
             # For backcompat, we use the run launcher to terminate unless the user opts in.
-            run = request.request_args.pipeline_run
+            run = request.request_args.dagster_run
 
             with DagsterInstance.from_ref(
                 instance.ref_for_deployment(deployment_name)

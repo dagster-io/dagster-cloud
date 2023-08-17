@@ -37,7 +37,7 @@ from dagster._core.storage.dagster_run import (
     RunsFilter,
     TagBucket,
 )
-from dagster._core.storage.runs.base import RunGroupInfo, RunStorage
+from dagster._core.storage.runs.base import RunStorage
 from dagster._daemon.types import DaemonHeartbeat
 from dagster._serdes import (
     ConfigurableClass,
@@ -64,7 +64,7 @@ from .queries import (
     GET_PIPELINE_SNAPSHOT_QUERY,
     GET_RUN_BY_ID_QUERY,
     GET_RUN_GROUP_QUERY,
-    GET_RUN_GROUPS_QUERY,
+    GET_RUN_IDS_QUERY,
     GET_RUN_PARTITION_DATA_QUERY,
     GET_RUN_RECORDS_QUERY,
     GET_RUN_TAG_KEYS_QUERY,
@@ -177,11 +177,11 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             raise GraphQLStorageError(res)
         return res
 
-    def add_run(self, pipeline_run: DagsterRun):
-        check.inst_param(pipeline_run, "pipeline_run", DagsterRun)
+    def add_run(self, dagster_run: DagsterRun):
+        check.inst_param(dagster_run, "dagster_run", DagsterRun)
         res = self._execute_query(
             ADD_RUN_MUTATION,
-            variables={"serializedPipelineRun": serialize_value(pipeline_run)},
+            variables={"serializedPipelineRun": serialize_value(dagster_run)},
         )
 
         result = res["data"]["runs"]["addRun"]
@@ -196,7 +196,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             else:
                 raise GraphQLStorageError(res)
 
-        return pipeline_run
+        return dagster_run
 
     def handle_run_event(self, run_id: str, event: DagsterEvent):
         # no-op, handled by store_event
@@ -224,6 +224,22 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return [deserialize_value(run, DagsterRun) for run in res["data"]["runs"]["getRuns"]]
 
+    def get_run_ids(
+        self,
+        filters: Optional[RunsFilter] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Sequence[str]:
+        res = self._execute_query(
+            GET_RUN_IDS_QUERY,
+            variables={
+                "filters": _get_filters_input(filters),
+                "cursor": check.opt_str_param(cursor, "cursor"),
+                "limit": check.opt_int_param(limit, "limit"),
+            },
+        )
+        return res["data"]["runs"]["getRunIds"]
+
     def get_runs_count(self, filters: Optional[RunsFilter] = None) -> int:
         res = self._execute_query(
             GET_RUNS_COUNT_QUERY,
@@ -250,30 +266,6 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             raise DagsterRunNotFoundError(invalid_run_id=run_group_or_error["runId"])
         else:
             raise DagsterInvariantViolationError(f"Unexpected getRunGroupOrError response {res}")
-
-    def get_run_groups(
-        self,
-        filters: Optional[RunsFilter] = None,
-        cursor: Optional[str] = None,
-        limit: Optional[int] = None,
-    ) -> Mapping[str, RunGroupInfo]:
-        res = self._execute_query(
-            GET_RUN_GROUPS_QUERY,
-            variables={
-                "filters": _get_filters_input(filters),
-                "cursor": check.opt_str_param(cursor, "cursor"),
-                "limit": check.opt_int_param(limit, "limit"),
-            },
-        )
-        raw_run_groups = res["data"]["runs"]["getRunGroups"]
-
-        run_groups: Dict[str, RunGroupInfo] = {}
-        for run_group in raw_run_groups:
-            run_groups[run_group["rootRunId"]] = {
-                "runs": [deserialize_value(run, DagsterRun) for run in run_group["serializedRuns"]],
-                "count": run_group["count"],
-            }
-        return run_groups
 
     def get_run_by_id(self, run_id: str) -> Optional[DagsterRun]:
         res = self._execute_query(
