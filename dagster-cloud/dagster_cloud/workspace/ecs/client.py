@@ -612,7 +612,7 @@ class Client:
                 elif task.get("lastStatus") == "STOPPED":
                     self._raise_failed_task(task, container_name, logger)
 
-            time.sleep(10)
+            time.sleep(20)
 
         # Fetch the service event logs to try to get some clue about why the service never spun
         # up any tasks

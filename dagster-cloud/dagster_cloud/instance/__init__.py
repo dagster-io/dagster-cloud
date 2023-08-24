@@ -484,6 +484,7 @@ instance_class:
 
     @property
     def dagster_cloud_run_worker_monitoring_interval_seconds(self) -> int:
+        # potentially overridden interval in the serverless user code launcher
         return 30
 
 

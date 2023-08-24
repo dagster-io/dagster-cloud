@@ -307,15 +307,21 @@ def run_worker_monitoring_thread(
     statuses_dict: Dict[str, Sequence[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
     shutdown_event: threading.Event,
+    monitoring_interval: Optional[int] = None,
 ) -> None:
     logger = logging.getLogger("dagster_cloud")
     check.inst_param(instance, "instance", DagsterCloudAgentInstance)
     logger.debug("Run Monitor thread has started")
+    interval = (
+        monitoring_interval
+        if monitoring_interval
+        else instance.dagster_cloud_run_worker_monitoring_interval_seconds
+    )
     while not shutdown_event.is_set():
         run_worker_monitoring_thread_iteration(
             instance, deployments_to_check, statuses_dict, run_worker_monitoring_lock, logger
         )
-        shutdown_event.wait(instance.dagster_cloud_run_worker_monitoring_interval_seconds)
+        shutdown_event.wait(interval)
     logger.debug("Run monitor thread shutting down")
 
 
@@ -348,6 +354,7 @@ def start_run_worker_monitoring_thread(
     deployments_to_check: Set[str],
     statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
+    monitoring_interval: Optional[int] = None,
 ) -> Tuple[threading.Thread, threading.Event]:
     shutdown_event = threading.Event()
     thread = threading.Thread(
@@ -358,6 +365,7 @@ def start_run_worker_monitoring_thread(
             statuses_dict,
             run_worker_monitoring_lock,
             shutdown_event,
+            monitoring_interval,
         ),
         name="run-monitoring",
     )

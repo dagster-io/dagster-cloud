@@ -412,15 +412,7 @@ class DagsterCloudUserCodeLauncher(
             self._instance.deployment_names or self._instance.include_all_serverless_deployments
         ):
             self._logger.debug("Starting run worker monitoring.")
-            (
-                self._run_worker_monitoring_thread,
-                self._run_worker_monitoring_thread_shutdown_event,
-            ) = start_run_worker_monitoring_thread(
-                self._instance,
-                self._run_worker_deployments_to_check,
-                self._run_worker_statuses_dict,
-                self._run_worker_monitoring_lock,
-            )
+            self._start_run_worker_monitoring()
         else:
             self._logger.debug(
                 "Not starting run worker monitoring, because it's not supported on this agent."
@@ -436,6 +428,18 @@ class DagsterCloudUserCodeLauncher(
             )
             self._reconcile_grpc_metadata_thread.daemon = True
             self._reconcile_grpc_metadata_thread.start()
+
+    def _start_run_worker_monitoring(self):
+        # Utility method to be overridden by serverless subclass to change the monitoring interval
+        (
+            self._run_worker_monitoring_thread,
+            self._run_worker_monitoring_thread_shutdown_event,
+        ) = start_run_worker_monitoring_thread(
+            self._instance,
+            self._run_worker_deployments_to_check,
+            self._run_worker_statuses_dict,
+            self._run_worker_monitoring_lock,
+        )
 
     def is_run_worker_monitoring_thread_alive(self):
         return (
@@ -1035,15 +1039,17 @@ class DagsterCloudUserCodeLauncher(
     def _refresh_actual_entries(self) -> None:
         for deployment_location, server in self._multipex_servers.items():
             if deployment_location in self._actual_entries:
-                # If a multipex server exists, we query it to make sure the pex server is still
-                # available
+                # If a multipex server exists, we query it over gRPC
+                # to make sure the pex server is still available.
+
+                # First verify that the multipex server is running
                 try:
-                    self._check_running_multipex_server(server)
+                    server.server_endpoint.create_multipex_client().ping("")
                 except:
-                    # This is expected if ECS is currently spinning up this service after it crashed.
-                    # In this case, we want to wait for it to fully come up before we remove actual
-                    # entries. This ensures the recon loop uses the ECS replacement multiplex server
-                    # and not try to spin up a new multipex server.
+                    # If it isn't, this is expected if ECS is currently spinning up this service
+                    # after it crashed. In this case, we want to wait for it to fully come up
+                    # before we remove actual entries. This ensures the recon loop uses the ECS
+                    # replacement multiplex server and not try to spin up a new multipex server.
                     self._logger.info(
                         "Multipex server entry exists but server is not running. "
                         "Will wait for server to come up."

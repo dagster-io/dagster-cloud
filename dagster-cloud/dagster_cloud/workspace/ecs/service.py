@@ -56,6 +56,7 @@ class Service:
         return arn
 
     @property
+    @cached_method
     def public_ip(self):
         task_arns = self.client.ecs.list_tasks(
             cluster=self.client.cluster_name,
@@ -78,6 +79,7 @@ class Service:
                     return eni.association_attribute.get("PublicIp")
 
     @property
+    @cached_method
     def created_at(self):
         task_arns = self.client.ecs.list_tasks(
             cluster=self.client.cluster_name,
@@ -93,6 +95,7 @@ class Service:
         return task.get("createdAt")
 
     @property
+    @cached_method
     def environ(self):
         task_arns = self.client.ecs.list_tasks(
             cluster=self.client.cluster_name,
