@@ -25,6 +25,7 @@ from dagster._core.event_api import EventLogRecord, EventRecordsFilter, RunShard
 from dagster._core.events import DagsterEvent, DagsterEventType
 from dagster._core.events.log import EventLogEntry
 from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
+from dagster._core.storage.asset_check_execution_record import AssetCheckExecutionRecord
 from dagster._core.storage.dagster_run import DagsterRunStatsSnapshot
 from dagster._core.storage.event_log.base import (
     AssetEntry,
@@ -895,3 +896,14 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             variables={"runId": run_id, "stepKey": step_key},
         )
         return res
+
+    def get_asset_check_executions(
+        self,
+        asset_key: AssetKey,
+        check_name: str,
+        limit: int,
+        cursor: Optional[int] = None,
+        materialization_event_storage_id: Optional[int] = None,
+        include_planned: bool = True,
+    ) -> Sequence[AssetCheckExecutionRecord]:
+        raise NotImplementedError("Not callable from user cloud")

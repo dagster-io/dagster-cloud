@@ -544,30 +544,3 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         launcher.register_instance(self._instance)
 
         return launcher
-
-    def _get_logs(self, task_arn: str) -> List[str]:
-        task_id = task_arn.split("/")[-1]
-
-        task = self.ecs.describe_tasks(
-            cluster=self.cluster,
-            tasks=[task_arn],
-        ).get(
-            "tasks"
-        )[0]
-        task_definition = self.ecs.describe_task_definition(
-            taskDefinition=task.get("taskDefinitionArn"),
-        ).get("taskDefinition")
-        container = task_definition.get("containerDefinitions")[0]
-        container_name = container.get("name")
-        log_stream_prefix = (
-            container.get("logConfiguration", {}).get("options", {}).get("awslogs-stream-prefix")
-        )
-
-        log_stream = f"{log_stream_prefix}/{container_name}/{task_id}"
-
-        events = self.logs.get_log_events(
-            logGroupName=self.log_group,
-            logStreamName=log_stream,
-        ).get("events")
-
-        return [event.get("message") for event in events]
