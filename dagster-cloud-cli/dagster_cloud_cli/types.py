@@ -33,7 +33,8 @@ class CliEventTags:
     @classmethod
     def split(cls, value: str) -> Tuple[str, str]:
         if cls.contains(value):
-            return tuple(value.split(":", 1))
+            parts = value.split(":", 1)
+            return (parts[0], parts[1])
         raise ValueError("Invalid tag value", value)
 
     agent_strategy = tags("agent-strategy", ["hybrid", "serverless"])

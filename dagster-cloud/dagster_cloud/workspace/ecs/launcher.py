@@ -275,7 +275,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _get_service_repository_credentials_override(
         self, container_context: EcsContainerContext
     ) -> Optional[str]:
-        return container_context.server_resources.get("repository_credentials")
+        return container_context.repository_credentials
 
     def _get_enable_ecs_exec(self) -> bool:
         return False
@@ -465,9 +465,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _remove_server_handle(self, server_handle: EcsServerHandleType) -> None:
         self._logger.info(
-            "Deleting service {} at hostname {}...".format(
-                server_handle.name, server_handle.hostname
-            )
+            f"Deleting service {server_handle.name} at hostname {server_handle.hostname}..."
         )
         self.client.delete_service(server_handle)
         self._logger.info(

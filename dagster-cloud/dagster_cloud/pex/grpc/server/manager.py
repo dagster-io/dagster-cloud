@@ -341,12 +341,12 @@ class MultiPexManager(AbstractContextManager):
                     pass
 
     def __exit__(self, exception_type, exception_value, traceback):
-        for _handle, pex_server in self._pex_servers.items():
+        for pex_server in self._pex_servers.values():
             if isinstance(pex_server, PexProcessEntry):
                 pex_server.heartbeat_shutdown_event.set()
                 pex_server.heartbeat_thread.join()
 
-        for _handle, pex_server in self._pex_servers.items():
+        for pex_server in self._pex_servers.values():
             if isinstance(pex_server, PexProcessEntry):
                 try:
                     pex_server.grpc_client.shutdown_server()

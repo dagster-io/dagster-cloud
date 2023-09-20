@@ -198,18 +198,10 @@ class Client:
                 .get("taskDefinition")
                 .get("taskDefinitionArn")
             )
-            logger.info(
-                "Created new task definition {task_definition_arn}".format(
-                    task_definition_arn=task_definition_arn
-                )
-            )
+            logger.info(f"Created new task definition {task_definition_arn}")
         else:
             task_definition_arn = existing_task_definition["taskDefinitionArn"]
-            logger.info(
-                "Re-using existing task definition {task_definition_arn}".format(
-                    task_definition_arn=task_definition_arn
-                )
-            )
+            logger.info(f"Re-using existing task definition {task_definition_arn}")
 
         return task_definition_arn
 
@@ -627,11 +619,7 @@ class Client:
                 service_events = [event.get("message") for event in service.get("events")]
                 service_events_str = "Service events:\n" + "\n".join(service_events)
         except:
-            logger.exception(
-                "Error trying to get service event logs from service {service_name}".format(
-                    service_name=service_name
-                )
-            )
+            logger.exception(f"Error trying to get service event logs from service {service_name}")
 
         raise Exception(
             f"Timed out waiting for a running task for service: {service_name}."

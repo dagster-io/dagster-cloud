@@ -655,11 +655,7 @@ class DagsterCloudUserCodeLauncher(
         server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
         metadata: CodeDeploymentMetadata,
     ):
-        self._logger.info(
-            "Fetching metadata for {deployment_name}:{location_name}".format(
-                deployment_name=deployment_name, location_name=location_name
-            )
-        )
+        self._logger.info(f"Fetching metadata for {deployment_name}:{location_name}")
 
         try:
             if isinstance(server_or_error, SerializableErrorInfo):
@@ -683,10 +679,7 @@ class DagsterCloudUserCodeLauncher(
                 )
 
                 self._logger.info(
-                    "Updating {deployment_name}:{location_name} with repository load data".format(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                    )
+                    f"Updating {deployment_name}:{location_name} with repository load data"
                 )
 
                 self._update_workspace_entry(deployment_name, loaded_workspace_entry)
@@ -706,12 +699,8 @@ class DagsterCloudUserCodeLauncher(
             # from being updated or continue reconciling in a loop
             error_info = serializable_error_info_from_exc_info(sys.exc_info())
             self._logger.error(
-                "Error while writing location data for {deployment_name}:{location_name}:"
-                " {error_info}".format(
-                    deployment_name=deployment_name,
-                    location_name=location_name,
-                    error_info=error_info,
-                )
+                f"Error while writing location data for {deployment_name}:{location_name}:"
+                f" {error_info}"
             )
 
     @property
@@ -744,11 +733,7 @@ class DagsterCloudUserCodeLauncher(
 
             self._logger.error(
                 "Error while fetching existing PEX servers from multipex server for"
-                " {deployment_name}:{location_name}: {error_info}".format(
-                    deployment_name=deployment_name,
-                    location_name=location_name,
-                    error_info=error_info,
-                )
+                f" {deployment_name}:{location_name}: {error_info}"
             )
             return []
 
@@ -842,11 +827,8 @@ class DagsterCloudUserCodeLauncher(
             run_ids = self.get_current_runs_for_server_handle(server_handle)
         except Exception:
             self._logger.error(
-                "Failure connecting to server with handle {server_handle}, going to shut it down:"
-                " {exc_info}".format(
-                    server_handle=server_handle,
-                    exc_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                )
+                f"Failure connecting to server with handle {server_handle}, going to shut it down:"
+                f" {serializable_error_info_from_exc_info(sys.exc_info())}"
             )
 
         if run_ids:
@@ -1195,22 +1177,14 @@ class DagsterCloudUserCodeLauncher(
                             error_info = serializable_error_info_from_exc_info(sys.exc_info())
                             self._logger.error(
                                 "Spinning up a new multipex server for"
-                                " {deployment_name}:{location_name} since the existing one failed"
-                                " with the following error: {error_info}".format(
-                                    deployment_name=deployment_name,
-                                    location_name=location_name,
-                                    error_info=error_info,
-                                )
+                                f" {deployment_name}:{location_name} since the existing one failed"
+                                f" with the following error: {error_info}"
                             )
                             multipex_server = None
 
                     if not multipex_server:
                         self._logger.info(
-                            "Creating new multipex server for {deployment_name}:{location_name}"
-                            .format(
-                                deployment_name=deployment_name,
-                                location_name=location_name,
-                            )
+                            f"Creating new multipex server for {deployment_name}:{location_name}"
                         )
                         multipex_server = self._create_multipex_server(
                             deployment_name, location_name, desired_entry.code_deployment_metadata
@@ -1224,22 +1198,14 @@ class DagsterCloudUserCodeLauncher(
                         new_multipex_servers[to_update_key] = multipex_server
                     else:
                         self._logger.info(
-                            "Found running multipex server for {deployment_name}:{location_name}"
-                            .format(
-                                deployment_name=deployment_name,
-                                location_name=location_name,
-                            )
+                            f"Found running multipex server for {deployment_name}:{location_name}"
                         )
 
                 except Exception:
                     error_info = serializable_error_info_from_exc_info(sys.exc_info())
                     self._logger.error(
                         "Error while setting up multipex server for"
-                        " {deployment_name}:{location_name}: {error_info}".format(
-                            deployment_name=deployment_name,
-                            location_name=location_name,
-                            error_info=error_info,
-                        )
+                        f" {deployment_name}:{location_name}: {error_info}"
                     )
                     new_dagster_servers[to_update_key] = error_info
             elif to_update_key in self._multipex_servers:
@@ -1253,11 +1219,8 @@ class DagsterCloudUserCodeLauncher(
 
             try:
                 self._logger.info(
-                    "Waiting for new multipex server for {deployment_name}:{location_name} to be"
-                    " ready".format(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                    )
+                    f"Waiting for new multipex server for {deployment_name}:{location_name} to be"
+                    " ready"
                 )
                 self._wait_for_new_multipex_server(
                     deployment_name,
@@ -1292,12 +1255,7 @@ class DagsterCloudUserCodeLauncher(
                 desired_entry = desired_entries[to_update_key]
                 code_deployment_metadata = desired_entry.code_deployment_metadata
 
-                self._logger.info(
-                    "Updating server for {deployment_name}:{location_name}".format(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                    )
-                )
+                self._logger.info(f"Updating server for {deployment_name}:{location_name}")
                 existing_standalone_dagster_server_handles[to_update_key] = (
                     self._get_standalone_dagster_server_handles_for_location(
                         deployment_name, location_name
@@ -1320,12 +1278,8 @@ class DagsterCloudUserCodeLauncher(
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 self._logger.error(
-                    "Error while updating server for {deployment_name}:{location_name}:"
-                    " {error_info}".format(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                        error_info=error_info,
-                    )
+                    f"Error while updating server for {deployment_name}:{location_name}:"
+                    f" {error_info}"
                 )
                 new_dagster_servers[to_update_key] = error_info
 
@@ -1338,9 +1292,7 @@ class DagsterCloudUserCodeLauncher(
             if not isinstance(server_or_error, SerializableErrorInfo):
                 try:
                     self._logger.info(
-                        "Waiting for new grpc server for {location_name} to be ready...".format(
-                            location_name=to_update_key
-                        )
+                        f"Waiting for new grpc server for {to_update_key} to be ready..."
                     )
                     self._wait_for_new_server_ready(
                         deployment_name,
@@ -1423,10 +1375,7 @@ class DagsterCloudUserCodeLauncher(
                     or current_multipex_server_handle != multipex_server_handle
                 ):
                     self._logger.info(
-                        "Removing old multipex server for {deployment_name}:{location_name}".format(
-                            location_name=location_name,
-                            deployment_name=deployment_name,
-                        )
+                        f"Removing old multipex server for {deployment_name}:{location_name}"
                     )
 
                     try:
@@ -1446,12 +1395,8 @@ class DagsterCloudUserCodeLauncher(
             if current_multipex_server and pex_server_handles:
                 removed_any_servers = True
                 self._logger.info(
-                    "Removing {num_servers} grpc processes from multipex server for"
-                    " {deployment_name}:{location_name}".format(
-                        num_servers=len(pex_server_handles),
-                        location_name=location_name,
-                        deployment_name=deployment_name,
-                    )
+                    f"Removing {len(pex_server_handles)} grpc processes from multipex server for"
+                    f" {deployment_name}:{location_name}"
                 )
                 for pex_server_handle in pex_server_handles:
                     try:
@@ -1474,10 +1419,7 @@ class DagsterCloudUserCodeLauncher(
 
             if removed_any_servers:
                 self._logger.info(
-                    "Removed all previous servers for {deployment_name}:{location_name}".format(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                    )
+                    f"Removed all previous servers for {deployment_name}:{location_name}"
                 )
 
             # Always update our actual entries
@@ -1489,12 +1431,8 @@ class DagsterCloudUserCodeLauncher(
                 self._remove_server(deployment_name, location_name)
             except Exception:
                 self._logger.error(
-                    "Error while removing server for {deployment_name}:{location_name}:"
-                    " {error_info}".format(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                        error_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                    )
+                    f"Error while removing server for {deployment_name}:{location_name}:"
+                    f" {serializable_error_info_from_exc_info(sys.exc_info())}"
                 )
 
             with self._grpc_servers_lock:
@@ -1700,11 +1638,7 @@ class DagsterCloudUserCodeLauncher(
             }
 
     def _remove_server(self, deployment_name: str, location_name: str):
-        self._logger.info(
-            "Removing server for {deployment_name}:{location_name}".format(
-                deployment_name=deployment_name, location_name=location_name
-            )
-        )
+        self._logger.info(f"Removing server for {deployment_name}:{location_name}")
         existing_standalone_dagster_server_handles = (
             self._get_standalone_dagster_server_handles_for_location(deployment_name, location_name)
         )

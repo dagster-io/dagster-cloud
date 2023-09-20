@@ -64,7 +64,6 @@ from .queries import (
     FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
     GET_ASSET_RECORDS_QUERY,
-    GET_ASSET_RUN_IDS_QUERY,
     GET_CONCURRENCY_INFO_QUERY,
     GET_CONCURRENCY_KEYS_QUERY,
     GET_DYNAMIC_PARTITIONS_QUERY,
@@ -558,12 +557,6 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 result[event.dagster_event.asset_key] = event
 
         return result
-
-    def get_asset_run_ids(self, asset_key: AssetKey) -> Iterable[str]:
-        res = self._execute_query(
-            GET_ASSET_RUN_IDS_QUERY, variables={"assetKey": asset_key.to_string()}
-        )
-        return res["data"]["eventLogs"]["getAssetRunIds"]
 
     def can_cache_asset_status_data(self) -> bool:
         # cached_status_data column exists in the asset_key table

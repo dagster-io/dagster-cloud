@@ -175,9 +175,7 @@ def get_cloud_run_worker_statuses(
                 active_non_isolated_run_ids_by_server_handle[str(handle)] = run_ids
             except Exception as e:
                 logger.exception(
-                    "Run monitoring: hit error with GetCurrentRunsResult for handle: {}".format(
-                        handle
-                    )
+                    f"Run monitoring: hit error with GetCurrentRunsResult for handle: {handle}"
                 )
                 if _is_grpc_unimplemented_error(e):
                     logger.info(

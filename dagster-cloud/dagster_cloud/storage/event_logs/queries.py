@@ -224,14 +224,6 @@ GET_ALL_ASSET_KEYS_QUERY = """
     }
     """
 
-GET_ASSET_RUN_IDS_QUERY = """
-    query getAssetRunIds($assetKey: String!) {
-        eventLogs {
-            getAssetRunIds(assetKey: $assetKey)
-        }
-    }
-    """
-
 UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION = """
     mutation updateAssetCachedStatusData($assetKey: String!, $cacheValues: AssetStatusCacheValueInput!) {
         eventLogs {

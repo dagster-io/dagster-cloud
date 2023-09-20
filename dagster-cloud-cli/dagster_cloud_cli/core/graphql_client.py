@@ -139,7 +139,7 @@ class GqlShimClient:
 
                 logger.warning(
                     "Dagster Cloud is currently unavailable due to scheduled maintenance. Retrying"
-                    " in {retry_interval} seconds...".format(retry_interval=e.retry_interval)
+                    f" in {e.retry_interval} seconds..."
                 )
                 time.sleep(e.retry_interval)
             except Exception as e:

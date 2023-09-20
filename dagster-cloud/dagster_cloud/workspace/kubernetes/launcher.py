@@ -304,10 +304,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 construct_code_location_service(deployment_name, location_name, resource_name),
             )
             self._logger.info(
-                "Created service {} in namespace {}".format(
-                    api_response.metadata.name,
-                    namespace,
-                )
+                f"Created service {api_response.metadata.name} in namespace {namespace}"
             )
         except ApiException as e:
             self._logger.error(

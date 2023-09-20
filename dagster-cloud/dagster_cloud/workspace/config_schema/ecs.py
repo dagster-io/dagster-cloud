@@ -20,15 +20,6 @@ SHARED_ECS_CONFIG = {
                     is_required=False,
                     description="The ephemeral storage, in GiB, to use for the launched task.",
                 ),
-                "repository_credentials": Field(
-                    str,
-                    is_required=False,
-                    description=(
-                        "AWS SSM Secret ARN of the credentials used to pull a server's image from a"
-                        " private registry."
-                        " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/private-auth.html"
-                    ),
-                ),
             }
         )
     ),
@@ -49,15 +40,6 @@ SHARED_ECS_CONFIG = {
                     int,
                     is_required=False,
                     description="The ephemeral storage, in GiB, to use for the launched task.",
-                ),
-                "repository_credentials": Field(
-                    str,
-                    is_required=False,
-                    description=(
-                        "AWS SSM Secret ARN of the credentials used to pull a run's image from a"
-                        " private registry."
-                        " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/private-auth.html"
-                    ),
                 ),
             }
         )
@@ -183,6 +165,15 @@ ECS_CONTAINER_CONTEXT_CONFIG = {
             "ARN of the task execution role for the ECS container and Fargate agent to make AWS API"
             " calls on your behalf. See"
             " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html. "
+        ),
+    ),
+    "repository_credentials": Field(
+        StringSource,
+        is_required=False,
+        description=(
+            "The arn of the secret to authenticate into your private container registry."
+            " This does not apply if you are leveraging ECR for your images, see"
+            " https://docs.aws.amazon.com/AmazonECS/latest/userguide/private-auth.html."
         ),
     ),
     **SHARED_ECS_CONFIG,

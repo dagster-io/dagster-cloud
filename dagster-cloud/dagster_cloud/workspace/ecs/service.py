@@ -33,11 +33,7 @@ class Service:
                 ResourceARN=self.service_discovery_arn
             ).get("Tags")
         except self.client.service_discovery.exceptions.ResourceNotFoundException:
-            logging.warning(
-                "Could not find service discovery ARN {service_discovery_arn}".format(
-                    service_discovery_arn=self.service_discovery_arn
-                )
-            )
+            logging.warning(f"Could not find service discovery ARN {self.service_discovery_arn}")
             return {}
 
         return dict([(tag["Key"], tag["Value"]) for tag in tags])

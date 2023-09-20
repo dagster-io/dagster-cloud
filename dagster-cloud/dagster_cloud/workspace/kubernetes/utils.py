@@ -229,11 +229,7 @@ def get_deployment_failure_debug_info(
             pod_name, namespace, container_name="dagster"
         )
     except Exception:
-        logger.exception(
-            "Error trying to get debug information for failed k8s pod {pod_name}".format(
-                pod_name=pod_name
-            )
-        )
+        logger.exception(f"Error trying to get debug information for failed k8s pod {pod_name}")
 
     return f"{pod_debug_info}\n\n{kubectl_prompt}" if pod_debug_info else kubectl_prompt
 

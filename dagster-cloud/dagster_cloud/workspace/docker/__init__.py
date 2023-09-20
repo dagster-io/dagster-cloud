@@ -186,13 +186,8 @@ class DockerUserCodeLauncher(
         client = docker.client.from_env()
 
         self._logger.info(
-            "Starting a new container for {deployment_name}:{location_name} with image {image}:"
-            " {container_name}".format(
-                deployment_name=deployment_name,
-                location_name=location_name,
-                image=image,
-                container_name=container_name,
-            )
+            f"Starting a new container for {deployment_name}:{location_name} with image {image}:"
+            f" {container_name}"
         )
 
         environment = merge_dicts(
@@ -331,12 +326,7 @@ class DockerUserCodeLauncher(
         try:
             container.stop()
         except Exception:
-            self._logger.error(
-                "Failure stopping container {container_id}: {exc_info}".format(
-                    container_id=container.id,
-                    exc_info=sys.exc_info(),
-                )
-            )
+            self._logger.error(f"Failure stopping container {container.id}: {sys.exc_info()}")
         container.remove(force=True)
         self._logger.info(f"Removed container {container.id}")
 

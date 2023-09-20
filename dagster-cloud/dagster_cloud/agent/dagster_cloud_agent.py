@@ -791,11 +791,7 @@ class DagsterCloudAgent:
         else:
             try:
                 request = deserialize_value(request_body, DagsterCloudApiRequest)
-                self._logger.info(
-                    "Received request {request}.".format(
-                        request=request,
-                    )
-                )
+                self._logger.info(f"Received request {request}.")
                 api_result = self._handle_api_request(
                     request, deployment_name, is_branch_deployment, instance, user_code_launcher
                 )
@@ -803,18 +799,9 @@ class DagsterCloudAgent:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 api_result = DagsterCloudApiErrorResponse(error_infos=[error_info])
 
-                self._logger.error(
-                    "Error serving request {request}: {error_info}".format(
-                        request=json_request,
-                        error_info=error_info,
-                    )
-                )
+                self._logger.error(f"Error serving request {json_request}: {error_info}")
 
-        self._logger.info(
-            "Finished processing request {request}.".format(
-                request=request,
-            )
-        )
+        self._logger.info(f"Finished processing request {request}.")
 
         thread_finished_request_time = pendulum.now("UTC").timestamp()
         thread_telemetry = DagsterCloudApiThreadTelemetry(
@@ -833,19 +820,11 @@ class DagsterCloudAgent:
             response=api_result,
         )
 
-        self._logger.info(
-            "Uploading response for request {request}.".format(
-                request=request,
-            )
-        )
+        self._logger.info(f"Uploading response for request {request}.")
 
         upload_api_response(instance, deployment_name, upload_response)
 
-        self._logger.info(
-            "Finished uploading response for request {request}.".format(
-                request=request,
-            )
-        )
+        self._logger.info(f"Finished uploading response for request {request}.")
 
         return error_info
 
@@ -882,13 +861,8 @@ class DagsterCloudAgent:
             json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
 
             self._logger.debug(
-                "Iteration #{iteration}: Adding {num_requests} requests to be"
-                " processed. Currently {num_pending_requests} waiting for server to be ready"
-                .format(
-                    iteration=self._iteration,
-                    num_requests=len(json_requests),
-                    num_pending_requests=num_pending_requests,
-                )
+                f"Iteration #{self._iteration}: Adding {len(json_requests)} requests to be"
+                f" processed. Currently {num_pending_requests} waiting for server to be ready"
             )
             self._pending_requests.extend(json_requests)
 
