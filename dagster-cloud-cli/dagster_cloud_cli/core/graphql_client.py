@@ -68,6 +68,7 @@ class GqlShimClient:
         query: str,
         variable_values: Optional[Mapping[str, Any]] = None,
         headers: Optional[Mapping[str, str]] = None,
+        idempotent_mutation: bool = False,
     ):
         start_time = time.time()
         retry_number = 0
@@ -84,7 +85,7 @@ class GqlShimClient:
                     requested_sleep_time = _get_retry_after_sleep_time(e.response.headers)
                 elif isinstance(e, RequestsReadTimeout):
                     # "mutation " must appear in the document if its a mutation
-                    if "mutation " in query:
+                    if "mutation " in query and not idempotent_mutation:
                         # mutations can be made idempotent if they use Idempotency-Key header
                         retryable_error = (
                             bool(headers.get("Idempotency-Key")) if headers is not None else False

@@ -74,6 +74,7 @@ from .queries import (
     GET_LATEST_STORAGE_ID_BY_PARTITION,
     GET_LATEST_TAGS_BY_PARTITION,
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
+    GET_MATERIALIZED_PARTITIONS,
     GET_RECORDS_FOR_RUN_QUERY,
     GET_STATS_FOR_RUN_QUERY,
     GET_STEP_STATS_FOR_RUN_QUERY,
@@ -593,6 +594,21 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             WIPE_ASSET_CACHED_STATUS_DATA_MUTATION, variables={"assetKey": asset_key.to_string()}
         )
         return res
+
+    def get_materialized_partitions(
+        self, asset_key: AssetKey, after_cursor: Optional[int] = None
+    ) -> Set[str]:
+        check.inst_param(asset_key, "asset_key", AssetKey)
+        check.opt_int_param(after_cursor, "after_cursor")
+        res = self._execute_query(
+            GET_MATERIALIZED_PARTITIONS,
+            variables={
+                "assetKey": asset_key.to_string(),
+                "afterCursor": after_cursor,
+            },
+        )
+        materialized_partitions = res["data"]["eventLogs"]["getMaterializedPartitions"]
+        return set(materialized_partitions)
 
     def get_materialization_count_by_partition(
         self,

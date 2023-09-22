@@ -234,6 +234,14 @@ UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION = """
     }
 """
 
+GET_MATERIALIZED_PARTITIONS = """
+    query getMaterializedPartitions($assetKey: String!, $afterCursor: BigInt) {
+        eventLogs {
+            getMaterializedPartitions(assetKey: $assetKey, afterCursor: $afterCursor)
+        }
+    }
+"""
+
 GET_MATERIALIZATION_COUNT_BY_PARTITION = """
     query getMaterializationCountByPartition($assetKeys: [String!]!, $afterCursor: BigInt) {
         eventLogs {

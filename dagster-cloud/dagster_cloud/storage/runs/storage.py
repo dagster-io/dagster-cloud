@@ -171,8 +171,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             else self._instance.graphql_client
         )
 
-    def _execute_query(self, query, variables=None):
-        res = self._graphql_client.execute(query, variable_values=variables)
+    def _execute_query(self, query, variables=None, idempotent_mutation=False):
+        res = self._graphql_client.execute(
+            query, variable_values=variables, idempotent_mutation=idempotent_mutation
+        )
         if "errors" in res:
             raise GraphQLStorageError(res)
         return res
@@ -335,6 +337,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                     check.mapping_param(new_tags, "new_tags", key_type=str, value_type=str)
                 ),
             },
+            idempotent_mutation=True,
         )
 
     def has_run(self, run_id: str) -> bool:
