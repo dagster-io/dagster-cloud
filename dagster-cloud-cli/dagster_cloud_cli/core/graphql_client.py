@@ -249,7 +249,7 @@ def _get_retry_after_sleep_time(headers):
 
 
 @contextmanager
-def create_cloud_dagit_client(url: str, api_token: str, retries=3):
+def create_cloud_webserver_client(url: str, api_token: str, retries=3):
     with create_graphql_requests_session() as session:
         yield GqlShimClient(
             session=session,

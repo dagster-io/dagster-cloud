@@ -596,14 +596,19 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return res
 
     def get_materialized_partitions(
-        self, asset_key: AssetKey, after_cursor: Optional[int] = None
+        self,
+        asset_key: AssetKey,
+        before_cursor: Optional[int] = None,
+        after_cursor: Optional[int] = None,
     ) -> Set[str]:
         check.inst_param(asset_key, "asset_key", AssetKey)
+        check.opt_int_param(before_cursor, "before_cursor")
         check.opt_int_param(after_cursor, "after_cursor")
         res = self._execute_query(
             GET_MATERIALIZED_PARTITIONS,
             variables={
                 "assetKey": asset_key.to_string(),
+                "beforeCursor": before_cursor,
                 "afterCursor": after_cursor,
             },
         )

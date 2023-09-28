@@ -246,7 +246,7 @@ def dagster_cloud_options(
     Unless `allow_empty` or `allow_empty_deployment` are set, an error
     will be raised if these values are not specified as arguments or via config/env var.
 
-    Set `requires_url` if the command needs a Dagit url; if so, this will be provided
+    Set `requires_url` if the command needs a Dagster webserver url; if so, this will be provided
     via the `url` keyword argument.
     """
 

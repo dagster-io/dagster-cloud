@@ -235,9 +235,9 @@ UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION = """
 """
 
 GET_MATERIALIZED_PARTITIONS = """
-    query getMaterializedPartitions($assetKey: String!, $afterCursor: BigInt) {
+    query getMaterializedPartitions($assetKey: String!, $beforeCursor: BigInt, $afterCursor: BigInt) {
         eventLogs {
-            getMaterializedPartitions(assetKey: $assetKey, afterCursor: $afterCursor)
+            getMaterializedPartitions(assetKey: $assetKey, beforeCursor: $beforeCursor, afterCursor: $afterCursor)
         }
     }
 """

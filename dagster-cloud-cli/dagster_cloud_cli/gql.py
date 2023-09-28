@@ -5,19 +5,19 @@ from dagster_cloud_cli.types import (
     CliEventType,
 )
 
-from .core.graphql_client import GqlShimClient, create_cloud_dagit_client
+from .core.graphql_client import GqlShimClient, create_cloud_webserver_client
 
 
 @contextmanager
 def graphql_client_from_url(
     url: str, token: str, retries: int = 3
 ) -> Generator[GqlShimClient, None, None]:
-    with create_cloud_dagit_client(url.rstrip("/"), token, retries) as client:
+    with create_cloud_webserver_client(url.rstrip("/"), token, retries) as client:
         yield client
 
 
 def url_from_config(organization: str, deployment: Optional[str] = None) -> str:
-    """Gets the Cloud Dagit base url for a given organization and API token.
+    """Gets the Cloud webserver base url for a given organization and API token.
     Uses the default deployment if none is specified.
     """
     # Return the root URL / root GQL endpoint if no deployment is provided
