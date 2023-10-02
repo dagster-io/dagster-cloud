@@ -64,6 +64,8 @@ AGENT_HEARTBEAT_ERROR_LIMIT = 25  # Send at most 25 errors
 
 DEFAULT_PENDING_REQUESTS_LIMIT = 100
 
+SLEEP_INTERVAL_SECONDS = float(os.getenv("DAGSTER_CLOUD_AGENT_SLEEP_INTERVAL_SECONDS", "0.5"))
+
 DEPLOYMENT_INFO_QUERY = """
     query DeploymentInfo {
          deploymentInfo {
@@ -221,7 +223,7 @@ class DagsterCloudAgent:
 
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
-                time.sleep(0.5)
+                time.sleep(SLEEP_INTERVAL_SECONDS)
 
     def _check_update_workspace(self, instance, user_code_launcher, upload_all):
         curr_time = pendulum.now("UTC")
