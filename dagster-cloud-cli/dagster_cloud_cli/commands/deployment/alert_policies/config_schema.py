@@ -103,10 +103,10 @@ ALERT_POLICY_SCHEMA = Shape(
                             ),
                         ),
                         EnumValue(
-                            "ASSET_CHECK_SUCCESS", description="Alert on asset check success."
+                            "ASSET_CHECK_PASSED", description="Alert on asset check success."
                         ),
                         EnumValue(
-                            "ASSET_CHECK_FAILURE",
+                            "ASSET_CHECK_EXECUTION_FAILURE",
                             description=(
                                 "Alert when a planned asset check fails before it evaluates."
                             ),
@@ -209,7 +209,7 @@ ALERT_POLICY_SCHEMA = Shape(
                         config=Shape(
                             fields={
                                 "asset_key": Field(
-                                    config=str,
+                                    config=Array(str),
                                     is_required=True,
                                     description="The key of the asset.",
                                 )
