@@ -74,6 +74,8 @@ DEPLOYMENT_INFO_QUERY = """
      }
 """
 
+AGENT_VERSION_LABEL = "version"
+
 
 class DagsterCloudAgent:
     MAX_THREADS_PER_CORE = 10
@@ -279,7 +281,7 @@ class DagsterCloudAgent:
                         ),
                         errors=errors,
                         metadata=merge_dicts(
-                            {"version": __version__},
+                            {AGENT_VERSION_LABEL: __version__},
                             {"image_tag": agent_image_tag} if agent_image_tag else {},
                         ),
                         run_worker_statuses=run_worker_statuses_dict[deployment_name],

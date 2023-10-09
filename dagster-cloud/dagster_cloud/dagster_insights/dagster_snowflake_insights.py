@@ -17,10 +17,11 @@ import requests
 from dagster import (
     AssetKey,
     AssetsDefinition,
+    DagsterInstance,
     ScheduleDefinition,
 )
 
-from dagster_cloud.instance import DagsterCloudAgentInstance
+from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgentInstance
 
 from .dbt_wrapper import OPAQUE_ID_METADATA_KEY_PREFIX, OPAQUE_ID_SQL_SIGIL
 
@@ -36,13 +37,19 @@ class AssetMaterializationId:
     step_key: str
 
 
+def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str]:
+    if not isinstance(instance, DagsterCloudAgentInstance):
+        raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
+
+    return f"{instance.dagit_url}graphql", instance.dagster_cloud_agent_token
+
+
 def query_graphql_from_instance(
-    instance: DagsterCloudAgentInstance, query_text: str, variables=None
+    instance: DagsterInstance, query_text: str, variables=None
 ) -> Dict[str, Any]:
     headers = {}
 
-    url = f"{instance.dagit_url}graphql"
-    cloud_token = instance.dagster_cloud_agent_token
+    url, cloud_token = get_url_and_token_from_instance(instance)
 
     headers["Dagster-Cloud-API-Token"] = cloud_token
 
@@ -74,6 +81,7 @@ def get_opaque_ids_to_assets(
           runId
           partition
           stepKey
+          timestamp
           metadataEntries {
             ... on BoolMetadataEntry {
               label

@@ -1,8 +1,11 @@
 from typing import (
     TYPE_CHECKING,
+    Any,
     Iterable,
     Iterator,
+    List,
     Optional,
+    Tuple,
     Union,
 )
 from uuid import uuid4 as uuid
@@ -11,7 +14,9 @@ import yaml
 from dagster import (
     AssetCheckResult,
     AssetExecutionContext,
+    AssetKey,
     AssetObservation,
+    OpExecutionContext,
     Output,
 )
 
@@ -36,7 +41,7 @@ def add_asset_context_to_sql_query(
 
 
 def dbt_with_snowflake_insights(
-    context: AssetExecutionContext,
+    context: Union[OpExecutionContext, AssetExecutionContext],
     dbt_cli_invocation: "DbtCliInvocation",
     dagster_events: Optional[Iterable[Union[Output, AssetObservation, AssetCheckResult]]] = None,
     skip_config_check=False,
@@ -97,7 +102,7 @@ def dbt_with_snowflake_insights(
     if dagster_events is None:
         dagster_events = dbt_cli_invocation.stream()
 
-    asset_and_partition_key_to_unique_id = {}
+    asset_and_partition_key_to_unique_id: List[Tuple[AssetKey, Optional[str], Any]] = []
     for dagster_event in dagster_events:
         if isinstance(dagster_event, Output):
             unique_id = dagster_event.metadata["unique_id"].value
@@ -108,19 +113,20 @@ def dbt_with_snowflake_insights(
                 partition_key = context.asset_partition_key_for_output(dagster_event.output_name)
             else:
                 partition_key = None
-            asset_and_partition_key_to_unique_id[(asset_key, partition_key)] = unique_id
+            asset_and_partition_key_to_unique_id.append((asset_key, partition_key, unique_id))
+
         elif isinstance(dagster_event, AssetObservation):
             unique_id = dagster_event.metadata["unique_id"].value
             asset_key = dagster_event.asset_key
             partition_key = dagster_event.partition
-            asset_and_partition_key_to_unique_id[(asset_key, partition_key)] = unique_id
+            asset_and_partition_key_to_unique_id.append((asset_key, partition_key, unique_id))
 
         yield dagster_event
 
     run_results_json = dbt_cli_invocation.get_artifact("run_results.json")
     invocation_id = run_results_json["metadata"]["invocation_id"]
 
-    for (asset_key, partition), unique_id in asset_and_partition_key_to_unique_id.items():
+    for asset_key, partition, unique_id in asset_and_partition_key_to_unique_id:
         # must match the query-comment in dbt_project.yml
         opaque_id = f"{unique_id}:{invocation_id}"
         context.log_event(

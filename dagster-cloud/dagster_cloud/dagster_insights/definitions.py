@@ -5,11 +5,13 @@ from pprint import pprint
 from typing import (
     TYPE_CHECKING,
     Any,
+    Dict,
     List,
     Mapping,
     Optional,
     Sequence,
     Tuple,
+    Union,
 )
 
 from dagster import (
@@ -22,8 +24,6 @@ from dagster import (
     build_schedule_from_partitioned_job,
     define_asset_job,
 )
-
-from dagster_cloud.instance import DagsterCloudAgentInstance
 
 from .dagster_snowflake_insights import (
     AssetMaterializationId,
@@ -44,13 +44,11 @@ class SnowflakeInsightsDefinitions:
 
 
 def create_snowflake_insights_asset_and_schedule(
-    start_date: date,
-    code_location_name: str,
-    repository_name: str = "__repository__",
+    start_date: Union[datetime, date, str],
     name: Optional[str] = None,
     group_name: Optional[str] = None,
     job_name: str = "snowflake_insights_import",
-    dry_run=True,
+    dry_run=False,
     allow_partial_partitions=False,
     snowflake_resource_key: str = "snowflake",
     snowflake_usage_latency: int = SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS,
@@ -63,12 +61,8 @@ def create_snowflake_insights_asset_and_schedule(
     Dagster Insights.
 
     Args:
-        start_date (date): The date to start the partitioned schedule on. This should be the date
+        start_date (Union[datetime, str]): The date to start the partitioned schedule on. This should be the date
             that you began to track cost data alongside your dbt runs.
-        code_location_name (str): The name of the code location that this asset should be associated
-            with in Dagster Insights.
-        repository_name (str): The name of the repository that this asset should be associated with
-            in Dagster Insights.
         name (Optional[str]): The name of the asset. Defaults to "snowflake_query_history".
         group_name (Optional[str]): The name of the asset group. Defaults to the default group.
         job_name (str): The name of the job that will be created to run the schedule. Defaults to
@@ -82,11 +76,14 @@ def create_snowflake_insights_asset_and_schedule(
             query_history table is not immediately available after the end of the hour. Its latency
             has an SLA of 45 minutes. The default value is 105 minutes, which provides an hour buffer.
     """
+    # for backcompat, this used to take `date`
+    if isinstance(start_date, date):
+        start_date = start_date.strftime("%Y-%m-%d-%H:%M")
 
     @asset(
         name=name,
         group_name=group_name,
-        partitions_def=HourlyPartitionsDefinition(start_date=start_date.strftime("%Y-%m-%d-%H:%M")),
+        partitions_def=HourlyPartitionsDefinition(start_date=start_date),
         required_resource_keys={snowflake_resource_key},
     )
     def poll_snowflake_query_history_hour(
@@ -109,8 +106,6 @@ def create_snowflake_insights_asset_and_schedule(
                 )
 
         instance = context.instance
-        if not isinstance(instance, DagsterCloudAgentInstance):
-            raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
 
         costs = (
             get_cost_data_for_hour(
@@ -135,32 +130,39 @@ def create_snowflake_insights_asset_and_schedule(
 
             for run_id, step_key in mat_by_step.keys():
                 materializations = mat_by_step[(run_id, step_key)]
-                for i in range(0, len(materializations), 5):
+                costs_by_asset_key_and_partition: Dict[Tuple[str, Optional[str]], float] = {}
+                for mat, cost in materializations:
+                    key = (mat.asset_key.to_string(), mat.partition)
+                    costs_by_asset_key_and_partition[key] = costs_by_asset_key_and_partition.get(
+                        key, 0
+                    ) + float(cost)
+
+                costs_keys = list(costs_by_asset_key_and_partition.keys())
+
+                for i in range(0, len(costs_keys), 5):
                     metrics_to_submit.append(
                         {
-                            "repositoryName": repository_name,
-                            "codeLocationName": code_location_name,
                             "stepKey": step_key,
                             "runId": run_id,
                             "assetMetricDefinitions": [
                                 {
-                                    "assetKey": mat.asset_key.to_string(),
-                                    "assetGroup": "default",
+                                    "assetKey": key[0],
+                                    "partition": key[1],
                                     "metricValues": [
                                         {
                                             "metricName": "snowflake_credits",
-                                            "metricValue": float(cost),
+                                            "metricValue": float(
+                                                costs_by_asset_key_and_partition[key]
+                                            ),
                                         }
                                     ],
                                 }
-                                for mat, cost in materializations[i : i + 5]
+                                for key in costs_keys[i : i + 5]
                             ],
                         }
                     )
                 metrics_to_submit.append(
                     {
-                        "repositoryName": repository_name,
-                        "codeLocationName": code_location_name,
                         "stepKey": step_key,
                         "runId": run_id,
                         "jobMetricDefinitions": [

@@ -18,7 +18,7 @@ from typing import (
 from uuid import uuid4
 
 import dagster._check as check
-from dagster import DagsterInvalidInvocationError
+from dagster import AssetCheckKey, DagsterInvalidInvocationError
 from dagster._core.assets import AssetDetails
 from dagster._core.definitions.events import AssetKey, ExpectationResult
 from dagster._core.event_api import EventLogRecord, EventRecordsFilter, RunShardedEventsCursor
@@ -911,13 +911,15 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
         return res
 
-    def get_asset_check_executions(
+    def get_asset_check_execution_history(
         self,
-        asset_key: AssetKey,
-        check_name: str,
+        check_key: AssetCheckKey,
         limit: int,
         cursor: Optional[int] = None,
-        materialization_event_storage_id: Optional[int] = None,
-        include_planned: bool = True,
     ) -> Sequence[AssetCheckExecutionRecord]:
+        raise NotImplementedError("Not callable from user cloud")
+
+    def get_latest_asset_check_execution_by_key(
+        self, asset_check_keys: Sequence[AssetCheckKey]
+    ) -> Mapping[AssetCheckKey, AssetCheckExecutionRecord]:
         raise NotImplementedError("Not callable from user cloud")
