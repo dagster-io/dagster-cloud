@@ -1,9 +1,12 @@
 from typing import Any, Dict, List, Optional, cast
 
 from dagster import (
+    Enum as DagsterEnum,
+    EnumValue,
     Field,
     Map,
     Noneable,
+    Permissive,
     Selector,
     Shape,
     _check as check,
@@ -94,6 +97,56 @@ def process_workspace_config(workspace_config) -> Dict[str, Any]:
         return workspace_config
 
 
+K8S_CONFIG_FIELDS = {
+    **SHARED_K8S_CONFIG,
+    "run_k8s_config": Field(
+        Shape(
+            {
+                "container_config": Permissive(),
+                "pod_template_spec_metadata": Permissive(),
+                "pod_spec_config": Permissive(),
+                "job_config": Permissive(),
+                "job_metadata": Permissive(),
+                "job_spec_config": Permissive(),
+                "merge_behavior": Field(
+                    DagsterEnum(
+                        "K8sConfigMergeBehavior",
+                        [
+                            EnumValue("SHALLOW"),
+                            EnumValue("DEEP"),
+                        ],
+                    ),
+                    is_required=False,
+                ),
+            }
+        ),
+        is_required=False,
+        description="Raw Kubernetes configuration for launched runs.",
+    ),
+    "server_k8s_config": Field(
+        Shape(
+            {
+                "container_config": Permissive(),
+                "pod_spec_config": Permissive(),
+                "pod_template_spec_metadata": Permissive(),
+                "merge_behavior": Field(
+                    DagsterEnum(
+                        "K8sConfigMergeBehavior",
+                        [
+                            EnumValue("SHALLOW"),
+                            EnumValue("DEEP"),
+                        ],
+                    ),
+                    is_required=False,
+                ),
+            }
+        ),
+        is_required=False,
+        description="Raw Kubernetes configuration for launched code servers.",
+    ),
+}
+
+
 CONFIG_SCHEMA_FIELDS = {
     # Only used by the new workspace.yaml format, legacy format has the name as a key
     "location_name": Field(config=str, is_required=True, description="Location name"),
@@ -176,7 +229,7 @@ CONFIG_SCHEMA_FIELDS = {
     "container_context": Field(
         Shape(
             fields={
-                "k8s": Field(Shape(SHARED_K8S_CONFIG), is_required=False),
+                "k8s": Field(Shape(K8S_CONFIG_FIELDS), is_required=False),
                 "docker": Field(Shape(SHARED_DOCKER_CONFIG), is_required=False),
                 "ecs": Field(Shape(ECS_CONTAINER_CONTEXT_CONFIG), is_required=False),
             },

@@ -106,7 +106,7 @@ def construct_code_location_deployment(
         container_context.get_environment_dict(),
     )
 
-    user_defined_config = container_context.get_server_user_defined_k8s_config()
+    user_defined_config = container_context.server_k8s_config
 
     container_config = copy.deepcopy(user_defined_config.container_config)
 

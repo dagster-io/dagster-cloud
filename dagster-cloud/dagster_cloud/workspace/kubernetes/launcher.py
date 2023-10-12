@@ -10,6 +10,8 @@ from dagster import (
     Field,
     IntSource,
     Noneable,
+    Permissive,
+    Shape,
     StringSource,
     _check as check,
 )
@@ -18,6 +20,7 @@ from dagster._serdes.config_class import ConfigurableClassData
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
+from dagster_k8s.job import UserDefinedDagsterK8sConfig
 from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.models.v1_deployment_list import V1DeploymentList
 from kubernetes.client.rest import ApiException
@@ -216,6 +219,31 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 ),
                 "namespace": Field(StringSource, is_required=False, default_value="default"),
                 "scheduler_name": Field(StringSource, is_required=False),
+                "run_k8s_config": Field(
+                    Shape(
+                        {
+                            "container_config": Permissive(),
+                            "pod_template_spec_metadata": Permissive(),
+                            "pod_spec_config": Permissive(),
+                            "job_config": Permissive(),
+                            "job_metadata": Permissive(),
+                            "job_spec_config": Permissive(),
+                        }
+                    ),
+                    is_required=False,
+                    description="Raw Kubernetes configuration for launched runs.",
+                ),
+                "server_k8s_config": Field(
+                    Shape(
+                        {
+                            "container_config": Permissive(),
+                            "pod_spec_config": Permissive(),
+                            "pod_template_spec_metadata": Permissive(),
+                        }
+                    ),
+                    is_required=False,
+                    description="Raw Kubernetes configuration for launched code servers.",
+                ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
@@ -255,8 +283,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             resources=self._resources,
             scheduler_name=self._scheduler_name,
             security_context=self._security_context,
-            server_k8s_config=self._server_k8s_config,
-            run_k8s_config=self._run_k8s_config,
+            server_k8s_config=UserDefinedDagsterK8sConfig.from_dict(self._server_k8s_config),
+            run_k8s_config=UserDefinedDagsterK8sConfig.from_dict(self._run_k8s_config),
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
 
     def _start_new_server_spinup(

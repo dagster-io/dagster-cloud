@@ -35,7 +35,7 @@ def upload_identity_provider_metadata_command(
     if not url:
         url = gql.url_from_config(organization=organization)
 
-    with open(metadata_file, "r", encoding="utf8") as f:
+    with open(metadata_file, "rb") as f:
         response = requests.post(
             url=f"{url}/upload_idp_metadata",
             headers=get_dagster_cloud_api_headers(api_token, DagsterCloudInstanceScope.DEPLOYMENT),

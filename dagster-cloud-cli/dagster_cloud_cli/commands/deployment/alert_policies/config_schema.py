@@ -173,53 +173,56 @@ ALERT_POLICY_SCHEMA = Shape(
             default_value=True,
             description="Whether the alert policy is active or not.",
         ),
-        "alert_target": Field(
-            Selector(
-                fields={
-                    "asset_group_target": Field(
-                        config=Shape(
-                            fields={
-                                "asset_group": Field(
-                                    config=str,
-                                    is_required=True,
-                                    description="The name of the asset group.",
-                                ),
-                                "location_name": Field(
-                                    config=str,
-                                    is_required=True,
-                                    description=(
-                                        "The name of the code location that contains the asset"
-                                        " group."
+        "alert_targets": Field(
+            config=Array(
+                Selector(
+                    fields={
+                        "asset_group_target": Field(
+                            config=Shape(
+                                fields={
+                                    "asset_group": Field(
+                                        config=str,
+                                        is_required=True,
+                                        description="The name of the asset group.",
                                     ),
-                                ),
-                                "repo_name": Field(
-                                    config=str,
-                                    is_required=False,
-                                    description=(
-                                        "The name of the repository that contains the asset group."
-                                        " Only required if there are multiple repositories with the"
-                                        " same code location."
+                                    "location_name": Field(
+                                        config=str,
+                                        is_required=True,
+                                        description=(
+                                            "The name of the code location that contains the asset"
+                                            " group."
+                                        ),
                                     ),
-                                    default_value=SINGLETON_REPOSITORY_NAME,
-                                ),
-                            }
-                        )
+                                    "repo_name": Field(
+                                        config=str,
+                                        is_required=False,
+                                        description=(
+                                            "The name of the repository that contains the asset"
+                                            " group. Only required if there are multiple"
+                                            " repositories with the same code location."
+                                        ),
+                                        default_value=SINGLETON_REPOSITORY_NAME,
+                                    ),
+                                }
+                            )
+                        ),
+                        "asset_key_target": Field(
+                            config=Shape(
+                                fields={
+                                    "asset_key": Field(
+                                        config=Array(str),
+                                        is_required=True,
+                                        description="The key of the asset.",
+                                    )
+                                }
+                            )
+                        ),
+                    },
+                    description=(
+                        "Information for targeting events for this alert policy. If no target is"
+                        " specified, the alert policy will apply to all events of a particular"
+                        " type."
                     ),
-                    "asset_key_target": Field(
-                        config=Shape(
-                            fields={
-                                "asset_key": Field(
-                                    config=Array(str),
-                                    is_required=True,
-                                    description="The key of the asset.",
-                                )
-                            }
-                        )
-                    ),
-                },
-                description=(
-                    "Information for targeting events for this alert policy. If no target is"
-                    " specified, the alert policy will apply to all events of a particular type."
                 ),
             ),
             is_required=False,
