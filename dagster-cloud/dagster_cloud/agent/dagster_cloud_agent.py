@@ -299,6 +299,7 @@ class DagsterCloudAgent:
             variable_values={
                 "serializedAgentHeartbeats": serialized_agent_heartbeats,
             },
+            idempotent_mutation=True,
         )
 
         if "errors" in res:

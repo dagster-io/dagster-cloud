@@ -299,11 +299,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             else self._instance.graphql_client
         )
 
-    def _execute_query(self, query, variables=None, headers=None):
+    def _execute_query(self, query, variables=None, headers=None, idempotent_mutation=False):
         res = self._graphql_client.execute(
             query,
             variable_values=variables,
             headers=headers,
+            idempotent_mutation=idempotent_mutation,
         )
         if "errors" in res:
             raise GraphQLStorageError(res)
@@ -843,6 +844,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 "stepKey": step_key,
                 "priority": priority,
             },
+            idempotent_mutation=True,
         )
         claim_status = res["data"]["eventLogs"]["ClaimConcurrencySlot"]["status"]
         return ConcurrencyClaimStatus(
@@ -898,7 +900,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def free_concurrency_slots_for_run(self, run_id: str) -> None:
         check.str_param(run_id, "run_id")
         res = self._execute_query(
-            FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION, variables={"runId": run_id}
+            FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION,
+            variables={"runId": run_id},
+            idempotent_mutation=True,
         )
         return res
 
@@ -908,6 +912,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         res = self._execute_query(
             FREE_CONCURRENCY_SLOT_FOR_STEP_MUTATION,
             variables={"runId": run_id, "stepKey": step_key},
+            idempotent_mutation=True,
         )
         return res
 

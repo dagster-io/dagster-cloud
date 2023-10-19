@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import List
 
+from dagster import _seven as seven
 from typer import Argument, Option, Typer
 
 from dagster_cloud_cli import docker_utils, gql, pex_utils, ui
@@ -422,6 +423,12 @@ def deploy_python_executable_command(
     **kwargs,
 ):
     """Add a code location from a local directory, deployed as a Python executable."""
+    if seven.IS_WINDOWS:
+        raise ui.error(
+            "Deploying Python executables is not supported on Windows. See 'deploy-docker' as an"
+            " alternative deployment method."
+        )
+
     location_name = kwargs.get("location_name")
     if not location_name:
         raise ui.error(

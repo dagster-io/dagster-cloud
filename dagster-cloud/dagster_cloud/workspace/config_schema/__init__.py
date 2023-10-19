@@ -163,6 +163,14 @@ CONFIG_SCHEMA_FIELDS = {
                     is_required=True,
                     description="Identifies which Pex files to use (internal only).",
                 ),
+                "python_version": Field(
+                    config=str,
+                    is_required=False,
+                    description=(
+                        "Determines which base image to use for pex, alternative to specifying the"
+                        " top level image."
+                    ),
+                ),
             }
         ),
         is_required=False,

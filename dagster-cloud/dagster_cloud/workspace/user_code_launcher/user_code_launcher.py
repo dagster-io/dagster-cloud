@@ -491,7 +491,10 @@ class DagsterCloudUserCodeLauncher(
         return False
 
     def _update_workspace_entry(
-        self, deployment_name: str, workspace_entry: DagsterCloudUploadWorkspaceEntry
+        self,
+        deployment_name: str,
+        workspace_entry: DagsterCloudUploadWorkspaceEntry,
+        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
     ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             dst = os.path.join(temp_dir, "workspace_entry.tmp")
@@ -525,7 +528,7 @@ class DagsterCloudUserCodeLauncher(
             )
 
             # if the update took we are all done
-            if response.updated:
+            if response.updated or isinstance(server_or_error, SerializableErrorInfo):
                 return
 
             # if not there must be missing job snapshots, upload them and then try again
@@ -539,7 +542,9 @@ class DagsterCloudUserCodeLauncher(
             self._logger.info(f"Uploading {len(missing)} job snapshots.")
             with ThreadPoolExecutor() as executor:
                 futures = [
-                    executor.submit(self.upload_job_snapshot, deployment_name, job_selector)
+                    executor.submit(
+                        self.upload_job_snapshot, deployment_name, job_selector, server_or_error
+                    )
                     for job_selector in missing
                 ]
                 wait(futures)
@@ -575,9 +580,10 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
+        server: DagsterCloudGrpcServer,
     ) -> DagsterCloudUploadLocationData:
         location_origin = self._get_code_location_origin(location_name)
-        client = self.get_grpc_endpoint(deployment_name, location_name).create_client()
+        client = server.server_endpoint.create_client()
 
         list_repositories_response = sync_list_repositories_grpc(client)
 
@@ -646,7 +652,9 @@ class DagsterCloudUserCodeLauncher(
             serialized_error_info=error_info,
         )
 
-        self._update_workspace_entry(deployment_name, errored_workspace_entry)
+        self._update_workspace_entry(
+            deployment_name, errored_workspace_entry, server_or_error=error_info
+        )
 
     def _update_location_data(
         self,
@@ -654,59 +662,57 @@ class DagsterCloudUserCodeLauncher(
         location_name: str,
         server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
         metadata: CodeDeploymentMetadata,
-    ):
+    ) -> None:
+        """Attempt to update Dagster Cloud with snapshots for this code location. If there's a failure
+        writing (e.g. a timeout while generating the needed snapshots), will attempt to upload the
+        error state to Dagster Cloud instead, then raise an Exception that must be caught and handled
+        in the reconciliation loop in the callsite.
+        """
         self._logger.info(f"Fetching metadata for {deployment_name}:{location_name}")
 
-        try:
-            if isinstance(server_or_error, SerializableErrorInfo):
-                self._update_location_error(
-                    deployment_name,
-                    location_name,
-                    error_info=server_or_error,
-                    metadata=metadata,
-                )
-                return
-
-            try:
-                loaded_workspace_entry = DagsterCloudUploadWorkspaceEntry(
-                    location_name=location_name,
-                    deployment_metadata=metadata,
-                    upload_location_data=self._get_upload_location_data(
-                        deployment_name,
-                        location_name,
-                    ),
-                    serialized_error_info=None,
-                )
-
-                self._logger.info(
-                    f"Updating {deployment_name}:{location_name} with repository load data"
-                )
-
-                self._update_workspace_entry(deployment_name, loaded_workspace_entry)
-            except Exception:
-                # Try to write the error to cloud. If this doesn't work the outer try block
-                # prevents this from blocking the agent loop.
-                self._update_location_error(
-                    deployment_name,
-                    location_name,
-                    error_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                    metadata=metadata,
-                )
-                return
-
-        except Exception:
-            # Don't let a failure uploading the serialized data keep other locations
-            # from being updated or continue reconciling in a loop
-            error_info = serializable_error_info_from_exc_info(sys.exc_info())
-            self._logger.error(
-                f"Error while writing location data for {deployment_name}:{location_name}:"
-                f" {error_info}"
+        if isinstance(server_or_error, SerializableErrorInfo):
+            self._update_location_error(
+                deployment_name,
+                location_name,
+                error_info=server_or_error,
+                metadata=metadata,
             )
+            return
+
+        try:
+            loaded_workspace_entry = DagsterCloudUploadWorkspaceEntry(
+                location_name=location_name,
+                deployment_metadata=metadata,
+                upload_location_data=self._get_upload_location_data(
+                    deployment_name,
+                    location_name,
+                    server_or_error,
+                ),
+                serialized_error_info=None,
+            )
+
+            self._logger.info(
+                f"Updating {deployment_name}:{location_name} with repository load data"
+            )
+
+            self._update_workspace_entry(deployment_name, loaded_workspace_entry, server_or_error)
+        except Exception:
+            # Try to write the error to cloud.
+            self._update_location_error(
+                deployment_name,
+                location_name,
+                error_info=serializable_error_info_from_exc_info(sys.exc_info()),
+                metadata=metadata,
+            )
+            raise
 
     @property
     @abstractmethod
     def requires_images(self) -> bool:
         pass
+
+    def _resolve_image(self, metadata: CodeDeploymentMetadata) -> Optional[str]:
+        return metadata.image
 
     def _get_existing_pex_servers(
         self, deployment_name: str, location_name: str
@@ -1052,7 +1058,7 @@ class DagsterCloudUserCodeLauncher(
         pass
 
     def _check_for_image(self, metadata: CodeDeploymentMetadata):
-        if self.requires_images and not metadata.image:
+        if self.requires_images and not self._resolve_image(metadata):
             raise Exception(
                 "Your agent's configuration requires you to specify an image. "
                 "Use the `--image` flag when specifying your location to tell the agent "
@@ -1186,6 +1192,8 @@ class DagsterCloudUserCodeLauncher(
                         self._logger.info(
                             f"Creating new multipex server for {deployment_name}:{location_name}"
                         )
+                        # confirm it's a valid image since _create_multipex_server will launch a container
+                        self._check_for_image(desired_entry.code_deployment_metadata)
                         multipex_server = self._create_multipex_server(
                             deployment_name, location_name, desired_entry.code_deployment_metadata
                         )
@@ -1301,7 +1309,7 @@ class DagsterCloudUserCodeLauncher(
                         server_or_error.server_handle,
                         server_or_error.server_endpoint,
                     )
-                except:
+                except Exception:
                     error_info = serializable_error_info_from_exc_info(sys.exc_info())
                     self._logger.error(
                         "Error while waiting for server for {deployment_name}:{location_name} to be"
@@ -1313,17 +1321,29 @@ class DagsterCloudUserCodeLauncher(
                     )
                     server_or_error = error_info
 
-            with self._grpc_servers_lock:
-                self._grpc_servers[to_update_key] = server_or_error
-
+            # If needed, upload snapshot information to Dagster Cloud
             if to_update_key in upload_locations:
                 upload_locations.remove(to_update_key)
-                self._update_location_data(
-                    deployment_name,
-                    location_name,
-                    server_or_error,
-                    desired_entries[to_update_key].code_deployment_metadata,
-                )
+                try:
+                    self._update_location_data(
+                        deployment_name,
+                        location_name,
+                        server_or_error,
+                        desired_entries[to_update_key].code_deployment_metadata,
+                    )
+                except Exception:
+                    # If there was a failure uploading snapshots, log it but don't block other code locations
+                    # from updating (and still use the new server to serve new requests)
+                    error_info = serializable_error_info_from_exc_info(sys.exc_info())
+                    self._logger.error(
+                        f"Error while writing location data for {deployment_name}:{location_name}:"
+                        f" {error_info}"
+                    )
+
+            # Once we've verified that the new server has uploaded its data successfully, swap in
+            # the server to start serving new requests
+            with self._grpc_servers_lock:
+                self._grpc_servers[to_update_key] = server_or_error
 
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
@@ -1446,12 +1466,19 @@ class DagsterCloudUserCodeLauncher(
                 server_or_error = self._grpc_servers[location]
 
             deployment_name, location_name = location
-            self._update_location_data(
-                deployment_name,
-                location_name,
-                server_or_error,
-                self._actual_entries[location].code_deployment_metadata,
-            )
+            try:
+                self._update_location_data(
+                    deployment_name,
+                    location_name,
+                    server_or_error,
+                    self._actual_entries[location].code_deployment_metadata,
+                )
+            except Exception:
+                self._logger.error(
+                    f"Error while writing location data for {deployment_name}:{location_name}:"
+                    f" {serializable_error_info_from_exc_info(sys.exc_info())}"
+                )
+
         seconds = time.time() - start_time
         self._logger.info(f"Finished reconciling in {seconds} seconds.")
         self._event_logger.info(
@@ -1713,11 +1740,10 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         job_selector: JobSelector,
+        server: DagsterCloudGrpcServer,
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
-            client = self.get_grpc_endpoint(
-                deployment_name, job_selector.location_name
-            ).create_client()
+            client = server.server_endpoint.create_client()
             location_origin = self._get_code_location_origin(job_selector.location_name)
             response = client.external_job(
                 ExternalRepositoryOrigin(location_origin, job_selector.repository_name),

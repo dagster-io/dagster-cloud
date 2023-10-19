@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List, NamedTuple, Optional
 
 import dagster._check as check
@@ -25,14 +26,34 @@ class GitMetadata(
 class PexMetadata(
     NamedTuple(
         "_PexMetadata",
-        [("pex_tag", str)],
+        [
+            # pex_tag is a string like 'deps-234y4384.pex:source-39y3474.pex' that idenfies
+            # the pex files to execute
+            ("pex_tag", str),
+            # python_version determines which pex base docker image to use
+            # only one of PexMetadata.python_version or CodeDeploymentMetadata.image should be specified
+            ("python_version", Optional[str]),
+        ],
     )
 ):
-    def __new__(cls, pex_tag):
+    def __new__(cls, pex_tag, python_version=None):
         return super(PexMetadata, cls).__new__(
             cls,
             check.str_param(pex_tag, "pex_tag"),
+            check.opt_str_param(python_version, "python_version"),
         )
+
+    def resolve_image(self) -> Optional[str]:
+        if not self.python_version:
+            return None
+        agent_image_tag = os.getenv("DAGSTER_CLOUD_AGENT_IMAGE_TAG")
+        serverless_service_name = os.getenv("SERVERLESS_SERVICE_NAME")
+        if not agent_image_tag or not serverless_service_name:
+            return None
+        if serverless_service_name in ["serverless-agents", "serverless-agents-public-demo"]:
+            return f"657821118200.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{agent_image_tag}"
+        else:
+            return f"878483074102.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{agent_image_tag}"
 
 
 @whitelist_for_serdes

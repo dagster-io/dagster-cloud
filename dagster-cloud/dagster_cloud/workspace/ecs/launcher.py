@@ -349,11 +349,14 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         ]
         if invalid_user_keys:
             raise Exception(f"Cannot override system ECS tags: {', '.join(invalid_user_keys)}")
+        image = self._resolve_image(metadata)
+        if image != metadata.image:
+            self._logger.info("Resolved image to %r", image)
 
         service = self.client.create_service(
             name=unique_ecs_resource_name(deployment_name, location_name),
             family=family,
-            image=metadata.image,
+            image=image,
             container_name=CONTAINER_NAME,
             command=command,
             execution_role_arn=container_context.execution_role_arn,
