@@ -175,12 +175,15 @@ def wait_for_load(
             ]
 
             if error_locations:
-                error_string = "Some locations failed to load after being synced by the agent:\n" + "\n".join(
-                    [
-                        f"Error loading {error_location}:"
-                        f" {nodes_by_location[error_location]['locationOrLoadError']}"
-                        for error_location in error_locations
-                    ]
+                error_string = (
+                    "Some locations failed to load after being synced by the agent:\n"
+                    + "\n".join(
+                        [
+                            f"Error loading {error_location}:"
+                            f" {nodes_by_location[error_location]['locationOrLoadError']}"
+                            for error_location in error_locations
+                        ]
+                    )
                 )
                 raise ui.error(error_string)
             else:

@@ -127,9 +127,8 @@ def construct_code_location_deployment(
         **container_config,
         "name": container_name,
         "image": metadata.image,
-        "env": [
-            {"name": key, "value": value} for key, value in env.items()
-        ] + user_defined_env_vars,
+        "env": [{"name": key, "value": value} for key, value in env.items()]
+        + user_defined_env_vars,
         "env_from": (
             [{"config_map_ref": {"name": config_map}} for config_map in env_config_maps]
             + [{"secret_ref": {"name": secret_name}} for secret_name in env_secrets]
@@ -150,9 +149,8 @@ def construct_code_location_deployment(
 
     pod_spec_config = {
         **pod_spec_config,
-        "image_pull_secrets": [
-            {"name": x["name"]} for x in image_pull_secrets
-        ] + user_defined_image_pull_secrets,
+        "image_pull_secrets": [{"name": x["name"]} for x in image_pull_secrets]
+        + user_defined_image_pull_secrets,
         "service_account_name": user_defined_service_account_name or service_account_name,
         "containers": [container_config] + user_defined_containers,
         "volumes": volumes + user_defined_volumes,

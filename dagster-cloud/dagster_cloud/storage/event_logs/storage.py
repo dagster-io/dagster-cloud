@@ -662,9 +662,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         latest_storage_id_by_partition: Dict[str, int] = {}
 
         for graphene_latest_storage_id in latest_storage_id_result:
-            latest_storage_id_by_partition[graphene_latest_storage_id["partition"]] = (
-                graphene_latest_storage_id["storageId"]
-            )
+            latest_storage_id_by_partition[
+                graphene_latest_storage_id["partition"]
+            ] = graphene_latest_storage_id["storageId"]
 
         return latest_storage_id_by_partition
 
@@ -691,20 +691,21 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         latest_tags_by_partition_result = res["data"]["eventLogs"]["getLatestTagsByPartition"]
         latest_tags_by_partition: Dict[str, Dict[str, str]] = defaultdict(dict)
         for tag_by_partition in latest_tags_by_partition_result:
-            latest_tags_by_partition[tag_by_partition["partition"]][tag_by_partition["key"]] = (
-                tag_by_partition["value"]
-            )
+            latest_tags_by_partition[tag_by_partition["partition"]][
+                tag_by_partition["key"]
+            ] = tag_by_partition["value"]
 
         # convert defaultdict to dict
         return dict(latest_tags_by_partition)
 
     def get_latest_asset_partition_materialization_attempts_without_materializations(
-        self, asset_key: AssetKey
+        self, asset_key: AssetKey, after_storage_id: Optional[int] = None
     ) -> Mapping[str, Tuple[str, int]]:
         res = self._execute_query(
             GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
             variables={
                 "assetKey": asset_key.to_string(),
+                "afterStorageId": after_storage_id,
             },
         )
         return res["data"]["eventLogs"][

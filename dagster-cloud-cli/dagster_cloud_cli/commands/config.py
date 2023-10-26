@@ -43,7 +43,7 @@ def set_deployment(
 def view(
     show_token: bool = Option(
         False, "--show-token", "-s", help="Whether to display the user token in plaintext."
-    )
+    ),
 ):
     """View the current CLI configuration."""
     config = read_config()

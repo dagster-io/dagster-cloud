@@ -382,8 +382,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             volumes=container_context.volumes,
         )
         self._logger.info(
-            "Created a new service at hostname {} for {}:{}, waiting for server to be ready..."
-            .format(service.hostname, deployment_name, location_name)
+            "Created a new service at hostname {} for {}:{}, waiting for server to be ready...".format(
+                service.hostname, deployment_name, location_name
+            )
         )
 
         endpoint = ServerEndpoint(

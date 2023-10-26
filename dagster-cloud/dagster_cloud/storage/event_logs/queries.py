@@ -61,7 +61,9 @@ fragment EventLogEntryFragment on EventLogEntry {
 }
 """
 
-EVENT_RECORD_FRAGMENT = EVENT_LOG_ENTRY_FRAGMENT + """
+EVENT_RECORD_FRAGMENT = (
+    EVENT_LOG_ENTRY_FRAGMENT
+    + """
     fragment EventLogRecordFragment on EventLogRecord {
         storageId
         eventLogEntry {
@@ -69,6 +71,7 @@ EVENT_RECORD_FRAGMENT = EVENT_LOG_ENTRY_FRAGMENT + """
         }
     }
     """
+)
 
 CACHED_STATUS_DATA_FRAGMENT = """
 fragment CachedStatusDataFragment on AssetStatusCacheValue {
@@ -81,7 +84,10 @@ fragment CachedStatusDataFragment on AssetStatusCacheValue {
 }
 """
 
-ASSET_ENTRY_FRAGMENT = EVENT_RECORD_FRAGMENT + CACHED_STATUS_DATA_FRAGMENT + """
+ASSET_ENTRY_FRAGMENT = (
+    EVENT_RECORD_FRAGMENT
+    + CACHED_STATUS_DATA_FRAGMENT
+    + """
     fragment AssetEntryFragment on AssetEntry {
         assetKey {
             path
@@ -98,8 +104,11 @@ ASSET_ENTRY_FRAGMENT = EVENT_RECORD_FRAGMENT + CACHED_STATUS_DATA_FRAGMENT + """
         }
     }
     """
+)
 
-ASSET_RECORD_FRAGMENT = ASSET_ENTRY_FRAGMENT + """
+ASSET_RECORD_FRAGMENT = (
+    ASSET_ENTRY_FRAGMENT
+    + """
     fragment AssetRecordFragment on AssetRecord {
         storageId
         assetEntry {
@@ -107,8 +116,11 @@ ASSET_RECORD_FRAGMENT = ASSET_ENTRY_FRAGMENT + """
         }
     }
     """
+)
 
-GET_RECORDS_FOR_RUN_QUERY = EVENT_RECORD_FRAGMENT + """
+GET_RECORDS_FOR_RUN_QUERY = (
+    EVENT_RECORD_FRAGMENT
+    + """
     query getRecordsForRun($runId: String!, $cursor: String, $ofType: String, $ofTypes: [String!], $limit: Int) {
         eventLogs {
             getRecordsForRun(runId: $runId, cursor: $cursor, ofType: $ofType, ofTypes: $ofTypes, limit: $limit) {
@@ -121,6 +133,7 @@ GET_RECORDS_FOR_RUN_QUERY = EVENT_RECORD_FRAGMENT + """
         }
     }
     """
+)
 
 GET_STATS_FOR_RUN_QUERY = """
     query getStatsForRun($runId: String!) {
@@ -175,7 +188,9 @@ IS_ASSET_AWARE_QUERY = """
     }
     """
 
-GET_EVENT_RECORDS_QUERY = EVENT_RECORD_FRAGMENT + """
+GET_EVENT_RECORDS_QUERY = (
+    EVENT_RECORD_FRAGMENT
+    + """
     query getEventRecords($eventRecordsFilter: EventRecordsFilter, $limit: Int, $ascending: Boolean) {
         eventLogs {
             getEventRecords(
@@ -188,6 +203,7 @@ GET_EVENT_RECORDS_QUERY = EVENT_RECORD_FRAGMENT + """
         }
     }
     """
+)
 HAS_ASSET_KEY_QUERY = """
     query hasAssetKey($assetKey: String!) {
         eventLogs {
@@ -196,7 +212,9 @@ HAS_ASSET_KEY_QUERY = """
     }
     """
 
-GET_LATEST_MATERIALIZATION_EVENTS_QUERY = EVENT_LOG_ENTRY_FRAGMENT + """
+GET_LATEST_MATERIALIZATION_EVENTS_QUERY = (
+    EVENT_LOG_ENTRY_FRAGMENT
+    + """
     query getLatestMaterializationEvents($assetKeys: [String!]!) {
         eventLogs {
             getLatestMaterializationEvents(assetKeys: $assetKeys) {
@@ -205,8 +223,11 @@ GET_LATEST_MATERIALIZATION_EVENTS_QUERY = EVENT_LOG_ENTRY_FRAGMENT + """
         }
     }
     """
+)
 
-GET_ASSET_RECORDS_QUERY = ASSET_RECORD_FRAGMENT + """
+GET_ASSET_RECORDS_QUERY = (
+    ASSET_RECORD_FRAGMENT
+    + """
     query getAssetRecords($assetKeys: [String!]) {
         eventLogs {
             getAssetRecords(assetKeys: $assetKeys) {
@@ -215,6 +236,7 @@ GET_ASSET_RECORDS_QUERY = ASSET_RECORD_FRAGMENT + """
         }
     }
     """
+)
 
 GET_ALL_ASSET_KEYS_QUERY = """
     query getAllAssetKeys {
@@ -300,9 +322,9 @@ GET_LATEST_TAGS_BY_PARTITION = """
 """
 
 GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS = """
-    query getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations($assetKey: String!) {
+    query getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations($assetKey: String!, $afterStorageId: BigInt) {
         eventLogs {
-            getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations(assetKey: $assetKey)
+            getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations(assetKey: $assetKey, afterStorageId: $afterStorageId)
         }
     }
     """
@@ -439,7 +461,9 @@ DELETE_DYNAMIC_PARTITION_MUTATION = """
     }
 """
 
-SET_CONCURRENCY_SLOTS_MUTATION = PYTHON_ERROR_FRAGMENT + """
+SET_CONCURRENCY_SLOTS_MUTATION = (
+    PYTHON_ERROR_FRAGMENT
+    + """
 mutation SetConcurrencySlots($concurrencyKey: String!, $num: Int!) {
     eventLogs {
         SetConcurrencySlots(concurrencyKey: $concurrencyKey, num: $num) {
@@ -451,6 +475,7 @@ mutation SetConcurrencySlots($concurrencyKey: String!, $num: Int!) {
     }
 }
 """
+)
 
 GET_CONCURRENCY_KEYS_QUERY = """
 query getConcurrencyKeys {

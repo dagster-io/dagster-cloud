@@ -28,8 +28,9 @@ from dagster import (
 from .dagster_snowflake_insights import (
     AssetMaterializationId,
     get_cost_data_for_hour,
-    query_graphql_from_instance,
 )
+from .dbt_wrapper import OUTPUT_NON_ASSET_SIGIL
+from .utils import DagsterMetric, put_metrics, query_graphql_from_instance
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection
@@ -121,10 +122,9 @@ def create_snowflake_insights_asset_and_schedule(
         if dry_run:
             pprint(costs)
         else:
-            metrics_to_submit = []
-            mat_by_step: Mapping[Tuple[str, str], List[Tuple[AssetMaterializationId, Any]]] = (
-                defaultdict(list)
-            )
+            mat_by_step: Mapping[
+                Tuple[str, str], List[Tuple[AssetMaterializationId, Any]]
+            ] = defaultdict(list)
             for mat, cost in costs:
                 mat_by_step[(mat.run_id, mat.step_key)].append((mat, cost))
 
@@ -132,79 +132,52 @@ def create_snowflake_insights_asset_and_schedule(
                 materializations = mat_by_step[(run_id, step_key)]
                 costs_by_asset_key_and_partition: Dict[Tuple[str, Optional[str]], float] = {}
                 for mat, cost in materializations:
-                    key = (mat.asset_key.to_string(), mat.partition)
-                    costs_by_asset_key_and_partition[key] = costs_by_asset_key_and_partition.get(
-                        key, 0
-                    ) + float(cost)
+                    # filter out any costs not associated with a specific asset (e.g. just an op output)
+                    if not mat.asset_key.path[-1].startswith(OUTPUT_NON_ASSET_SIGIL):
+                        key = (mat.asset_key.to_string(), mat.partition)
+                        costs_by_asset_key_and_partition[key] = (
+                            costs_by_asset_key_and_partition.get(key, 0) + float(cost)
+                        )
 
                 costs_keys = list(costs_by_asset_key_and_partition.keys())
 
-                for i in range(0, len(costs_keys), 5):
-                    metrics_to_submit.append(
-                        {
-                            "stepKey": step_key,
-                            "runId": run_id,
-                            "assetMetricDefinitions": [
-                                {
-                                    "assetKey": key[0],
-                                    "partition": key[1],
-                                    "metricValues": [
-                                        {
-                                            "metricName": "snowflake_credits",
-                                            "metricValue": float(
-                                                costs_by_asset_key_and_partition[key]
-                                            ),
-                                        }
-                                    ],
-                                }
-                                for key in costs_keys[i : i + 5]
-                            ],
-                        }
+                for asset_key, partition in costs_keys:
+                    cost = costs_by_asset_key_and_partition[(asset_key, partition)]
+
+                    result = put_metrics(
+                        context=context,
+                        run_id=run_id,
+                        step_key=step_key,
+                        asset_key=asset_key,
+                        partition=partition,
+                        metrics=[DagsterMetric("snowflake_credits", cost)],
                     )
-                metrics_to_submit.append(
-                    {
-                        "stepKey": step_key,
-                        "runId": run_id,
-                        "jobMetricDefinitions": [
-                            {
-                                "metricValues": [
-                                    {
-                                        "metricName": "snowflake_credits",
-                                        "metricValue": sum(
-                                            [float(cost) for mat, cost in materializations]
-                                        ),
-                                    }
-                                ],
-                            }
-                        ],
-                    }
+                    assert (
+                        result["createOrUpdateMetrics"]["__typename"]
+                        == "CreateOrUpdateMetricsSuccess"
+                    ), result
+
+                result = put_metrics(
+                    context=context,
+                    run_id=run_id,
+                    step_key=step_key,
+                    metrics=[
+                        DagsterMetric(
+                            "snowflake_credits",
+                            sum([float(cost) for mat, cost in materializations]),
+                        )
+                    ],
                 )
-
-            mutation = """
-                mutation AddMetrics($metrics: [MetricInputs]) {
-                    createOrUpdateMetrics(
-                        metrics: $metrics
-                    ) {
-                        __typename
-                        ... on CreateOrUpdateMetricsFailed {
-                            message 
-                        }
-                    }
-                }
-            """
-
-            result = query_graphql_from_instance(
-                instance, query_text=mutation, variables={"metrics": metrics_to_submit}
-            )
-
-            assert (
-                result["data"]["createOrUpdateMetrics"]["__typename"]
-                == "CreateOrUpdateMetricsSuccess"
-            ), result
+                assert (
+                    result["createOrUpdateMetrics"]["__typename"] == "CreateOrUpdateMetricsSuccess"
+                ), result
 
     schedule = build_schedule_from_partitioned_job(
         job=define_asset_job(job_name, AssetSelection.assets(poll_snowflake_query_history_hour)),
         minute_of_hour=59,
     )
     # schedule may be a UnresolvedPartitionedAssetScheduleDefinition so we ignore the type check
-    return SnowflakeInsightsDefinitions(assets=[poll_snowflake_query_history_hour], schedule=schedule)  # type: ignore
+    return SnowflakeInsightsDefinitions(
+        assets=[poll_snowflake_query_history_hour],
+        schedule=schedule,  # type: ignore
+    )

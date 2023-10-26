@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Generator, List, NamedTuple, Optional
+from typing import Any, Dict, Generator, List
 
 import dagster._check as check
 from dagster import AssetObservation, OpExecutionContext
@@ -8,118 +8,19 @@ from gql import Client, gql
 from gql.transport.exceptions import TransportError
 from gql.transport.requests import RequestsHTTPTransport
 
+from ..dagster_insights.errors import DagsterInsightsError
+from ..dagster_insights.utils import (
+    PUT_CLOUD_METRICS_MUTATION,
+    DagsterMetric as DagsterMetric,
+    put_metrics as put_metrics,
+)
 from ..instance import DagsterCloudAgentInstance
-from .errors import DagsterInsightsError
-from .query import PUT_CLOUD_METRICS_MUTATION
 
 
 def _chunks(chunk_list: List[Any], length: int):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(chunk_list), length):
         yield chunk_list[i : i + length]
-
-
-@experimental
-class DagsterMetric(NamedTuple):
-    """Experimental: This class gives information about a Metric.
-
-    Args:
-        metric_name (str): name of the metric
-        metric_value (float): value of the metric
-    """
-
-    metric_name: str
-    metric_value: float
-
-
-@experimental
-def put_metrics(
-    url: str,
-    token: str,
-    run_id: str,
-    step_key: str,
-    code_location_name: str,
-    repository_name: str,
-    metrics: List[DagsterMetric],
-    asset_key: Optional[str] = None,
-    asset_group: Optional[str] = None,
-    partition: Optional[str] = None,
-) -> None:
-    """Experimental: Store metrics in the dagster cloud metrics store. This method is useful when you would like to
-    store run, asset or asset group materialization metric data to view in the insights UI.
-
-    Currently only supported in Dagster Cloud
-
-    Args:
-        url (str): url of the dagster cloud graphql endpoint
-        token (str): dagster cloud api token
-        run_id (str): id of the dagster run
-        step_key (str): key of the step
-        code_location_name (str): name of the code location
-        repository_name (str): name of the repository
-        metrics (List[DagsterMetric]): metrics to store in the dagster metrics store
-        asset_key (Optional[str]): key of the asset
-        asset_group (Optional[str]): group of the asset
-        partition (Optional[str]): partition of the asset
-    """
-    check.list_param(metrics, "metrics", of_type=DagsterMetric)
-    check.str_param(url, "url", url)
-    check.str_param(token, "token", token)
-    check.str_param(run_id, "run_id", run_id)
-    check.str_param(step_key, "step_key", step_key)
-    check.str_param(asset_key, "run_id", asset_key)
-    check.str_param(code_location_name, "code_location_name", code_location_name)
-    check.str_param(repository_name, "repository_name", repository_name)
-    check.opt_str_param(asset_group, "asset_group", asset_group)
-    check.opt_str_param(partition, "partition", partition)
-
-    transport = RequestsHTTPTransport(
-        url=url,
-        use_json=True,
-        timeout=300,
-        headers={"Dagster-Cloud-Api-Token": token},
-    )
-    client = Client(transport=transport, fetch_schema_from_transport=True)
-
-    metric_graphql_input = {
-        "runId": run_id,
-        "stepKey": step_key,
-        "codeLocationName": code_location_name,
-        "repositoryName": repository_name,
-        "assetMetricDefinitions": [],
-        "jobMetricDefinitions": [],
-    }
-
-    if asset_key is not None:
-        metric_graphql_input["assetMetricDefinitions"].append(
-            {
-                "assetKey": asset_key,
-                "assetGroup": asset_group,
-                "partition": partition,
-                "metricValues": [
-                    {
-                        "metricValue": metric_def.metric_value,
-                        "metricName": metric_def.metric_name,
-                    }
-                    for metric_def in metrics
-                ],
-            }
-        )
-    metric_graphql_input["jobMetricDefinitions"].append(
-        {
-            "metricValues": [
-                {
-                    "metricValue": metric_def.metric_value,
-                    "metricName": metric_def.metric_name,
-                }
-                for metric_def in metrics
-            ],
-        }
-    )
-
-    client.execute(
-        gql(PUT_CLOUD_METRICS_MUTATION), variable_values={"metrics": [metric_graphql_input]}
-    )
 
 
 @experimental
@@ -272,8 +173,13 @@ def store_dbt_adapter_metrics(
                     lambda asset_key: asset_key.path[-1] == node["name"],
                     context.selected_asset_keys,
                 )
-            )
+            ),
+            None,
         )
+
+        if not assetKey:
+            continue
+
         for adapter_response_key in result["adapter_response"]:
             if adapter_response_key in ["_message", "code"]:
                 continue

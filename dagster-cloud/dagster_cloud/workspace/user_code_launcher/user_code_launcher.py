@@ -503,8 +503,7 @@ class DagsterCloudUserCodeLauncher(
 
             with open(dst, "rb") as f:
                 self._logger.info(
-                    "Uploading workspace entry for {deployment_name}:{location_name} ({size} bytes)"
-                    .format(
+                    "Uploading workspace entry for {deployment_name}:{location_name} ({size} bytes)".format(
                         deployment_name=deployment_name,
                         location_name=workspace_entry.location_name,
                         size=os.path.getsize(dst),
@@ -1164,9 +1163,9 @@ class DagsterCloudUserCodeLauncher(
 
             # First check what multipex servers already exist for this location (any that are
             # no longer used will be cleaned up at the end)
-            existing_multipex_server_handles[to_update_key] = (
-                self._get_multipex_server_handles_for_location(deployment_name, location_name)
-            )
+            existing_multipex_server_handles[
+                to_update_key
+            ] = self._get_multipex_server_handles_for_location(deployment_name, location_name)
 
             if code_deployment_metadata.pex_metadata:
                 try:
@@ -1264,10 +1263,10 @@ class DagsterCloudUserCodeLauncher(
                 code_deployment_metadata = desired_entry.code_deployment_metadata
 
                 self._logger.info(f"Updating server for {deployment_name}:{location_name}")
-                existing_standalone_dagster_server_handles[to_update_key] = (
-                    self._get_standalone_dagster_server_handles_for_location(
-                        deployment_name, location_name
-                    )
+                existing_standalone_dagster_server_handles[
+                    to_update_key
+                ] = self._get_standalone_dagster_server_handles_for_location(
+                    deployment_name, location_name
                 )
 
                 existing_pex_server_handles[to_update_key] = self._get_existing_pex_servers(
@@ -1355,8 +1354,7 @@ class DagsterCloudUserCodeLauncher(
             if server_handles:
                 removed_any_servers = True
                 self._logger.info(
-                    "Removing {num_servers} existing servers for {deployment_name}:{location_name}"
-                    .format(
+                    "Removing {num_servers} existing servers for {deployment_name}:{location_name}".format(
                         num_servers=len(server_handles),
                         location_name=location_name,
                         deployment_name=deployment_name,

@@ -141,9 +141,7 @@ class DagsterCloudAgent:
             )
 
             if missing_deployment_names:
-                deployment_str = (
-                    f"deployment{'s' if len(missing_deployment_names) > 1 else ''} {', '.join(missing_deployment_names)}"
-                )
+                deployment_str = f"deployment{'s' if len(missing_deployment_names) > 1 else ''} {', '.join(missing_deployment_names)}"
                 raise Exception(
                     f"Agent is configured to serve an invalid {deployment_str}. Check your"
                     " agent configuration to make sure it is serving the correct deployment.",

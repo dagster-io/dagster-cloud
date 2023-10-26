@@ -13,15 +13,12 @@ from typing import (
     Tuple,
 )
 
-import requests
+import dagster._check as check
 from dagster import (
     AssetKey,
     AssetsDefinition,
-    DagsterInstance,
     ScheduleDefinition,
 )
-
-from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgentInstance
 
 from .dbt_wrapper import OPAQUE_ID_METADATA_KEY_PREFIX, OPAQUE_ID_SQL_SIGIL
 
@@ -35,29 +32,6 @@ class AssetMaterializationId:
     asset_key: AssetKey
     partition: Optional[str]
     step_key: str
-
-
-def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str]:
-    if not isinstance(instance, DagsterCloudAgentInstance):
-        raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
-
-    return f"{instance.dagit_url}graphql", instance.dagster_cloud_agent_token
-
-
-def query_graphql_from_instance(
-    instance: DagsterInstance, query_text: str, variables=None
-) -> Dict[str, Any]:
-    headers = {}
-
-    url, cloud_token = get_url_and_token_from_instance(instance)
-
-    headers["Dagster-Cloud-API-Token"] = cloud_token
-
-    return requests.post(
-        url,
-        json={"operationName": None, "variables": variables or dict(), "query": query_text},
-        headers=headers,
-    ).json()
 
 
 def get_opaque_ids_to_assets(
@@ -99,13 +73,13 @@ def get_opaque_ids_to_assets(
 
     response = query_gql(query, {})
 
-    for node in response["data"]["assetsOrError"]["nodes"]:
+    for node in response["assetsOrError"]["nodes"]:
         asset_key = AssetKey.from_graphql_input(node["key"])
         if asset_key is None:
             # should never happen, but we must appease the type checker
             raise RuntimeError("asset_key is None, which should never happen")
         for observation in node["assetObservations"]:
-            run_id = observation["runId"]
+            run_id = check.not_none(observation["runId"])
             partition = observation["partition"]
             step_key = observation["stepKey"]
             opaque_id = None

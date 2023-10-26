@@ -27,7 +27,9 @@ fragment runRecordFragment on RunRecord {
 }
 """
 
-ADD_RUN_MUTATION = ERROR_FRAGMENT + """
+ADD_RUN_MUTATION = (
+    ERROR_FRAGMENT
+    + """
     mutation addRunMutation($serializedPipelineRun: String!) {
         runs {
             addRun(serializedPipelineRun: $serializedPipelineRun) {
@@ -39,6 +41,7 @@ ADD_RUN_MUTATION = ERROR_FRAGMENT + """
         }
     }
 """
+)
 
 
 GET_RUNS_QUERY = """
@@ -115,7 +118,9 @@ GET_RUN_GROUP_QUERY = """
 """
 
 
-GET_RUN_RECORDS_QUERY = RUN_ROW_FRAGMENT + """
+GET_RUN_RECORDS_QUERY = (
+    RUN_ROW_FRAGMENT
+    + """
     query getRunRecordsQuery($filters: RunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean, $bucketBy: RunBucket) {
         runs {
             getRunRecords(filters: $filters, limit: $limit, orderBy: $orderBy, ascending: $ascending, bucketBy: $bucketBy) {
@@ -124,6 +129,7 @@ GET_RUN_RECORDS_QUERY = RUN_ROW_FRAGMENT + """
         }
     }
 """
+)
 
 GET_RUN_TAGS_QUERY = """
     query getRunTagsQuery($jsonTagKeys: JSONString, $valuePrefix: String, $limit: Int) {

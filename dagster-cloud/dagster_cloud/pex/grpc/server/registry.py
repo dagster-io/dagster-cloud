@@ -18,8 +18,11 @@ DEFAULT_PEX_FILES_DIR = "/tmp/pex-files"
 def _download_from_s3(filename: str, local_filepath: str):
     # Lazy import boto3 to avoid a hard dependency during module load
     import boto3
+    from botocore.config import Config
 
-    s3 = boto3.client("s3", region_name="us-west-2")
+    config = Config(retries={"max_attempts": 3, "mode": "standard"})
+
+    s3 = boto3.client("s3", region_name="us-west-2", config=config)
 
     # TODO: move the bucket and prefix to pex_metdata
     s3_bucket_name = os.environ["DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_BUCKET"]
@@ -86,9 +89,9 @@ class PexS3Registry:
             local_pex_files_dir if local_pex_files_dir else DEFAULT_PEX_FILES_DIR
         )
         os.makedirs(self._local_pex_files_dir, exist_ok=True)
-        self.working_dirs: Dict[str, str] = (
-            {}
-        )  # once unpacked, working dirs dont change so we cache them
+        self.working_dirs: Dict[
+            str, str
+        ] = {}  # once unpacked, working dirs dont change so we cache them
 
     def get_pex_executable(self, pex_metadata: PexMetadata) -> PexExecutable:
         if "=" not in pex_metadata.pex_tag:

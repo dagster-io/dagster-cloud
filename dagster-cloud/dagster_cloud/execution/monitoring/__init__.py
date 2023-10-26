@@ -181,9 +181,9 @@ def get_cloud_run_worker_statuses(
                     logger.info(
                         "Run monitoring: get_current_runs not implemented, skipping server handle"
                     )
-                    active_non_isolated_run_ids_by_server_handle[str(handle)] = (
-                        _GetCurrentRunsError.UNIMPLEMENTED
-                    )
+                    active_non_isolated_run_ids_by_server_handle[
+                        str(handle)
+                    ] = _GetCurrentRunsError.UNIMPLEMENTED
 
                 # NOTE: multipex servers on version 1.1.4 and 1.1.5 had a bug where they would return
                 # UNKNOWN errors for GetCurrentRuns. For backcompat, ignore it as unimplemented
@@ -192,14 +192,14 @@ def get_cloud_run_worker_statuses(
                         "Run monitoring: get_current_runs returned UNKNOWN error, skipping server"
                         " handle"
                     )
-                    active_non_isolated_run_ids_by_server_handle[str(handle)] = (
-                        _GetCurrentRunsError.UNIMPLEMENTED
-                    )
+                    active_non_isolated_run_ids_by_server_handle[
+                        str(handle)
+                    ] = _GetCurrentRunsError.UNIMPLEMENTED
                 else:
                     logger.info("Run monitoring: error getting current runs for server handle")
-                    active_non_isolated_run_ids_by_server_handle[str(handle)] = (
-                        _GetCurrentRunsError.OTHER_ERROR
-                    )
+                    active_non_isolated_run_ids_by_server_handle[
+                        str(handle)
+                    ] = _GetCurrentRunsError.OTHER_ERROR
 
     for deployment_name in deployment_names:
         with DagsterInstance.from_ref(

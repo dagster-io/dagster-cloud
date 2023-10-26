@@ -23,10 +23,12 @@ STATUS_MESSAGES = {
 
 def markdown_report(location_states: List[state.LocationState]):
     markdown = []
-    markdown.append("""
+    markdown.append(
+        """
 | Location          | Status          | Link    | Updated         |
 | ----------------- | --------------- | ------- | --------------- | 
-""")
+"""
+    )
     for location_state in location_states:
         if not location_state.selected or not location_state.history:
             continue
