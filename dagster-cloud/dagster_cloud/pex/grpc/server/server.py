@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import threading
@@ -275,7 +276,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
 def run_multipex_server(
     port,
     socket,
-    print_fn,
+    logger: logging.Logger,
     host="localhost",
     max_workers=None,
     local_pex_files_dir: Optional[str] = "/tmp/pex-files",
@@ -320,13 +321,13 @@ def run_multipex_server(
 
         server.start()
 
-        print_fn(f"Started {server_desc}")
+        logger.info(f"Started {server_desc}")
 
         health_servicer.set("MultiPexApi", health_pb2.HealthCheckResponse.SERVING)
 
         server_termination_thread = threading.Thread(
             target=server_termination_target,
-            args=[server_termination_event, server],
+            args=[server_termination_event, server, logger],
             name="grpc-server-termination",
         )
         server_termination_thread.daemon = True
@@ -334,7 +335,7 @@ def run_multipex_server(
 
         server.wait_for_termination()
 
-        print_fn(f"Shutting down {server_desc}")
+        logger.info(f"Shutting down {server_desc}")
         server_termination_thread.join()
 
-    print_fn("Server shut down.")
+    logger.info("Server shut down.")

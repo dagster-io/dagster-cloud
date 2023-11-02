@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 from typing import Optional
@@ -5,7 +6,7 @@ from typing import Optional
 from dagster._serdes import deserialize_value
 from dagster._utils.interrupts import capture_interrupts
 from dagster_cloud_cli.core.workspace import PexMetadata
-from typer import Option, Typer, echo
+from typer import Option, Typer
 
 from ..registry import PexS3Registry
 from ..server import run_multipex_server
@@ -24,11 +25,13 @@ def grpc(
     ),
     watchdog_run_interval: Optional[int] = Option(default=30, envvar="WATCHDOG_RUN_INTERVAL"),
 ):
+    logger = logging.getLogger("dagster.multipex_server")
+
     run_multipex_server(
         port=port,
         socket=socket,
         host=host,
-        print_fn=echo,
+        logger=logger,
         max_workers=max_workers,
         local_pex_files_dir=local_pex_files_dir,
         watchdog_run_interval=watchdog_run_interval,

@@ -549,3 +549,72 @@ mutation FreeConcurrencySlotForStep($runId: String!, $stepKey: String!) {
     }
 }
 """
+
+
+FETCH_MATERIALIZATIONS_QUERY = (
+    EVENT_RECORD_FRAGMENT
+    + """
+query fetchMaterializationsQuery($recordsFilter: AssetRecordsFilter!, $limit: Int, $cursor: String, $ascending: Boolean) {
+    eventLogs {
+        fetchMaterializations(recordsFilter: $recordsFilter, limit: $limit, cursor: $cursor, ascending: $ascending) {
+            records {
+                ...EventLogRecordFragment
+            }
+            cursor
+            hasMore
+        }
+    }
+}
+"""
+)
+
+FETCH_OBSERVATIONS_QUERY = (
+    EVENT_RECORD_FRAGMENT
+    + """
+query fetchObservationsQuery($recordsFilter: AssetRecordsFilter!, $limit: Int, $cursor: String, $ascending: Boolean) {
+    eventLogs {
+        fetchObservations(recordsFilter: $recordsFilter, limit: $limit, cursor: $cursor, ascending: $ascending) {
+            records {
+                ...EventLogRecordFragment
+            }
+            cursor
+            hasMore
+        }
+    }
+}
+"""
+)
+
+FETCH_PLANNED_MATERIALIZATIONS = (
+    EVENT_RECORD_FRAGMENT
+    + """
+query fetchPlannedMaterializationsQuery($recordsFilter: AssetRecordsFilter!, $limit: Int, $cursor: String, $ascending: Boolean) {
+    eventLogs {
+        fetchPlannedMaterializations(recordsFilter: $recordsFilter, limit: $limit, cursor: $cursor, ascending: $ascending) {
+            records {
+                ...EventLogRecordFragment
+            }
+            cursor
+            hasMore
+        }
+    }
+}
+"""
+)
+
+GET_RUN_STATUS_CHANGE_EVENTS_QUERY = (
+    EVENT_RECORD_FRAGMENT
+    + """
+query getRunStatusChangeEventRecordsQuery($recordsFilter: RunStatusChangeRecordsFilter!, $limit: Int, $cursor: String, $ascending: Boolean) {
+    eventLogs {
+        getRunStatusChangeEventRecords(recordsFilter: $recordsFilter, limit: $limit, cursor: $cursor, ascending: $ascending) {
+            records {
+                ...EventLogRecordFragment
+            }
+            cursor
+            hasMore
+        }
+    }
+}
+"""
+)

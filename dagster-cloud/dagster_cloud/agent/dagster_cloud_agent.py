@@ -128,6 +128,10 @@ class DagsterCloudAgent:
     def _active_deployment_names(self):
         return [deployment[0] for deployment in self._active_deployments]
 
+    @property
+    def _active_full_deployment_names(self):
+        return [deployment[0] for deployment in self._active_deployments if not deployment[1]]
+
     def _check_initial_deployment_names(self, instance: DagsterCloudAgentInstance):
         if instance.deployment_names:
             result = instance.organization_scoped_graphql_client().execute(
@@ -858,7 +862,7 @@ class DagsterCloudAgent:
                 GET_USER_CLOUD_REQUESTS_QUERY,
                 {
                     "forBranchDeployments": instance.includes_branch_deployments,
-                    "forFullDeployments": self._active_deployment_names,
+                    "forFullDeployments": self._active_full_deployment_names,
                 },
             )
             json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]

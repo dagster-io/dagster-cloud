@@ -15,6 +15,7 @@ from dagster import (
     AssetCheckResult,
     AssetExecutionContext,
     AssetKey,
+    AssetMaterialization,
     AssetObservation,
     JobDefinition,
     OpExecutionContext,
@@ -63,10 +64,12 @@ def _marker_asset_key_for_job(
 def dbt_with_snowflake_insights(
     context: Union[OpExecutionContext, AssetExecutionContext],
     dbt_cli_invocation: "DbtCliInvocation",
-    dagster_events: Optional[Iterable[Union[Output, AssetObservation, AssetCheckResult]]] = None,
+    dagster_events: Optional[
+        Iterable[Union[Output, AssetMaterialization, AssetObservation, AssetCheckResult]]
+    ] = None,
     skip_config_check=False,
-    record_observation_usage: Optional[bool] = None,
-) -> Iterator[Union[Output, AssetObservation, AssetCheckResult]]:
+    record_observation_usage: bool = True,
+) -> Iterator[Union[Output, AssetMaterialization, AssetObservation, AssetCheckResult]]:
     """Wraps a dagster-dbt invocation to associate each Snowflake query with the produced
     asset materializations. This allows the cost of each query to be associated with the asset
     materialization that it produced.
@@ -83,10 +86,8 @@ def dbt_with_snowflake_insights(
             will be streamed.
         skip_config_check (bool): If true, skips the check that the dbt project config is set up
             correctly. Defaults to False.
-        record_observation_usage (Optional[bool]): If true, associates the usage associated with
-            asset observations with that asset. Default behavior is to do so only if this dbt job
-            also materializes assets. If this is false, the usage will only be associated with the
-            job, and not the asset key.
+        record_observation_usage (bool): If True, associates the usage associated with
+            asset observations with that asset. Default is True.
 
     **Example:**
 
@@ -130,37 +131,35 @@ def dbt_with_snowflake_insights(
     if dagster_events is None:
         dagster_events = dbt_cli_invocation.stream()
 
-    has_any_asset_outputs = len(context.job_def.asset_layer.asset_info_by_node_output_handle) > 0
-    record_observation_usage = (
-        has_any_asset_outputs if record_observation_usage is None else record_observation_usage
-    )
-
     asset_and_partition_key_to_unique_id: List[Tuple[AssetKey, Optional[str], Any]] = []
     for dagster_event in dagster_events:
-        if isinstance(dagster_event, Output):
+        # When calling dbt from an asset context, the dbt CLI invocation will emit Outputs,
+        # in the op context it'll be AssetObservations - we can extract the same data from both
+        if isinstance(dagster_event, (Output, AssetMaterialization)):
             unique_id = dagster_event.metadata["unique_id"].value
-            asset_key = _opt_asset_key_for_output(context, dagster_event.output_name)
-            if asset_key:
+
+            if isinstance(dagster_event, Output):
+                asset_key = _opt_asset_key_for_output(context, dagster_event.output_name)
                 partition_key = None
-                if context._step_execution_context.has_asset_partitions_for_output(  # noqa: SLF001
+                if asset_key and context._step_execution_context.has_asset_partitions_for_output(  # noqa: SLF001
                     dagster_event.output_name
                 ):
                     partition_key = context.asset_partition_key_for_output(
                         dagster_event.output_name
                     )
+            else:
+                asset_key = dagster_event.asset_key
+                partition_key = dagster_event.partition
+
+            if asset_key:
                 asset_and_partition_key_to_unique_id.append((asset_key, partition_key, unique_id))
             else:
-                # For non-asset Outputs, we use a special sigil when storing the unique ID
-                # so that we make sure not to associate it with any asset materializations
-                # in the insights job
+                # Outputs should only be emitted in the context of an SDA, so this should be a dead
+                # code path after https://github.com/dagster-io/dagster/pull/17405/files, but we
+                # retain it as a fallback in case users have any old-style custom dbt event conversion logic
                 asset_and_partition_key_to_unique_id.append(
                     (_marker_asset_key_for_job(context.job_def), None, unique_id)
                 )
-
-            # filter out any outputs that are not affiliated with this op
-            # in the case that we are running in an op-job
-            if dagster_event.output_name not in context.selected_output_names:
-                continue
 
         elif isinstance(dagster_event, AssetObservation):
             unique_id = dagster_event.metadata["unique_id"].value

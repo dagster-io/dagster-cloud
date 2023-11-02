@@ -21,7 +21,14 @@ import dagster._check as check
 from dagster import AssetCheckKey, DagsterInvalidInvocationError
 from dagster._core.assets import AssetDetails
 from dagster._core.definitions.events import AssetKey, ExpectationResult
-from dagster._core.event_api import EventLogRecord, EventRecordsFilter, RunShardedEventsCursor
+from dagster._core.event_api import (
+    AssetRecordsFilter,
+    EventLogRecord,
+    EventRecordsFilter,
+    EventRecordsResult,
+    RunShardedEventsCursor,
+    RunStatusChangeRecordsFilter,
+)
 from dagster._core.events import DagsterEvent, DagsterEventType
 from dagster._core.events.log import EventLogEntry
 from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
@@ -60,6 +67,9 @@ from .queries import (
     DELETE_DYNAMIC_PARTITION_MUTATION,
     DELETE_EVENTS_MUTATION,
     ENABLE_SECONDARY_INDEX_MUTATION,
+    FETCH_MATERIALIZATIONS_QUERY,
+    FETCH_OBSERVATIONS_QUERY,
+    FETCH_PLANNED_MATERIALIZATIONS,
     FREE_CONCURRENCY_SLOT_FOR_STEP_MUTATION,
     FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
@@ -76,6 +86,7 @@ from .queries import (
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_MATERIALIZED_PARTITIONS,
     GET_RECORDS_FOR_RUN_QUERY,
+    GET_RUN_STATUS_CHANGE_EVENTS_QUERY,
     GET_STATS_FOR_RUN_QUERY,
     GET_STEP_STATS_FOR_RUN_QUERY,
     HAS_ASSET_KEY_QUERY,
@@ -214,6 +225,50 @@ def _get_event_records_filter_input(
     }
 
 
+def _get_asset_records_filter_input(
+    records_filter: Union[AssetKey, AssetRecordsFilter]
+) -> Dict[str, Any]:
+    check.opt_inst_param(records_filter, "records_filter", (AssetKey, AssetRecordsFilter))
+
+    if isinstance(records_filter, AssetKey):
+        return {"assetKey": records_filter.to_string()}
+
+    return {
+        "assetKey": records_filter.asset_key.to_string() if records_filter.asset_key else None,
+        "assetPartitions": records_filter.asset_partitions,
+        "afterTimestamp": records_filter.after_timestamp,
+        "beforeTimestamp": records_filter.before_timestamp,
+        "tags": (
+            [
+                merge_dicts(
+                    {"key": tag_key},
+                    ({"value": tag_value} if isinstance(tag_value, str) else {"values": tag_value}),
+                )
+                for tag_key, tag_value in records_filter.tags.items()
+            ]
+            if records_filter.tags
+            else None
+        ),
+        "storageIds": records_filter.storage_ids,
+    }
+
+
+def _fetch_run_status_changes_filter_input(records_filter) -> Dict[str, Any]:
+    check.inst_param(
+        records_filter, "records_filter", (DagsterEventType, RunStatusChangeRecordsFilter)
+    )
+
+    if isinstance(records_filter, DagsterEventType):
+        return {"eventType": records_filter.value}
+
+    return {
+        "eventType": records_filter.event_type.value if records_filter.event_type else None,
+        "afterTimestamp": records_filter.after_timestamp,
+        "beforeTimestamp": records_filter.before_timestamp,
+        "storageIds": records_filter.storage_ids,
+    }
+
+
 def _event_record_from_graphql(graphene_event_record: Dict) -> EventLogRecord:
     check.dict_param(graphene_event_record, "graphene_event_record")
 
@@ -268,6 +323,17 @@ def _asset_record_from_graphql(graphene_asset_record: Dict) -> AssetRecord:
     return AssetRecord(
         storage_id=graphene_asset_record["storageId"],
         asset_entry=_asset_entry_from_graphql(graphene_asset_record["assetEntry"]),
+    )
+
+
+def _event_records_result_from_graphql(graphene_event_records_result: Dict) -> EventRecordsResult:
+    return EventRecordsResult(
+        records=[
+            _event_record_from_graphql(record)
+            for record in graphene_event_records_result["records"]
+        ],
+        cursor=graphene_event_records_result["cursor"],
+        has_more=graphene_event_records_result["hasMore"],
     )
 
 
@@ -492,7 +558,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         event_records_filter: Optional[EventRecordsFilter] = None,
         limit: Optional[int] = None,
         ascending: Optional[bool] = False,
-    ) -> Iterable[EventLogRecord]:
+    ) -> Sequence[EventLogRecord]:
         check.opt_inst_param(event_records_filter, "event_records_filter", EventRecordsFilter)
         check.opt_int_param(limit, "limit")
         check.bool_param(ascending, "ascending")
@@ -929,3 +995,79 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         self, asset_check_keys: Sequence[AssetCheckKey]
     ) -> Mapping[AssetCheckKey, AssetCheckExecutionRecord]:
         raise NotImplementedError("Not callable from user cloud")
+
+    def fetch_materializations(
+        self,
+        records_filter: Union[AssetKey, AssetRecordsFilter],
+        limit: int,
+        cursor: Optional[str] = None,
+        ascending: bool = False,
+    ) -> EventRecordsResult:
+        res = self._execute_query(
+            FETCH_MATERIALIZATIONS_QUERY,
+            variables={
+                "recordsFilter": _get_asset_records_filter_input(records_filter),
+                "limit": limit,
+                "cursor": cursor,
+                "ascending": ascending,
+            },
+        )
+        return _event_records_result_from_graphql(res["data"]["eventLogs"]["fetchMaterializations"])
+
+    def fetch_observations(
+        self,
+        records_filter: Union[AssetKey, AssetRecordsFilter],
+        limit: int,
+        cursor: Optional[str] = None,
+        ascending: bool = False,
+    ) -> EventRecordsResult:
+        res = self._execute_query(
+            FETCH_OBSERVATIONS_QUERY,
+            variables={
+                "recordsFilter": _get_asset_records_filter_input(records_filter),
+                "limit": limit,
+                "cursor": cursor,
+                "ascending": ascending,
+            },
+        )
+        return _event_records_result_from_graphql(res["data"]["eventLogs"]["fetchObservations"])
+
+    def fetch_planned_materializations(
+        self,
+        records_filter: Union[AssetKey, AssetRecordsFilter],
+        limit: int,
+        cursor: Optional[str] = None,
+        ascending: bool = False,
+    ) -> EventRecordsResult:
+        res = self._execute_query(
+            FETCH_PLANNED_MATERIALIZATIONS,
+            variables={
+                "recordsFilter": _get_asset_records_filter_input(records_filter),
+                "limit": limit,
+                "cursor": cursor,
+                "ascending": ascending,
+            },
+        )
+        return _event_records_result_from_graphql(
+            res["data"]["eventLogs"]["fetchPlannedMaterializations"]
+        )
+
+    def fetch_run_status_changes(
+        self,
+        records_filter: Union[DagsterEventType, RunStatusChangeRecordsFilter],
+        limit: int,
+        cursor: Optional[str] = None,
+        ascending: bool = False,
+    ) -> EventRecordsResult:
+        res = self._execute_query(
+            GET_RUN_STATUS_CHANGE_EVENTS_QUERY,
+            variables={
+                "recordsFilter": _fetch_run_status_changes_filter_input(records_filter),
+                "limit": limit,
+                "cursor": cursor,
+                "ascending": ascending,
+            },
+        )
+        return _event_records_result_from_graphql(
+            res["data"]["eventLogs"]["getRunStatusChangeEventRecords"]
+        )
