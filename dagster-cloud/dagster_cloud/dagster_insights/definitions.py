@@ -23,19 +23,20 @@ from dagster import (
     asset,
     build_schedule_from_partitioned_job,
     define_asset_job,
+    fs_io_manager,
 )
 
 from .dagster_snowflake_insights import (
     AssetMaterializationId,
     get_cost_data_for_hour,
 )
-from .dbt_wrapper import OUTPUT_NON_ASSET_SIGIL
-from .utils import DagsterMetric, put_metrics, query_graphql_from_instance
+from .metrics_utils import DagsterMetric, put_metrics, query_graphql_from_instance
+from .snowflake.snowflake_utils import OUTPUT_NON_ASSET_SIGIL
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection
 
-SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS = 60 + 45
+SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS = 45
 
 
 @dataclass
@@ -53,6 +54,7 @@ def create_snowflake_insights_asset_and_schedule(
     allow_partial_partitions=False,
     snowflake_resource_key: str = "snowflake",
     snowflake_usage_latency: int = SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS,
+    partition_end_offset_hrs: int = 1,
 ) -> SnowflakeInsightsDefinitions:
     """Generates a pre-defined Dagster asset and schedule that can be used to import Snowflake cost
     data into Dagster Insights.
@@ -72,10 +74,9 @@ def create_snowflake_insights_asset_and_schedule(
             submitting it to Dagster Insights. Defaults to True.
         snowflake_resource_key (str): The name of the snowflake resource key to use. Defaults to
             "snowflake".
-        snowflake_usage_latency (int): The number of minutes to wait after the end of the hour
-            before querying the Snowflake query_history table. This is necessary as the Snowflake
-            query_history table is not immediately available after the end of the hour. Its latency
-            has an SLA of 45 minutes. The default value is 105 minutes, which provides an hour buffer.
+        partition_end_offset_hrs (int): The number of additional hours to wait before querying
+            Snowflake for the latest data. This is useful in case the Snowflake query_history table
+            is not immediately available. Defaults to .
     """
     # for backcompat, this used to take `date`
     if isinstance(start_date, date):
@@ -84,8 +85,11 @@ def create_snowflake_insights_asset_and_schedule(
     @asset(
         name=name,
         group_name=group_name,
-        partitions_def=HourlyPartitionsDefinition(start_date=start_date),
+        partitions_def=HourlyPartitionsDefinition(
+            start_date=start_date, end_offset=partition_end_offset_hrs
+        ),
         required_resource_keys={snowflake_resource_key},
+        io_manager_def=fs_io_manager,
     )
     def poll_snowflake_query_history_hour(
         context: AssetExecutionContext,

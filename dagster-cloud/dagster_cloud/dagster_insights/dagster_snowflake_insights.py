@@ -20,7 +20,7 @@ from dagster import (
     ScheduleDefinition,
 )
 
-from .dbt_wrapper import OPAQUE_ID_METADATA_KEY_PREFIX, OPAQUE_ID_SQL_SIGIL
+from .snowflake.snowflake_utils import OPAQUE_ID_METADATA_KEY_PREFIX, OPAQUE_ID_SQL_SIGIL
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection

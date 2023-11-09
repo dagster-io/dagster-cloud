@@ -9,7 +9,7 @@ from gql.transport.exceptions import TransportError
 from gql.transport.requests import RequestsHTTPTransport
 
 from ..dagster_insights.errors import DagsterInsightsError
-from ..dagster_insights.utils import (
+from ..dagster_insights.metrics_utils import (
     PUT_CLOUD_METRICS_MUTATION,
     DagsterMetric as DagsterMetric,
     put_metrics as put_metrics,

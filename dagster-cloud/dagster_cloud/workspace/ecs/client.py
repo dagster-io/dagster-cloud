@@ -8,6 +8,7 @@ import botocore
 import dagster._check as check
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from dagster._utils.cached_method import cached_method
 from dagster_aws.ecs.tasks import DagsterEcsTaskDefinitionConfig
 from dagster_aws.ecs.utils import task_definitions_match
 
@@ -103,6 +104,7 @@ class Client:
         return settings["settings"][0]["value"] == "enabled"
 
     @property
+    @cached_method
     def network_configuration(self):
         network_configuration = {
             "awsvpcConfiguration": {

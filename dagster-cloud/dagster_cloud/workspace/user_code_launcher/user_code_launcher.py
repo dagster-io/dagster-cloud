@@ -1502,7 +1502,9 @@ class DagsterCloudUserCodeLauncher(
         if not cand_server:
             return None
 
-        if (cand_server.code_deployment_metadata.image == code_deployment_metadata.image) and (
+        desired_image = self._resolve_image(code_deployment_metadata)
+
+        if (cand_server.code_deployment_metadata.image == desired_image) and (
             cand_server.code_deployment_metadata.container_context
             == code_deployment_metadata.container_context
         ):

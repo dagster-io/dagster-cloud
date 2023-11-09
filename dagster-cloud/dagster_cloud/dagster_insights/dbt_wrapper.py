@@ -8,7 +8,6 @@ from typing import (
     Tuple,
     Union,
 )
-from uuid import uuid4 as uuid
 
 import yaml
 from dagster import (
@@ -17,31 +16,18 @@ from dagster import (
     AssetKey,
     AssetMaterialization,
     AssetObservation,
-    JobDefinition,
     OpExecutionContext,
     Output,
 )
 
+from .snowflake.snowflake_utils import (
+    OPAQUE_ID_SQL_SIGIL,
+    build_opaque_id_metadata,
+    marker_asset_key_for_job,
+)
+
 if TYPE_CHECKING:
     from dagster_dbt import DbtCliInvocation
-
-# Metadata key prefix used to tag Snowflake queries with opaque IDs
-OPAQUE_ID_METADATA_KEY_PREFIX = "dagster_snowflake_opaque_id:"
-OPAQUE_ID_SQL_SIGIL = "snowflake_dagster_dbt_v1_opaque_id"
-
-OUTPUT_NON_ASSET_SIGIL = "__snowflake_query_metadata_"
-
-
-def add_asset_context_to_sql_query(
-    context: AssetExecutionContext,
-    sql: str,
-    comment_factory=lambda comment: f"\n-- {comment}\n",
-    opaque_id=None,
-):
-    if opaque_id is None:
-        opaque_id = str(uuid())
-    context.add_output_metadata({f"{OPAQUE_ID_METADATA_KEY_PREFIX}{opaque_id}": True})
-    return sql + comment_factory(f"{OPAQUE_ID_SQL_SIGIL}[[[{opaque_id}]]]")
 
 
 def _opt_asset_key_for_output(
@@ -53,12 +39,6 @@ def _opt_asset_key_for_output(
     if asset_info is None:
         return None
     return asset_info.key
-
-
-def _marker_asset_key_for_job(
-    job: JobDefinition,
-) -> AssetKey:
-    return AssetKey(path=[f"{OUTPUT_NON_ASSET_SIGIL}{job.name}"])
 
 
 def dbt_with_snowflake_insights(
@@ -158,7 +138,7 @@ def dbt_with_snowflake_insights(
                 # code path after https://github.com/dagster-io/dagster/pull/17405/files, but we
                 # retain it as a fallback in case users have any old-style custom dbt event conversion logic
                 asset_and_partition_key_to_unique_id.append(
-                    (_marker_asset_key_for_job(context.job_def), None, unique_id)
+                    (marker_asset_key_for_job(context.job_def), None, unique_id)
                 )
 
         elif isinstance(dagster_event, AssetObservation):
@@ -170,7 +150,7 @@ def dbt_with_snowflake_insights(
                 # If we don't want to record usage associated with an asset, we still want to
                 # record the usage associated with the job, so we use a special sigil for the
                 # emitted observation to make sure it doesn't get associated with a real asset key
-                asset_key = _marker_asset_key_for_job(context.job_def)
+                asset_key = marker_asset_key_for_job(context.job_def)
                 partition_key = None
             asset_and_partition_key_to_unique_id.append((asset_key, partition_key, unique_id))
 
@@ -186,6 +166,6 @@ def dbt_with_snowflake_insights(
             AssetObservation(
                 asset_key=asset_key,
                 partition=partition,
-                metadata={f"{OPAQUE_ID_METADATA_KEY_PREFIX}{opaque_id}": True},
+                metadata=build_opaque_id_metadata(opaque_id),
             )
         )
