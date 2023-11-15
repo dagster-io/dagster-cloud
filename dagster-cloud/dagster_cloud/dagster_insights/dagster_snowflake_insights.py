@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Dict,
     Iterable,
     List,
@@ -17,6 +16,10 @@ import dagster._check as check
 from dagster import (
     AssetKey,
     AssetsDefinition,
+    DagsterEventType,
+    DagsterInstance,
+    EventLogRecord,
+    EventRecordsFilter,
     ScheduleDefinition,
 )
 
@@ -24,6 +27,8 @@ from .snowflake.snowflake_utils import OPAQUE_ID_METADATA_KEY_PREFIX, OPAQUE_ID_
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection
+
+EVENT_RECORDS_LIMIT = 10000
 
 
 @dataclass(frozen=True, eq=True)
@@ -35,7 +40,7 @@ class AssetMaterializationId:
 
 
 def get_opaque_ids_to_assets(
-    query_gql: Callable[[str, Optional[Dict[str, Any]]], Dict[str, Any]],
+    instance: DagsterInstance,
     min_datetime: datetime,
     max_datetime: datetime,
 ) -> Iterable[Tuple[AssetMaterializationId, str]]:
@@ -43,57 +48,49 @@ def get_opaque_ids_to_assets(
     in the provided time range and returns a mapping from AssetMaterializationId to opaque
     Snowflake query ID.
     """
-    query = """
-{
-	assetsOrError {
-    ... on AssetConnection {
-      nodes {
-        key {
-            path
-        }
-        assetObservations(afterTimestampMillis:"%d", beforeTimestampMillis:"%d") {
-          runId
-          partition
-          stepKey
-          timestamp
-          metadataEntries {
-            ... on BoolMetadataEntry {
-              label
-            }
-          }
-        }
-      }
-    }
-  }
-}
-    """ % (
-        min_datetime.timestamp() * 1000,
-        max_datetime.timestamp() * 1000,
-    )
+    records: Sequence[EventLogRecord] = []
+    last_response = []
+    first = True
 
-    response = query_gql(query, {})
+    while len(last_response) == EVENT_RECORDS_LIMIT or first:
+        last_response = instance.get_event_records(
+            EventRecordsFilter(
+                event_type=DagsterEventType.ASSET_OBSERVATION,
+                before_timestamp=max_datetime.timestamp(),
+                after_timestamp=min_datetime.timestamp(),
+                after_cursor=last_response[-1].storage_id if last_response else None,
+            ),
+            limit=EVENT_RECORDS_LIMIT,
+        )
+        first = False
+        records.extend(last_response)
 
-    for node in response["assetsOrError"]["nodes"]:
-        asset_key = AssetKey.from_graphql_input(node["key"])
+    for record in records:
+        asset_key = record.asset_key
         if asset_key is None:
             # should never happen, but we must appease the type checker
             raise RuntimeError("asset_key is None, which should never happen")
-        for observation in node["assetObservations"]:
-            run_id = check.not_none(observation["runId"])
-            partition = observation["partition"]
-            step_key = observation["stepKey"]
-            opaque_id = None
-            for metadata in observation["metadataEntries"]:
-                if metadata.get("label", "").startswith(OPAQUE_ID_METADATA_KEY_PREFIX):
-                    opaque_id = metadata["label"][len(OPAQUE_ID_METADATA_KEY_PREFIX) :]
-                    break
-            if opaque_id is not None:
-                yield (
-                    AssetMaterializationId(
-                        run_id=run_id, asset_key=asset_key, partition=partition, step_key=step_key
-                    ),
-                    opaque_id,
-                )
+        run_id = check.not_none(record.run_id)
+        partition = record.partition_key
+        step_key = check.not_none(record.event_log_entry.step_key)
+        opaque_id = None
+
+        observation = check.not_none(record.event_log_entry.asset_observation)
+
+        for metadata_key in observation.metadata:
+            if metadata_key.startswith(OPAQUE_ID_METADATA_KEY_PREFIX):
+                opaque_id = metadata_key[len(OPAQUE_ID_METADATA_KEY_PREFIX) :]
+                break
+        if opaque_id is not None:
+            yield (
+                AssetMaterializationId(
+                    run_id=run_id,
+                    asset_key=asset_key,
+                    partition=partition,
+                    step_key=step_key,
+                ),
+                opaque_id,
+            )
 
 
 QUERY_HISTORY_TIME_PADDING = timedelta(hours=1)  # deal with desynchronized clocks
@@ -107,7 +104,7 @@ class SnowflakeInsightsDefinitions:
 
 def get_cost_data_for_hour(
     snowflake: "SnowflakeConnection",
-    query_gql: Callable[[str, Optional[Dict[str, Any]]], Dict[str, Any]],
+    instance: DagsterInstance,
     start_hour: datetime,
     end_hour: datetime,
 ) -> List[Tuple[AssetMaterializationId, Any]]:
@@ -115,7 +112,7 @@ def get_cost_data_for_hour(
     during that time period and returns a mapping from AssetMaterializationId to the cost of the
     query that produced it, as estimated by Snowflake. The cost is in Snowflake credits.
     """
-    queries = list(get_opaque_ids_to_assets(query_gql, start_hour, end_hour))
+    queries = list(get_opaque_ids_to_assets(instance, start_hour, end_hour))
     print(
         f"Found {len(queries)} queries to check from {start_hour.isoformat()} to"
         f" {end_hour.isoformat()}"

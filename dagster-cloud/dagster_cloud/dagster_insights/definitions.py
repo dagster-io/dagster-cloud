@@ -30,7 +30,7 @@ from .dagster_snowflake_insights import (
     AssetMaterializationId,
     get_cost_data_for_hour,
 )
-from .metrics_utils import DagsterMetric, put_metrics, query_graphql_from_instance
+from .metrics_utils import DagsterMetric, put_metrics
 from .snowflake.snowflake_utils import OUTPUT_NON_ASSET_SIGIL
 
 if TYPE_CHECKING:
@@ -110,14 +110,10 @@ def create_snowflake_insights_asset_and_schedule(
                     f" {now.isoformat()})"
                 )
 
-        instance = context.instance
-
         costs = (
             get_cost_data_for_hour(
                 snowflake,
-                lambda query_text, variables: query_graphql_from_instance(
-                    instance, query_text, variables
-                ),
+                context.instance,
                 start_hour,
                 end_hour,
             )
