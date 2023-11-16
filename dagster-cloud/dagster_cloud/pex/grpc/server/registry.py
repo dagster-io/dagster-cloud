@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Set
 from uuid import uuid4
 
 from dagster import _check as check
@@ -93,6 +93,9 @@ class PexS3Registry:
             str, str
         ] = {}  # once unpacked, working dirs dont change so we cache them
 
+        # keep track of local files and directories used by each pex tag
+        self.local_paths_for_pex_tag: Dict[str, Set[str]] = {}
+
     def get_pex_executable(self, pex_metadata: PexMetadata) -> PexExecutable:
         if "=" not in pex_metadata.pex_tag:
             raise ValueError(f"Invalid pex tag, no prefix in {pex_metadata.pex_tag!r}")
@@ -106,8 +109,13 @@ class PexS3Registry:
         deps_pex_filepaths = []
         source_pex_filepath = None
 
+        if pex_metadata.pex_tag not in self.local_paths_for_pex_tag:
+            self.local_paths_for_pex_tag[pex_metadata.pex_tag] = set()
+        local_paths = self.local_paths_for_pex_tag[pex_metadata.pex_tag]
+
         for filename in pex_filenames:
             local_filepath = os.path.join(self._local_pex_files_dir, filename)
+            local_paths.add(local_filepath)
 
             # no need to download if we already have this file - these
             # files have a content hash suffix so name equality implies content is same
@@ -131,9 +139,13 @@ class PexS3Registry:
 
         # we unpack each pex file into its own venv
         source_venv = self.venv_for(source_pex_filepath)
+        local_paths.add(str(source_venv.path.absolute()))
+
         deps_venvs = []
         for deps_filepath in deps_pex_filepaths:
-            deps_venvs.append(self.venv_for(deps_filepath))
+            deps_venv = self.venv_for(deps_filepath)
+            deps_venvs.append(deps_venv)
+            local_paths.add(str(deps_venv.path.absolute()))
 
         entrypoint = str(source_venv.entrypoint)
         pythonpaths = ":".join(
@@ -155,6 +167,32 @@ class PexS3Registry:
             working_dir,
             venv_dirs=[str(source_venv.path)] + [str(deps_venv.path) for deps_venv in deps_venvs],
         )
+
+    def cleanup_unused_files(self, in_use_pex_metadatas: List[PexMetadata]) -> None:
+        """Cleans up all local files and directories that are not associated with any PexMetadata provided."""
+        in_use_pex_tags = [pex_metadata.pex_tag for pex_metadata in in_use_pex_metadatas]
+
+        all_local_paths = set()
+        in_use_local_paths = set()
+        for pex_tag, local_paths in self.local_paths_for_pex_tag.items():
+            all_local_paths.update(local_paths)
+
+            if pex_tag in in_use_pex_tags:
+                in_use_local_paths.update(local_paths)
+
+        unused_local_paths = all_local_paths - in_use_local_paths
+        if unused_local_paths:
+            logging.info(
+                "Cleaning up %s unused local paths: %r", len(unused_local_paths), unused_local_paths
+            )
+            for path in unused_local_paths:
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                    else:
+                        os.remove(path)
+                except OSError:
+                    logging.exception("Ignoring failure to clean up local unused path %s", path)
 
     def venv_for(self, pex_filepath) -> PexVenv:
         _, pex_filename = os.path.split(pex_filepath)

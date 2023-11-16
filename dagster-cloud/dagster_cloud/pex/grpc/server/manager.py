@@ -15,7 +15,7 @@ from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata, PexMetadata
 from pydantic import BaseModel, Extra
 
 from ..types import PexServerHandle
@@ -46,6 +46,9 @@ class MultiPexManager(AbstractContextManager):
         self._pending_startup_pex_servers: Set[str] = set()
         self._pending_shutdown_pex_servers: Set[str] = set()
         self._pex_servers_lock = threading.RLock()
+        self._pex_metadata_for_handle: Dict[
+            str, Optional[PexMetadata]
+        ] = {}  # maps handle id to the pex tag
         self._heartbeat_ttl = 60
         self._registry = PexS3Registry(local_pex_files_dir)
 
@@ -171,6 +174,11 @@ class MultiPexManager(AbstractContextManager):
         code_deployment_metadata: CodeDeploymentMetadata,
         instance_ref: Optional[InstanceRef],
     ):
+        # we keep track of pex metadata in use to help cleanup unused resources over time
+        self._pex_metadata_for_handle[
+            server_handle.get_id()
+        ] = code_deployment_metadata.pex_metadata
+
         # install pex files and launch them - do it asynchronously to not block this call
         def _create_pex_server() -> None:
             try:
@@ -339,6 +347,23 @@ class MultiPexManager(AbstractContextManager):
                 except DagsterUserCodeUnreachableError:
                     # Server already shutdown
                     pass
+
+            # Delete any registry files not in use anymore
+            # - ensure that resources for servers starting up or shutting down are not removed
+            # - important to do this while holding the lock to avoid race conditions
+            running_server_ids = {
+                proc.pex_server_handle.get_id() for proc in self._pex_servers.values()
+            }
+            in_use_handle_ids = self._pending_startup_pex_servers.union(
+                self._pending_shutdown_pex_servers
+            ).union(running_server_ids)
+            in_use_pex_metadatas = [
+                self._pex_metadata_for_handle.get(handle_id) for handle_id in in_use_handle_ids
+            ]
+            in_use_pex_metadatas = [
+                pex_metadata for pex_metadata in in_use_pex_metadatas if pex_metadata is not None
+            ]
+            self._registry.cleanup_unused_files(in_use_pex_metadatas)
 
     def __exit__(self, exception_type, exception_value, traceback):
         for pex_server in self._pex_servers.values():

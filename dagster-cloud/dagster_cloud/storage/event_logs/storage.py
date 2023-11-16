@@ -1,6 +1,5 @@
 import json
 from collections import defaultdict
-from os import getenv
 from typing import (
     Any,
     Callable,
@@ -484,10 +483,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
         event = truncate_event(event)
 
-        headers = {}
-        # env var opt-in for experimental feature
-        if getenv("DAGSTER_CLOUD_IDEMPOTENT_STORE_EVENT"):
-            headers = {"Idempotency-Key": str(uuid4())}
+        headers = {"Idempotency-Key": str(uuid4())}
 
         self._execute_query(
             STORE_EVENT_MUTATION,
