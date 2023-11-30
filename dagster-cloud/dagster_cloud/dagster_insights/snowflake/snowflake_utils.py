@@ -6,6 +6,7 @@ from dagster import (
     AssetExecutionContext,
     AssetKey,
     AssetObservation,
+    DagsterInvariantViolationError,
     JobDefinition,
     OpExecutionContext,
 )
@@ -30,10 +31,8 @@ def get_current_context_and_asset_key() -> (
         context = AssetExecutionContext.get()
         if len(context.assets_def.keys_by_output_name.keys()) == 1:
             asset_key = context.asset_key
-    except DagsterInvalidPropertyError:
+    except (DagsterInvalidPropertyError, DagsterInvariantViolationError):
         context = OpExecutionContext.get()
-
-    print("CURRENT ASSET KEY IS ", asset_key)
 
     return check.not_none(context), asset_key
 

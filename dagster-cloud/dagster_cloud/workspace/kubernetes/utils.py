@@ -58,11 +58,16 @@ def get_k8s_human_readable_label(name):
     )
 
 
-def construct_code_location_service(deployment_name, location_name, service_name):
+def construct_code_location_service(
+    deployment_name, location_name, service_name, container_context
+):
+    labels = container_context.labels
+
     return client.V1Service(
         metadata=client.V1ObjectMeta(
             name=service_name,
             labels={
+                **labels,
                 **MANAGED_RESOURCES_LABEL,
                 "location_hash": deterministic_label_for_location(deployment_name, location_name),
                 "location_name": get_k8s_human_readable_label(location_name),
@@ -164,6 +169,7 @@ def construct_code_location_deployment(
         "metadata": {
             "name": k8s_deployment_name,
             "labels": {
+                **container_context.labels,
                 **MANAGED_RESOURCES_LABEL,
                 "location_hash": deterministic_label_for_location(deployment_name, location_name),
                 "location_name": get_k8s_human_readable_label(location_name),

@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, NamedTuple, Optional, Set
@@ -96,7 +97,14 @@ class PexS3Registry:
         # keep track of local files and directories used by each pex tag
         self.local_paths_for_pex_tag: Dict[str, Set[str]] = {}
 
+        # lock to do safe install and cleanup
+        self._install_lock = threading.RLock()
+
     def get_pex_executable(self, pex_metadata: PexMetadata) -> PexExecutable:
+        with self._install_lock:
+            return self._get_pex_executable(pex_metadata)
+
+    def _get_pex_executable(self, pex_metadata: PexMetadata) -> PexExecutable:
         if "=" not in pex_metadata.pex_tag:
             raise ValueError(f"Invalid pex tag, no prefix in {pex_metadata.pex_tag!r}")
         prefix, filenames = pex_metadata.pex_tag.split("=", 1)
@@ -169,6 +177,10 @@ class PexS3Registry:
         )
 
     def cleanup_unused_files(self, in_use_pex_metadatas: List[PexMetadata]) -> None:
+        with self._install_lock:
+            return self._cleanup_unused_files(in_use_pex_metadatas)
+
+    def _cleanup_unused_files(self, in_use_pex_metadatas: List[PexMetadata]) -> None:
         """Cleans up all local files and directories that are not associated with any PexMetadata provided."""
         in_use_pex_tags = [pex_metadata.pex_tag for pex_metadata in in_use_pex_metadatas]
 
@@ -182,13 +194,16 @@ class PexS3Registry:
 
         unused_local_paths = all_local_paths - in_use_local_paths
         if unused_local_paths:
+            unused_paths_present = [path for path in unused_local_paths if os.path.exists(path)]
             logging.info(
-                "Cleaning up %s unused local paths: %r", len(unused_local_paths), unused_local_paths
+                "Cleaning up %s unused local paths: %r",
+                len(unused_paths_present),
+                unused_paths_present,
             )
-            for path in unused_local_paths:
+            for path in unused_paths_present:
                 try:
                     if os.path.isdir(path):
-                        shutil.rmtree(path)
+                        shutil.rmtree(path, ignore_errors=True)
                     else:
                         os.remove(path)
                 except OSError:

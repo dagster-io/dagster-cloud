@@ -491,12 +491,17 @@ query getConcurrencyInfo($concurrencyKey: String!) {
         getConcurrencyInfo(concurrencyKey: $concurrencyKey) {
             concurrencyKey
             slotCount
-            activeSlotCount
-            activeRunIds
-            pendingStepCount
-            pendingStepRunIds
-            assignedStepCount
-            assignedStepRunIds
+            claimedSlots {
+                runId
+                stepKey
+            }
+            pendingSteps {
+                runId
+                stepKey
+                enqueuedTimestamp
+                assignedTimestamp
+                priority
+            }
         }
     }
 }

@@ -48,9 +48,11 @@ from dagster._serdes import (
 from dagster._serdes.serdes import deserialize_value
 from dagster._utils import datetime_as_float, utc_datetime_from_timestamp
 from dagster._utils.concurrency import (
+    ClaimedSlotInfo,
     ConcurrencyClaimStatus,
     ConcurrencyKeyInfo,
     ConcurrencySlotStatus,
+    PendingStepInfo,
 )
 from dagster._utils.error import SerializableErrorInfo
 from dagster._utils.merger import merge_dicts
@@ -336,6 +338,29 @@ def _event_records_result_from_graphql(graphene_event_records_result: Dict) -> E
     )
 
 
+def _claimed_slot_from_graphql(graphene_claimed_slot_dict: Dict) -> ClaimedSlotInfo:
+    check.dict_param(graphene_claimed_slot_dict, "graphene_claimed_slot_dict")
+    return ClaimedSlotInfo(
+        graphene_claimed_slot_dict["runId"],
+        graphene_claimed_slot_dict["stepKey"],
+    )
+
+
+def _pending_step_from_graphql(graphene_pending_step: Dict) -> PendingStepInfo:
+    check.dict_param(graphene_pending_step, "graphene_pending_step")
+    return PendingStepInfo(
+        graphene_pending_step["runId"],
+        graphene_pending_step["stepKey"],
+        enqueued_timestamp=utc_datetime_from_timestamp(graphene_pending_step["enqueuedTimestamp"]),
+        assigned_timestamp=(
+            utc_datetime_from_timestamp(graphene_pending_step["assignedTimestamp"])
+            if graphene_pending_step["assignedTimestamp"]
+            else None
+        ),
+        priority=graphene_pending_step["priority"],
+    )
+
+
 class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def __init__(self, inst_data=None, override_graphql_client=None):
         """Initialize this class directly only for test. Use the ConfigurableClass machinery to
@@ -559,6 +584,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         check.opt_int_param(limit, "limit")
         check.bool_param(ascending, "ascending")
 
+        print(_get_event_records_filter_input(event_records_filter))
         res = self._execute_query(
             GET_EVENT_RECORDS_QUERY,
             variables={
@@ -884,12 +910,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return ConcurrencyKeyInfo(
             concurrency_key=concurrency_key,
             slot_count=info["slotCount"],
-            active_slot_count=info["activeSlotCount"],
-            active_run_ids=set(info["activeRunIds"]),
-            pending_step_count=info["pendingStepCount"],
-            pending_run_ids=set(info["pendingStepRunIds"]),
-            assigned_step_count=info["assignedStepCount"],
-            assigned_run_ids=set(info["assignedStepRunIds"]),
+            claimed_slots=[_claimed_slot_from_graphql(slot) for slot in info["claimedSlots"]],
+            pending_steps=[_pending_step_from_graphql(step) for step in info["pendingSteps"]],
         )
 
     def claim_concurrency_slot(
