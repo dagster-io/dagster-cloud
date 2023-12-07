@@ -1187,9 +1187,14 @@ class DagsterCloudUserCodeLauncher(
                             )
                             multipex_server = None
 
+                    desired_pex_metadata = desired_entry.code_deployment_metadata.pex_metadata
+                    desired_python_version = (
+                        desired_pex_metadata.python_version if desired_pex_metadata else None
+                    )
+                    multipex_server_repr = f"{deployment_name}:{location_name} image={desired_entry.code_deployment_metadata.image} python_version={desired_python_version}"
                     if not multipex_server:
                         self._logger.info(
-                            f"Creating new multipex server for {deployment_name}:{location_name}"
+                            f"Creating new multipex server for {multipex_server_repr}"
                         )
                         # confirm it's a valid image since _create_multipex_server will launch a container
                         self._check_for_image(desired_entry.code_deployment_metadata)
@@ -1205,7 +1210,7 @@ class DagsterCloudUserCodeLauncher(
                         new_multipex_servers[to_update_key] = multipex_server
                     else:
                         self._logger.info(
-                            f"Found running multipex server for {deployment_name}:{location_name}"
+                            f"Found running multipex server for {multipex_server_repr}"
                         )
 
                 except Exception:
@@ -1296,10 +1301,16 @@ class DagsterCloudUserCodeLauncher(
             code_deployment_metadata = desired_entries[to_update_key].code_deployment_metadata
             server_or_error = new_dagster_servers[to_update_key]
 
+            pex_metadata = code_deployment_metadata.pex_metadata
+            deployment_info = (
+                f"(pex_tag={pex_metadata.pex_tag}, python_version={pex_metadata.python_version})"
+                if pex_metadata
+                else f"(image={code_deployment_metadata})"
+            )
             if not isinstance(server_or_error, SerializableErrorInfo):
                 try:
                     self._logger.info(
-                        f"Waiting for new grpc server for {to_update_key} to be ready..."
+                        f"Waiting for new grpc server for {to_update_key} for {deployment_info} to be ready..."
                     )
                     self._wait_for_new_server_ready(
                         deployment_name,
@@ -1311,11 +1322,12 @@ class DagsterCloudUserCodeLauncher(
                 except Exception:
                     error_info = serializable_error_info_from_exc_info(sys.exc_info())
                     self._logger.error(
-                        "Error while waiting for server for {deployment_name}:{location_name} to be"
+                        "Error while waiting for server for {deployment_name}:{location_name} for {deployment_info} to be"
                         " ready: {error_info}".format(
                             deployment_name=deployment_name,
                             location_name=location_name,
                             error_info=error_info,
+                            deployment_info=deployment_info,
                         )
                     )
                     server_or_error = error_info
@@ -1502,11 +1514,23 @@ class DagsterCloudUserCodeLauncher(
         if not cand_server:
             return None
 
-        desired_image = self._resolve_image(code_deployment_metadata)
-
-        if (cand_server.code_deployment_metadata.image == desired_image) and (
-            cand_server.code_deployment_metadata.container_context
-            == code_deployment_metadata.container_context
+        cand_python_version = (
+            cand_server.code_deployment_metadata.pex_metadata.python_version
+            if cand_server.code_deployment_metadata.pex_metadata
+            else None
+        )
+        python_version = (
+            code_deployment_metadata.pex_metadata.python_version
+            if code_deployment_metadata.pex_metadata
+            else None
+        )
+        if (
+            (cand_server.code_deployment_metadata.image == code_deployment_metadata.image)
+            and (cand_python_version == python_version)
+            and (
+                cand_server.code_deployment_metadata.container_context
+                == code_deployment_metadata.container_context
+            )
         ):
             return cand_server
 

@@ -202,14 +202,15 @@ class DagsterCloudAgent:
             with raise_interrupts_as(KeyboardInterrupt):
                 pass
 
-            try:
-                self._check_add_heartbeat(instance, agent_uuid, heartbeat_interval_seconds)
-            except Exception:
-                self._logger.error(
-                    "Failed to add heartbeat: \n{}".format(
-                        serializable_error_info_from_exc_info(sys.exc_info())
+            if user_code_launcher.ready_to_serve_requests:
+                try:
+                    self._check_add_heartbeat(instance, agent_uuid, heartbeat_interval_seconds)
+                except Exception:
+                    self._logger.error(
+                        "Failed to add heartbeat: \n{}".format(
+                            serializable_error_info_from_exc_info(sys.exc_info())
+                        )
                     )
-                )
 
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):

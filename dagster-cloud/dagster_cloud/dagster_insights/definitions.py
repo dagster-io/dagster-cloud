@@ -51,7 +51,7 @@ def create_snowflake_insights_asset_and_schedule(
     group_name: Optional[str] = None,
     job_name: str = "snowflake_insights_import",
     dry_run=False,
-    allow_partial_partitions=False,
+    allow_partial_partitions=True,
     snowflake_resource_key: str = "snowflake",
     snowflake_usage_latency: int = SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS,
     partition_end_offset_hrs: int = 1,
@@ -99,16 +99,19 @@ def create_snowflake_insights_asset_and_schedule(
         start_hour = context.partition_time_window.start
         end_hour = context.partition_time_window.end
 
-        if not allow_partial_partitions:
-            now = datetime.now().astimezone(timezone.utc)
-            earliest_call_time = end_hour + timedelta(minutes=snowflake_usage_latency)
-            if now < earliest_call_time:
-                raise RuntimeError(
-                    "This function was called before the Snowflake query_history table may be"
-                    f" available. For hour starting {start_hour.isoformat()} you can call it"
-                    f" starting at {earliest_call_time.isoformat()} (it is currently"
-                    f" {now.isoformat()})"
-                )
+        now = datetime.now().astimezone(timezone.utc)
+        earliest_call_time = end_hour + timedelta(minutes=snowflake_usage_latency)
+        if now < earliest_call_time:
+            err = (
+                "Attempted to gather Snowflake usage information before the Snowflake query_history table may be"
+                f" available. For hour starting {start_hour.isoformat()} you can call it"
+                f" starting at {earliest_call_time.isoformat()} (it is currently"
+                f" {now.isoformat()})"
+            )
+            if allow_partial_partitions:
+                context.log.error(err)
+            else:
+                raise RuntimeError(err)
 
         costs = (
             get_cost_data_for_hour(

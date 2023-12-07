@@ -204,6 +204,12 @@ class MultiPexManager(AbstractContextManager):
                     str(self._heartbeat_ttl),
                 ]
 
+                # Set working_directory to "." if it is not set, so that it does not
+                # default to the PEX absolute path (which will then be expected to be the
+                # same during runs)
+                if not metadata.working_directory:
+                    metadata = metadata._replace(working_directory=".")
+
                 if seven.IS_WINDOWS:
                     port = find_free_port()
                     socket = None

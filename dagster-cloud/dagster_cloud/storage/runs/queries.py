@@ -45,9 +45,9 @@ ADD_RUN_MUTATION = (
 
 
 GET_RUNS_QUERY = """
-    query getRunsQuery($filters: RunsFilter, $cursor: String, $limit: Int, $bucketBy: RunBucket) {
+    query getRunsQuery($filters: RunsFilter, $cursor: String, $limit: Int, $bucketBy: RunBucket, $ascending: Boolean) {
         runs {
-            getRuns(filters: $filters, cursor: $cursor, limit: $limit, bucketBy: $bucketBy)
+            getRuns(filters: $filters, cursor: $cursor, limit: $limit, bucketBy: $bucketBy, ascending: $ascending)
         }
     }
 """

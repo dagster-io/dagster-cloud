@@ -229,9 +229,7 @@ def get_deployment_failure_debug_info(
     pod_debug_info = ""
     try:
         api_client = DagsterKubernetesClient.production_client(core_api_override=core_api_client)
-        pod_debug_info = api_client.get_pod_debug_info(
-            pod_name, namespace, container_name="dagster"
-        )
+        pod_debug_info = api_client.get_pod_debug_info(pod_name, namespace)
     except Exception:
         logger.exception(f"Error trying to get debug information for failed k8s pod {pod_name}")
 

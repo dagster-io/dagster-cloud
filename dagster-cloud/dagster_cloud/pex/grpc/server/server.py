@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
+from typing import Optional, cast
 
 import dagster._check as check
 import grpc
@@ -213,8 +213,38 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
     def ExternalScheduleExecution(self, request, context):
         return self._streaming_query("ExternalScheduleExecution", request, context)
 
+    def SyncExternalScheduleExecution(self, request, context):
+        try:
+            return self._query("SyncExternalScheduleExecution", request, context)
+        except Exception as e:
+            if (
+                isinstance(e, grpc.RpcError)
+                and cast(grpc.RpcError, e).code() == grpc.StatusCode.UNIMPLEMENTED
+            ):
+                context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "SyncExternalScheduleExecution method is not implemented on underlying code server",
+                )
+            else:
+                raise
+
     def ExternalSensorExecution(self, request, context):
         return self._streaming_query("ExternalSensorExecution", request, context)
+
+    def SyncExternalSensorExecution(self, request, context):
+        try:
+            return self._query("SyncExternalSensorExecution", request, context)
+        except Exception as e:
+            if (
+                isinstance(e, grpc.RpcError)
+                and cast(grpc.RpcError, e).code() == grpc.StatusCode.UNIMPLEMENTED
+            ):
+                context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "SyncExternalSensorExecution method is not implemented on underlying code server",
+                )
+            else:
+                raise
 
     def ShutdownServer(self, request, context):
         return self._query("ShutdownServer", request, context)

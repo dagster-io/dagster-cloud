@@ -139,6 +139,9 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
     def delete_instigator_state(self, origin_id: str, selector_id: str):
         raise NotImplementedError("Not callable from user cloud")
 
+    def get_tick(self, tick_id: int) -> InstigatorTick:
+        raise NotImplementedError("Not callable from user cloud")
+
     def get_ticks(
         self,
         origin_id: str,

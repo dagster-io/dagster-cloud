@@ -214,6 +214,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
         bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
+        ascending: bool = False,
     ) -> Iterable[DagsterRun]:
         res = self._execute_query(
             GET_RUNS_QUERY,
@@ -222,6 +223,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "cursor": check.opt_str_param(cursor, "cursor"),
                 "limit": check.opt_int_param(limit, "limit"),
                 "bucketBy": _get_bucket_input(bucket_by),
+                "ascending": check.bool_param(ascending, "ascending"),
             },
         )
         return [deserialize_value(run, DagsterRun) for run in res["data"]["runs"]["getRuns"]]
