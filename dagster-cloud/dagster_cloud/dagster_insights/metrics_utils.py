@@ -7,7 +7,7 @@ from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
 from ..instance import DagsterCloudAgentInstance
-from .query import PUT_CLOUD_METRICS_MUTATION
+from .query import PUT_CLOUD_METRICS_MUTATION, PUT_COST_INFORMATION_MUTATION
 
 
 def _chunks(chunk_list: List[Any], length: int):
@@ -53,6 +53,34 @@ def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str
         raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
 
     return f"{instance.dagit_url}graphql", instance.dagster_cloud_agent_token
+
+
+@experimental
+def put_cost_information(
+    context: Union[OpExecutionContext, AssetExecutionContext],
+    metric_name: str,
+    cost_information: List[Tuple[str, float]],
+    start: float,
+    end: float,
+) -> Dict[str, Any]:
+    cost_info_input = [
+        {
+            "opaqueId": opaque_id,
+            "cost": float(cost),
+        }
+        for opaque_id, cost in cost_information
+    ]
+
+    return query_graphql_from_instance(
+        context.instance,
+        PUT_COST_INFORMATION_MUTATION,
+        variables={
+            "costInfo": cost_info_input,
+            "metricName": metric_name,
+            "start": start,
+            "end": end,
+        },
+    )
 
 
 @experimental

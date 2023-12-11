@@ -1,16 +1,10 @@
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pprint import pprint
 from typing import (
     TYPE_CHECKING,
-    Any,
-    Dict,
-    List,
-    Mapping,
     Optional,
     Sequence,
-    Tuple,
     Union,
 )
 
@@ -27,11 +21,9 @@ from dagster import (
 )
 
 from .dagster_snowflake_insights import (
-    AssetMaterializationId,
     get_cost_data_for_hour,
 )
-from .metrics_utils import DagsterMetric, put_metrics
-from .snowflake.snowflake_utils import OUTPUT_NON_ASSET_SIGIL
+from .metrics_utils import put_cost_information
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection
@@ -86,7 +78,7 @@ def create_snowflake_insights_asset_and_schedule(
         name=name,
         group_name=group_name,
         partitions_def=HourlyPartitionsDefinition(
-            start_date=start_date, end_offset=partition_end_offset_hrs
+            start_date=start_date, end_offset=-abs(partition_end_offset_hrs)
         ),
         required_resource_keys={snowflake_resource_key},
         io_manager_def=fs_io_manager,
@@ -116,64 +108,34 @@ def create_snowflake_insights_asset_and_schedule(
         costs = (
             get_cost_data_for_hour(
                 snowflake,
-                context.instance,
                 start_hour,
                 end_hour,
             )
             or []
         )
+        snowflake_query_end_time = datetime.now().astimezone(timezone.utc)
+        context.log.info(
+            f"Fetched query history information from {start_hour.isoformat()} to {end_hour.isoformat()} in {(snowflake_query_end_time - now).total_seconds()} seconds"
+        )
+
         if dry_run:
             pprint(costs)
         else:
-            mat_by_step: Mapping[
-                Tuple[str, str], List[Tuple[AssetMaterializationId, Any]]
-            ] = defaultdict(list)
-            for mat, cost in costs:
-                mat_by_step[(mat.run_id, mat.step_key)].append((mat, cost))
-
-            for run_id, step_key in mat_by_step.keys():
-                materializations = mat_by_step[(run_id, step_key)]
-                costs_by_asset_key_and_partition: Dict[Tuple[str, Optional[str]], float] = {}
-                for mat, cost in materializations:
-                    # filter out any costs not associated with a specific asset (e.g. just an op output)
-                    if not mat.asset_key.path[-1].startswith(OUTPUT_NON_ASSET_SIGIL):
-                        key = (mat.asset_key.to_string(), mat.partition)
-                        costs_by_asset_key_and_partition[key] = (
-                            costs_by_asset_key_and_partition.get(key, 0) + float(cost)
-                        )
-
-                costs_keys = list(costs_by_asset_key_and_partition.keys())
-
-                for asset_key, partition in costs_keys:
-                    cost = costs_by_asset_key_and_partition[(asset_key, partition)]
-
-                    result = put_metrics(
-                        context=context,
-                        run_id=run_id,
-                        step_key=step_key,
-                        asset_key=asset_key,
-                        partition=partition,
-                        metrics=[DagsterMetric("snowflake_credits", cost)],
-                    )
-                    assert (
-                        result["createOrUpdateMetrics"]["__typename"]
-                        == "CreateOrUpdateMetricsSuccess"
-                    ), result
-
-                result = put_metrics(
-                    context=context,
-                    run_id=run_id,
-                    step_key=step_key,
-                    metrics=[
-                        DagsterMetric(
-                            "snowflake_credits",
-                            sum([float(cost) for mat, cost in materializations]),
-                        )
-                    ],
-                )
-                assert (
-                    result["createOrUpdateMetrics"]["__typename"] == "CreateOrUpdateMetricsSuccess"
-                ), result
+            context.log.info(
+                f"Submitting cost information for {len(costs)} queries to Dagster Insights"
+            )
+            result = put_cost_information(
+                context=context,
+                metric_name="snowflake_credits",
+                cost_information=costs,
+                start=start_hour.timestamp(),
+                end=end_hour.timestamp(),
+            )
+            if (
+                result["submitCostInformationForMetrics"]["__typename"]
+                != "CreateOrUpdateMetricsSuccess"
+            ):
+                raise RuntimeError("Failed to submit cost information", result)
 
     schedule = build_schedule_from_partitioned_job(
         job=define_asset_job(job_name, AssetSelection.assets(poll_snowflake_query_history_hour)),

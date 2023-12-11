@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import (
     TYPE_CHECKING,
-    Any,
-    Dict,
     Iterable,
     List,
     Optional,
@@ -104,28 +102,13 @@ class SnowflakeInsightsDefinitions:
 
 def get_cost_data_for_hour(
     snowflake: "SnowflakeConnection",
-    instance: DagsterInstance,
     start_hour: datetime,
     end_hour: datetime,
-) -> List[Tuple[AssetMaterializationId, Any]]:
+) -> List[Tuple[str, float]]:
     """Given a date range, queries the Snowflake query_history table for all queries that were run
     during that time period and returns a mapping from AssetMaterializationId to the cost of the
     query that produced it, as estimated by Snowflake. The cost is in Snowflake credits.
     """
-    queries = list(get_opaque_ids_to_assets(instance, start_hour, end_hour))
-    print(
-        f"Found {len(queries)} queries to check from {start_hour.isoformat()} to"
-        f" {end_hour.isoformat()}"
-    )
-    for am, opaque_id in queries:
-        print(opaque_id, am.run_id)
-    if len(queries) == 0:
-        return []
-
-    opaque_id_to_asset_materialization_id: Dict[str, AssetMaterializationId] = {}
-    for asset_materialization_id, opaque_id in queries:
-        opaque_id_to_asset_materialization_id[opaque_id] = asset_materialization_id
-
     opaque_ids_sql = rf"""
     regexp_substr_all(query_text, '{OPAQUE_ID_SQL_SIGIL}\\[\\[\\[(.*?)\\]\\]\\]', 1, 1, 'ce', 1)
     """.strip()
@@ -162,7 +145,7 @@ HAVING ARRAY_SIZE(opaque_ids) > 0
             assert result
             results = result.fetchall()
 
-    costs: List[Tuple[AssetMaterializationId, Any]] = []
+    costs: List[Tuple[str, float]] = []
 
     print(
         f"{len(results) if results else 0} annotated queries returned from snowflake query_history"
@@ -178,9 +161,7 @@ HAVING ARRAY_SIZE(opaque_ids) > 0
         cost = result_cost / len(opaque_ids)
         total += len(opaque_ids)
         for opaque_id in opaque_ids:
-            print(opaque_id, query_id)
-            if opaque_id in opaque_id_to_asset_materialization_id:
-                costs.append((opaque_id_to_asset_materialization_id[opaque_id], cost))
+            costs.append((opaque_id, float(cost)))
 
     print(
         f"Reported costs for {len(costs)} of {total} asset materializations found in the"
