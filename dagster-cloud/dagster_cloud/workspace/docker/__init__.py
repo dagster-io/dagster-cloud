@@ -106,7 +106,7 @@ class DockerUserCodeLauncher(
 
     @classmethod
     def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
-        return DockerUserCodeLauncher(inst_data=inst_data, **config_value)
+        return cls(inst_data=inst_data, **config_value)
 
     def _create_container(
         self,

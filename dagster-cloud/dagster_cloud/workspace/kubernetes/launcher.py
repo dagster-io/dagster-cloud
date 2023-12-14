@@ -250,7 +250,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
     @classmethod
     def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
-        return K8sUserCodeLauncher(
+        return cls(
             inst_data=inst_data,
             **config_value,
         )

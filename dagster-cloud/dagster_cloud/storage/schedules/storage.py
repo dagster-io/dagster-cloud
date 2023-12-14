@@ -56,7 +56,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
 
     @classmethod
     def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
-        return GraphQLScheduleStorage(inst_data=inst_data)
+        return cls(inst_data=inst_data)
 
     @property
     def _graphql_client(self):

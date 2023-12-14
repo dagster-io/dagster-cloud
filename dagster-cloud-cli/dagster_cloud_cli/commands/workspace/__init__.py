@@ -17,7 +17,7 @@ from dagster_cloud_cli.config_utils import (
 )
 from dagster_cloud_cli.core.graphql_client import GqlShimClient
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
-from dagster_cloud_cli.utils import add_options, create_stub_command
+from dagster_cloud_cli.utils import add_options
 
 DEFAULT_LOCATIONS_YAML_FILENAME = "locations.yaml"
 
@@ -346,11 +346,3 @@ def execute_sync_command(
         )
     except Exception as e:
         raise ui.error(str(e))
-
-
-try:
-    from dagster_cloud.workspace.cli import snapshot_command
-
-    app.command(name="snapshot", hidden=True)(snapshot_command)
-except ImportError:
-    app.command(name="snapshot", hidden=True)(create_stub_command("dagster-cloud"))

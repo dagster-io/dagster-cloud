@@ -56,21 +56,25 @@ class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
         sql_text: str,
         remove_comments: bool = False,
         return_cursors: bool = True,
-        cursor_class: Type = InsightsSnowflakeCursor,
+        cursor_class: Type[SnowflakeCursor] = InsightsSnowflakeCursor,
         **kwargs,
     ) -> Iterable[SnowflakeCursor]:
         return super().execute_string(
-            sql_text, remove_comments, return_cursors, cursor_class, **kwargs
+            sql_text,
+            remove_comments,
+            return_cursors,
+            cursor_class,  # type: ignore  # (bad stubs)
+            **kwargs,
         )
 
     def execute_stream(
         self,
         stream: StringIO,
         remove_comments: bool = False,
-        cursor_class: Type = InsightsSnowflakeCursor,
+        cursor_class: Type[SnowflakeCursor] = InsightsSnowflakeCursor,
         **kwargs,
     ) -> Generator[SnowflakeCursor, None, None]:
-        return super().execute_stream(stream, remove_comments, cursor_class, **kwargs)
+        return super().execute_stream(stream, remove_comments, cursor_class, **kwargs)  # type: ignore  # (bad stubs)
 
     def cursor(self, cursor_class=None) -> SnowflakeCursor:
         if cursor_class is None:

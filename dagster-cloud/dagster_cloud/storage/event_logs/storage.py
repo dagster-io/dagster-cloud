@@ -227,7 +227,7 @@ def _get_event_records_filter_input(
 
 
 def _get_asset_records_filter_input(
-    records_filter: Union[AssetKey, AssetRecordsFilter]
+    records_filter: Union[AssetKey, AssetRecordsFilter],
 ) -> Dict[str, Any]:
     check.opt_inst_param(records_filter, "records_filter", (AssetKey, AssetRecordsFilter))
 
@@ -379,7 +379,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     @classmethod
     def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:
-        return GraphQLEventLogStorage(inst_data=inst_data)
+        return cls(inst_data=inst_data)
 
     @property
     def _graphql_client(self):
