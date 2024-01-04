@@ -14,8 +14,12 @@ from dagster._grpc.__generated__.api_pb2_grpc import (
     DagsterApiServicer,
     add_DagsterApiServicer_to_server,
 )
+from dagster._grpc.client import DEFAULT_GRPC_TIMEOUT
 from dagster._grpc.server import server_termination_target
-from dagster._grpc.types import GetCurrentRunsResult
+from dagster._grpc.types import (
+    GetCurrentRunsResult,
+    SensorExecutionArgs,
+)
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
 from dagster._serdes import deserialize_value, serialize_value
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
@@ -128,21 +132,23 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             metadata_update_timestamp=int(metadict["timestamp"]),
         )
 
-    def _query(self, api_name: str, request, context):
+    def _query(self, api_name: str, request, context, timeout: int = DEFAULT_GRPC_TIMEOUT):
         client_or_error = self._pex_manager.get_pex_grpc_client_or_error(
             self._get_handle_from_metadata(context)
         )
         if isinstance(client_or_error, SerializableErrorInfo):
             raise Exception(f"Code server failed: {client_or_error}")
-        return client_or_error._get_response(api_name, request)  # noqa: SLF001
+        return client_or_error._get_response(api_name, request, timeout)  # noqa: SLF001
 
-    def _streaming_query(self, api_name: str, request, context):
+    def _streaming_query(
+        self, api_name: str, request, context, timeout: int = DEFAULT_GRPC_TIMEOUT
+    ):
         client_or_error = self._pex_manager.get_pex_grpc_client_or_error(
             self._get_handle_from_metadata(context)
         )
         if isinstance(client_or_error, SerializableErrorInfo):
             raise Exception("Server failed to start up, no available client")
-        return client_or_error._get_streaming_response(api_name, request)  # noqa: SLF001
+        return client_or_error._get_streaming_response(api_name, request, timeout)  # noqa: SLF001
 
     def ExecutionPlanSnapshot(self, request, context):
         return self._query("ExecutionPlanSnapshot", request, context)
@@ -229,11 +235,29 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
                 raise
 
     def ExternalSensorExecution(self, request, context):
-        return self._streaming_query("ExternalSensorExecution", request, context)
+        sensor_args = deserialize_value(
+            request.serialized_external_sensor_execution_args, SensorExecutionArgs
+        )
+        return self._streaming_query(
+            "ExternalSensorExecution",
+            request,
+            context,
+            timeout=sensor_args.timeout
+            if sensor_args.timeout is not None
+            else DEFAULT_GRPC_TIMEOUT,
+        )
 
     def SyncExternalSensorExecution(self, request, context):
         try:
-            return self._query("SyncExternalSensorExecution", request, context)
+            sensor_args = deserialize_value(
+                request.serialized_external_sensor_execution_args, SensorExecutionArgs
+            )
+            return self._query(
+                "SyncExternalSensorExecution",
+                request,
+                context,
+                timeout=sensor_args.timeout or DEFAULT_GRPC_TIMEOUT,
+            )
         except Exception as e:
             if (
                 isinstance(e, grpc.RpcError)

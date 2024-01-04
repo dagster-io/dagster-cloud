@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, Generator, List, NamedTuple, Optional, Tuple, Union
 
 import dagster._check as check
 from dagster import AssetExecutionContext, DagsterInstance, OpExecutionContext
@@ -6,7 +6,8 @@ from dagster._annotations import experimental
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
-from ..instance import DagsterCloudAgentInstance
+from dagster_cloud.instance import DagsterCloudAgentInstance
+
 from .query import PUT_CLOUD_METRICS_MUTATION, PUT_COST_INFORMATION_MUTATION
 
 
@@ -55,6 +56,39 @@ def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str
     return f"{instance.dagit_url}graphql", instance.dagster_cloud_agent_token
 
 
+def _cost_information_chunk_size() -> int:
+    return 10000
+
+
+def chunk_by_opaque_id(
+    chunk_list: List[Tuple[str, float]], length: int
+) -> Generator[List[Tuple[str, float]], None, None]:
+    """Yield chunks of data. Groups by opaque_id so that
+    all metrics for a given opaque_id are in the same chunk.
+    Chunks will be of size `length` or less unless a single
+    opaque_id has more than `length` metrics.
+    """
+    sorted_chunk_list = sorted(chunk_list, key=lambda x: x[0]) + [("marker", 0.0)]
+
+    current_opaque_id = None
+    last_opaque_id_boundary = 0
+    last_chunk_boundary = 0
+    for i, (opaque_id, _) in enumerate(sorted_chunk_list):
+        # If we've seen enough metrics to fill a chunk, yield the chunk minus the
+        # current opaque_id, and start a new chunk
+        if i - last_chunk_boundary > length:
+            yield sorted_chunk_list[last_chunk_boundary:last_opaque_id_boundary]
+            last_chunk_boundary = last_opaque_id_boundary
+
+        if opaque_id != current_opaque_id:
+            current_opaque_id = opaque_id
+            last_opaque_id_boundary = i
+
+    sorted_chunk_list = sorted_chunk_list[:-1]
+    if last_chunk_boundary < len(sorted_chunk_list):
+        yield sorted_chunk_list[last_chunk_boundary:]
+
+
 @experimental
 def put_cost_information(
     context: Union[OpExecutionContext, AssetExecutionContext],
@@ -62,25 +96,36 @@ def put_cost_information(
     cost_information: List[Tuple[str, float]],
     start: float,
     end: float,
-) -> Dict[str, Any]:
-    cost_info_input = [
-        {
-            "opaqueId": opaque_id,
-            "cost": float(cost),
-        }
-        for opaque_id, cost in cost_information
-    ]
+) -> None:
+    chunk_size = _cost_information_chunk_size()
 
-    return query_graphql_from_instance(
-        context.instance,
-        PUT_COST_INFORMATION_MUTATION,
-        variables={
-            "costInfo": cost_info_input,
-            "metricName": metric_name,
-            "start": start,
-            "end": end,
-        },
-    )
+    # Chunk the cost information & keep each opaque id in the same chunk
+    # to avoid the cost information for a single asset being split across
+    # multiple steps
+    for chunk in chunk_by_opaque_id(cost_information, chunk_size):
+        cost_info_input = [
+            {
+                "opaqueId": opaque_id,
+                "cost": float(cost),
+            }
+            for opaque_id, cost in chunk
+        ]
+
+        result = query_graphql_from_instance(
+            context.instance,
+            PUT_COST_INFORMATION_MUTATION,
+            variables={
+                "costInfo": cost_info_input,
+                "metricName": metric_name,
+                "start": start,
+                "end": end,
+            },
+        )
+        if (
+            result["submitCostInformationForMetrics"]["__typename"]
+            != "CreateOrUpdateMetricsSuccess"
+        ):
+            raise RuntimeError("Failed to submit cost information", result)
 
 
 @experimental

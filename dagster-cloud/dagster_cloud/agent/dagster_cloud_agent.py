@@ -75,11 +75,16 @@ DEPLOYMENT_INFO_QUERY = """
 """
 
 AGENT_VERSION_LABEL = "version"
+AGENT_DEFAULT_MAX_THREADS_PER_CORE = 10
+AGENT_MAX_THREADPOOL_WORKERS = int(
+    os.getenv(
+        "DAGSTER_CLOUD_AGENT_MAX_THREADPOOL_WORKERS",
+        str((os.cpu_count() or 1) * AGENT_DEFAULT_MAX_THREADS_PER_CORE),
+    )
+)
 
 
 class DagsterCloudAgent:
-    MAX_THREADS_PER_CORE = 10
-
     def __init__(self, pending_requests_limit: int = DEFAULT_PENDING_REQUESTS_LIMIT):
         self._logger = logging.getLogger("dagster_cloud.agent")
 
@@ -88,10 +93,9 @@ class DagsterCloudAgent:
         self._exit_stack = ExitStack()
         self._iteration = 0
 
-        max_workers = (os.cpu_count() or 1) * self.MAX_THREADS_PER_CORE
         self._executor = self._exit_stack.enter_context(
             ThreadPoolExecutor(
-                max_workers=max_workers,
+                max_workers=AGENT_MAX_THREADPOOL_WORKERS,
                 thread_name_prefix="dagster_cloud_agent_worker",
             )
         )

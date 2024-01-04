@@ -14,10 +14,13 @@ from dagster import (
     AssetSelection,
     HourlyPartitionsDefinition,
     ScheduleDefinition,
+    ScheduleEvaluationContext,
+    TimeWindow,
     asset,
     build_schedule_from_partitioned_job,
     define_asset_job,
     fs_io_manager,
+    schedule,
 )
 
 from .dagster_snowflake_insights import (
@@ -47,6 +50,7 @@ def create_snowflake_insights_asset_and_schedule(
     snowflake_resource_key: str = "snowflake",
     snowflake_usage_latency: int = SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS,
     partition_end_offset_hrs: int = 1,
+    schedule_batch_size_hrs: int = 1,
 ) -> SnowflakeInsightsDefinitions:
     """Generates a pre-defined Dagster asset and schedule that can be used to import Snowflake cost
     data into Dagster Insights.
@@ -68,18 +72,25 @@ def create_snowflake_insights_asset_and_schedule(
             "snowflake".
         partition_end_offset_hrs (int): The number of additional hours to wait before querying
             Snowflake for the latest data. This is useful in case the Snowflake query_history table
-            is not immediately available. Defaults to .
+            is not immediately available. Defaults to 1
+        schedule_batch_size_hrs (int): The number of hours of data to process in each schedule
+            run. For example, if this is set to 2, the schedule will run every 2 hours and process
+            2 hours of data. Defaults to 1.
     """
     # for backcompat, this used to take `date`
     if isinstance(start_date, date):
         start_date = start_date.strftime("%Y-%m-%d-%H:%M")
 
+    partition_end_offset_hrs = -abs(partition_end_offset_hrs)
+
+    partitions_def = HourlyPartitionsDefinition(
+        start_date=start_date, end_offset=partition_end_offset_hrs
+    )
+
     @asset(
         name=name,
         group_name=group_name,
-        partitions_def=HourlyPartitionsDefinition(
-            start_date=start_date, end_offset=-abs(partition_end_offset_hrs)
-        ),
+        partitions_def=partitions_def,
         required_resource_keys={snowflake_resource_key},
         io_manager_def=fs_io_manager,
     )
@@ -124,25 +135,51 @@ def create_snowflake_insights_asset_and_schedule(
             context.log.info(
                 f"Submitting cost information for {len(costs)} queries to Dagster Insights"
             )
-            result = put_cost_information(
+            put_cost_information(
                 context=context,
                 metric_name="snowflake_credits",
                 cost_information=costs,
                 start=start_hour.timestamp(),
                 end=end_hour.timestamp(),
             )
-            if (
-                result["submitCostInformationForMetrics"]["__typename"]
-                != "CreateOrUpdateMetricsSuccess"
-            ):
-                raise RuntimeError("Failed to submit cost information", result)
 
-    schedule = build_schedule_from_partitioned_job(
-        job=define_asset_job(job_name, AssetSelection.assets(poll_snowflake_query_history_hour)),
-        minute_of_hour=59,
+    insights_job = define_asset_job(
+        job_name,
+        AssetSelection.assets(poll_snowflake_query_history_hour),
+        partitions_def=partitions_def,
     )
+
+    if schedule_batch_size_hrs == 1:
+        insights_schedule = build_schedule_from_partitioned_job(
+            job=insights_job,
+            minute_of_hour=59,
+        )
+    else:
+
+        @schedule(
+            job=insights_job,
+            name=f"{job_name}_schedule_{schedule_batch_size_hrs}_hrs",
+            cron_schedule=f"59 0/{schedule_batch_size_hrs} * * *",
+        )
+        def _insights_schedule(context: ScheduleEvaluationContext):
+            timestamp = context.scheduled_execution_time.replace(
+                minute=0, second=0, microsecond=0
+            ) + timedelta(hours=partition_end_offset_hrs)
+            n_hours_ago = timestamp - timedelta(hours=schedule_batch_size_hrs)
+            window = TimeWindow(start=n_hours_ago, end=timestamp)
+
+            partition_keys = partitions_def.get_partition_keys_in_time_window(window)
+
+            for partition_key in partition_keys:
+                yield insights_job.run_request_for_partition(
+                    partition_key=partition_key,
+                    run_key=partition_key,
+                )
+
+        insights_schedule = _insights_schedule
+
     # schedule may be a UnresolvedPartitionedAssetScheduleDefinition so we ignore the type check
     return SnowflakeInsightsDefinitions(
         assets=[poll_snowflake_query_history_hour],
-        schedule=schedule,  # type: ignore
+        schedule=insights_schedule,  # type: ignore
     )

@@ -20,7 +20,7 @@ ver = get_version()
 # dont pin dev installs to avoid pip dep resolver issues
 pin = "" if ver == "1!0+dev" else f"=={ver}"
 setup(
-    name="dagster_cloud",
+    name="dagster-cloud",
     long_description=get_description(),
     long_description_content_type="text/markdown",
     version=ver,
@@ -40,8 +40,8 @@ setup(
     packages=find_packages(exclude=["dagster_cloud_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.5.13",
-        "dagster-cloud-cli==1.5.13",
+        "dagster==1.5.14",
+        "dagster-cloud-cli==1.5.14",
         "pex>=2.1.132",
         "questionary",
         "requests",
@@ -66,12 +66,12 @@ setup(
             "dbt-snowflake",
             "dbt-postgres",
             "dbt-duckdb",
-            "dagster-dbt==0.21.13",
-            "dagster_k8s==0.21.13",
+            "dagster-dbt==0.21.14",
+            "dagster_k8s==0.21.14",
         ],
-        "docker": ["docker", "dagster_docker==0.21.13"],
-        "kubernetes": ["kubernetes", "dagster_k8s==0.21.13"],
-        "ecs": ["dagster_aws==0.21.13", "boto3"],
+        "docker": ["docker", "dagster_docker==0.21.14"],
+        "kubernetes": ["kubernetes", "dagster_k8s==0.21.14"],
+        "ecs": ["dagster_aws==0.21.14", "boto3"],
         "sandbox": ["supervisor"],
         "pex": ["boto3"],
         "serverless": ["boto3"],

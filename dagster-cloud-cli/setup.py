@@ -13,7 +13,7 @@ def get_version() -> str:
 
 
 setup(
-    name="dagster_cloud_cli",
+    name="dagster-cloud-cli",
     version=get_version(),
     author_email="hello@elementl.com",
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),

@@ -124,8 +124,12 @@ def dbt_with_snowflake_insights(
                 if asset_key and context._step_execution_context.has_asset_partitions_for_output(  # noqa: SLF001
                     dagster_event.output_name
                 ):
-                    partition_key = context.asset_partition_key_for_output(
-                        dagster_event.output_name
+                    # We associate cost with the first partition key in the case that an output
+                    # maps to multiple partitions. This is a temporary solution, but partition key
+                    # is not used in Insights at the moment.
+                    # TODO: Find a long-term solution for this
+                    partition_key = next(
+                        iter(context.asset_partition_keys_for_output(dagster_event.output_name))
                     )
             else:
                 asset_key = dagster_event.asset_key
