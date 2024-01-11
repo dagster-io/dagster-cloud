@@ -477,6 +477,22 @@ mutation SetConcurrencySlots($concurrencyKey: String!, $num: Int!) {
 """
 )
 
+INITIALIZE_CONCURRENCY_LIMIT_MUTATION = (
+    PYTHON_ERROR_FRAGMENT
+    + """
+mutation InitializeConcurrencyLimit($concurrencyKey: String!) {
+    eventLogs {
+        InitializeConcurrencyLimit(concurrencyKey: $concurrencyKey) {
+            success
+            error {
+                ...PythonErrorFragment
+            }
+        }
+    }
+}
+"""
+)
+
 GET_CONCURRENCY_KEYS_QUERY = """
 query getConcurrencyKeys {
     eventLogs {

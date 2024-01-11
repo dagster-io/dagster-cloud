@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
 import yaml
 from dagster import (
+    Array,
     Field,
+    String,
     _check as check,
 )
 from dagster._config import process_config
@@ -26,6 +28,8 @@ from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
+
+from dagster_cloud.agent import AgentQueuesConfig
 
 from ..auth.constants import get_organization_name_from_agent_token
 from ..storage.client import dagster_cloud_api_config
@@ -51,6 +55,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         user_code_launcher=None,
         agent_replicas=None,
         isolated_agents=None,
+        agent_queues=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -104,6 +109,11 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             )
         else:
             self._isolated_agents = None
+
+        processed_agent_queues_config = self._get_processed_config(
+            "agent_queues", agent_queues, self._agent_queues_config_schema()
+        )
+        self.agent_queues_config = AgentQueuesConfig(**processed_agent_queues_config)
 
         self._instance_uuid = str(uuid.uuid4())
 
@@ -282,6 +292,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return f"{self.dagster_cloud_url}/gen_logs_url"
 
     @property
+    def dagster_cloud_gen_insights_url_url(self) -> str:
+        return f"{self.dagster_cloud_url}/gen_insights_url"
+
+    @property
     def dagster_cloud_upload_job_snap_url(self):
         return f"{self.dagster_cloud_url}/upload_job_snapshot"
 
@@ -402,11 +416,19 @@ instance_class:
             "agent_replicas": Field(
                 cls._isolated_agents_config_schema(), is_required=False
             ),  # deprecated in favor of isolated_agents
+            "agent_queues": Field(cls._agent_queues_config_schema(), is_required=False),
         }
 
     @classmethod
     def _isolated_agents_config_schema(cls):
         return {"enabled": Field(bool, is_required=False, default_value=False)}
+
+    @classmethod
+    def _agent_queues_config_schema(cls):
+        return {
+            "include_default_queue": Field(bool, default_value=True),
+            "additional_queues": Field(Array(String), is_required=False),
+        }
 
     def get_required_daemon_types(self) -> Sequence[str]:
         return []

@@ -24,6 +24,7 @@ def grpc(
         default="/tmp/pex-files", envvar="LOCAL_PEX_FILES_DIR"
     ),
     watchdog_run_interval: Optional[int] = Option(default=30, envvar="WATCHDOG_RUN_INTERVAL"),
+    enable_metrics: bool = Option(default=False, envvar="PEX_ENABLE_METRICS"),
 ):
     logger = logging.getLogger("dagster.multipex_server")
 
@@ -35,6 +36,7 @@ def grpc(
         max_workers=max_workers,
         local_pex_files_dir=local_pex_files_dir,
         watchdog_run_interval=watchdog_run_interval,
+        enable_metrics=enable_metrics,
     )
 
 

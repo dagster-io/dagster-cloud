@@ -92,6 +92,7 @@ from .queries import (
     GET_STEP_STATS_FOR_RUN_QUERY,
     HAS_ASSET_KEY_QUERY,
     HAS_DYNAMIC_PARTITION_QUERY,
+    INITIALIZE_CONCURRENCY_LIMIT_MUTATION,
     IS_ASSET_AWARE_QUERY,
     IS_PERSISTENT_QUERY,
     REINDEX_MUTATION,
@@ -879,6 +880,22 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def supports_global_concurrency_limits(self) -> bool:
         return True
 
+    def initialize_concurrency_limit_to_default(self, concurrency_key: str) -> bool:
+        check.str_param(concurrency_key, "concurrency_key")
+        res = self._execute_query(
+            INITIALIZE_CONCURRENCY_LIMIT_MUTATION,
+            variables={"concurrencyKey": concurrency_key},
+        )
+        result = res["data"]["eventLogs"]["InitializeConcurrencyLimit"]
+        error = result.get("error")
+
+        if error:
+            if error["className"] == "DagsterInvalidInvocationError":
+                raise DagsterInvalidInvocationError(error["message"])
+            else:
+                raise GraphQLStorageError(res)
+        return result.get("success")
+
     def set_concurrency_slots(self, concurrency_key: str, num: int) -> None:
         check.str_param(concurrency_key, "concurrency_key")
         check.int_param(num, "num")
@@ -927,7 +944,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 "concurrencyKey": concurrency_key,
                 "runId": run_id,
                 "stepKey": step_key,
-                "priority": priority,
+                "priority": priority or 0,
             },
             idempotent_mutation=True,
         )

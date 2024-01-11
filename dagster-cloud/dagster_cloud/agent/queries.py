@@ -1,7 +1,7 @@
 GET_USER_CLOUD_REQUESTS_QUERY = """
-    mutation GetUserCloudRequests($forBranchDeployments: Boolean $forFullDeployments: [String!], $limit: Int) {
+    mutation GetUserCloudRequests($forBranchDeployments: Boolean $forFullDeployments: [String!], $limit: Int, $agentQueues: [String]) {
         userCloudAgent {
-            popUserCloudAgentRequests(limit: $limit, forBranchDeployments: $forBranchDeployments, forFullDeployments: $forFullDeployments) {
+            popUserCloudAgentRequests(limit: $limit, forBranchDeployments: $forBranchDeployments, forFullDeployments: $forFullDeployments, agentQueues: $agentQueues) {
                 requestId
                 requestApi
                 requestBody
@@ -22,11 +22,11 @@ DEPLOYMENTS_QUERY = """
 """
 
 WORKSPACE_ENTRIES_QUERY = """
-    query WorkspaceEntries($deploymentNames: [String!]!, $includeAllServerlessDeployments: Boolean!) {
+    query WorkspaceEntries($deploymentNames: [String!]!, $includeAllServerlessDeployments: Boolean!, $agentQueues: [String]) {
         deployments(deploymentNames: $deploymentNames, includeAllServerlessDeployments: $includeAllServerlessDeployments) {
             deploymentName
             isBranchDeployment
-            workspaceEntries {
+            workspaceEntries(agentQueues: $agentQueues) {
                 locationName
                 serializedDeploymentMetadata
                 hasOutdatedData

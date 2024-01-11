@@ -245,6 +245,11 @@ CONFIG_SCHEMA_FIELDS = {
         description="Metadata for specific compute environments",
         is_required=False,
     ),
+    "agent_queue": Field(
+        config=str,
+        is_required=False,
+        description="Locations that specify an agent queue will only have their requests handled by agents configured to read from a matching queue. By default, requests are placed on a default queue that's handled by all agents.",
+    ),
 }
 
 

@@ -40,6 +40,7 @@ class MultiPexManager(AbstractContextManager):
         self,
         local_pex_files_dir: Optional[str] = None,
         watchdog_run_interval: Optional[int] = 30,
+        enable_metrics: bool = False,
     ):
         # Keyed by hash of PexServerHandle
         self._pex_servers: Dict[str, Union[PexProcessEntry, PexErrorEntry]] = {}
@@ -51,6 +52,7 @@ class MultiPexManager(AbstractContextManager):
         ] = {}  # maps handle id to the pex tag
         self._heartbeat_ttl = 60
         self._registry = PexS3Registry(local_pex_files_dir)
+        self._enable_metrics = enable_metrics
 
         if watchdog_run_interval and watchdog_run_interval > 0:
             self._watchdog_thread = threading.Thread(
@@ -90,13 +92,14 @@ class MultiPexManager(AbstractContextManager):
                         returncode,
                     )
             self._mark_servers_unexpected_termination(dead_server_returncodes)
-            logging.info(
-                "watchdog: inspected %s active servers %s, of which %s were found unexpectedly"
-                " terminated",
-                len(active_servers),
-                [server.pex_server_handle.get_id() for server in active_servers],
-                len(dead_server_returncodes),
-            )
+            if dead_server_returncodes:
+                logging.warning(
+                    "watchdog: inspected %s active servers %s, of which %s were found unexpectedly"
+                    " terminated",
+                    len(active_servers),
+                    [server.pex_server_handle.get_id() for server in active_servers],
+                    len(dead_server_returncodes),
+                )
 
     def _mark_servers_unexpected_termination(
         self, dead_server_returncodes: List[Tuple[PexProcessEntry, int]]
@@ -203,6 +206,8 @@ class MultiPexManager(AbstractContextManager):
                     "--heartbeat-timeout",
                     str(self._heartbeat_ttl),
                 ]
+                if self._enable_metrics:
+                    subprocess_args.append("--enable-metrics")
 
                 # Set working_directory to "." if it is not set, so that it does not
                 # default to the PEX absolute path (which will then be expected to be the
@@ -245,8 +250,8 @@ class MultiPexManager(AbstractContextManager):
                 heartbeat_thread = threading.Thread(
                     target=client_heartbeat_thread,
                     args=(client, heartbeat_shutdown_event),
+                    daemon=True,
                 )
-                heartbeat_thread.daemon = True
                 heartbeat_thread.start()
                 logging.info(
                     "Created a heartbeat thread %s for %s",

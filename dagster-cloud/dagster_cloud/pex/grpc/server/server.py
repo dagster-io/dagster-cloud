@@ -49,9 +49,11 @@ class MultiPexApiServer(MultiPexApiServicer):
     ):
         self._pex_manager = pex_manager
         self.__cleanup_thread = threading.Thread(
-            target=self._cleanup_thread, args=(), name="multi-pex-cleanup"
+            target=self._cleanup_thread,
+            args=(),
+            name="multi-pex-cleanup",
+            daemon=True,
         )
-        self.__cleanup_thread.daemon = True
         self.__cleanup_thread.start()
 
     def CreatePexServer(self, request, _context):
@@ -335,6 +337,7 @@ def run_multipex_server(
     max_workers=None,
     local_pex_files_dir: Optional[str] = "/tmp/pex-files",
     watchdog_run_interval: Optional[int] = 30,
+    enable_metrics: bool = False,
 ):
     server = grpc.server(
         ThreadPoolExecutor(max_workers=max_workers),
@@ -346,7 +349,9 @@ def run_multipex_server(
     )
 
     with MultiPexManager(
-        local_pex_files_dir=local_pex_files_dir, watchdog_run_interval=watchdog_run_interval
+        local_pex_files_dir=local_pex_files_dir,
+        watchdog_run_interval=watchdog_run_interval,
+        enable_metrics=enable_metrics,
     ) as pex_manager:
         pex_api_servicer = MultiPexApiServer(
             pex_manager=pex_manager,
@@ -383,8 +388,8 @@ def run_multipex_server(
             target=server_termination_target,
             args=[server_termination_event, server, logger],
             name="grpc-server-termination",
+            daemon=True,
         )
-        server_termination_thread.daemon = True
         server_termination_thread.start()
 
         server.wait_for_termination()

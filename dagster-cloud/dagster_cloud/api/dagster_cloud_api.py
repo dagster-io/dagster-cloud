@@ -15,6 +15,7 @@ from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
+from dagster_cloud.agent import AgentQueuesConfig
 from dagster_cloud.execution.monitoring import CloudCodeServerHeartbeat, CloudRunWorkerStatuses
 
 DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
@@ -445,9 +446,10 @@ class AgentHeartbeat(
             ("agent_label", Optional[str]),
             ("agent_type", Optional[str]),
             ("errors", Optional[Sequence[TimestampedError]]),
-            ("metadata", Optional[Mapping[str, str]]),
+            ("metadata", Optional[Mapping[str, Any]]),
             ("run_worker_statuses", Optional[CloudRunWorkerStatuses]),
             ("code_server_heartbeats", Optional[Sequence[CloudCodeServerHeartbeat]]),
+            ("agent_queues_config", AgentQueuesConfig),
         ],
     )
 ):
@@ -458,9 +460,10 @@ class AgentHeartbeat(
         agent_label: Optional[str],
         agent_type: Optional[str],
         errors: Optional[Sequence[TimestampedError]] = None,
-        metadata: Optional[Mapping[str, str]] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
         run_worker_statuses: Optional[CloudRunWorkerStatuses] = None,
         code_server_heartbeats: Optional[Sequence[CloudCodeServerHeartbeat]] = None,
+        agent_queues_config: Optional[AgentQueuesConfig] = None,
     ):
         return super(AgentHeartbeat, cls).__new__(
             cls,
@@ -469,11 +472,15 @@ class AgentHeartbeat(
             agent_label=check.opt_str_param(agent_label, "agent_label"),
             agent_type=check.opt_str_param(agent_type, "agent_type"),
             errors=check.opt_list_param(errors, "errors", of_type=TimestampedError),
-            metadata=check.opt_mapping_param(metadata, "metadata", str),
+            metadata=check.opt_mapping_param(metadata, "metadata", key_type=str),
             run_worker_statuses=check.opt_inst_param(
                 run_worker_statuses, "run_worker_statuses", CloudRunWorkerStatuses
             ),
             code_server_heartbeats=check.opt_list_param(
                 code_server_heartbeats, "code_server_heartbeats", of_type=CloudCodeServerHeartbeat
+            ),
+            agent_queues_config=(
+                check.opt_inst_param(agent_queues_config, "agent_queues_config", AgentQueuesConfig)
+                or AgentQueuesConfig()
             ),
         )

@@ -5,6 +5,7 @@ import dagster._check as check
 from dagster._core.instance.ref import InstanceRef
 from dagster._serdes import serialize_value, whitelist_for_serdes
 from dagster._utils.merger import merge_dicts
+from dagster_cloud.agent import AgentQueue
 
 
 @whitelist_for_serdes
@@ -72,6 +73,8 @@ class CodeDeploymentMetadata(
             ("container_context", Dict[str, Any]),
             ("cloud_context_env", Dict[str, Any]),
             ("pex_metadata", Optional[PexMetadata]),
+            ("enable_metrics", bool),
+            ("agent_queue", Optional[AgentQueue]),
         ],
     )
 ):
@@ -88,6 +91,8 @@ class CodeDeploymentMetadata(
         container_context=None,
         cloud_context_env=None,
         pex_metadata=None,
+        enable_metrics=False,
+        agent_queue=None,
     ):
         check.invariant(
             len([val for val in [python_file, package_name, module_name] if val]) == 1,
@@ -107,6 +112,8 @@ class CodeDeploymentMetadata(
             check.opt_dict_param(container_context, "container_context", key_type=str),
             check.opt_dict_param(cloud_context_env, "cloud_context_env", key_type=str),
             check.opt_inst_param(pex_metadata, "pex_metadata", PexMetadata),
+            check.bool_param(enable_metrics, "enable_metrics"),
+            check.opt_inst_param(agent_queue, "agent_queue", AgentQueue),
         )
 
     def with_cloud_context_env(self, cloud_context_env: Dict[str, Any]) -> "CodeDeploymentMetadata":
@@ -119,17 +126,22 @@ class CodeDeploymentMetadata(
             ["dagster-cloud", "pex", "grpc", "--host", "0.0.0.0"]
             + (["--port", str(port)] if port else [])
             + (["--socket", str(socket)] if socket else [])
+            + (["--enable-metrics"] if self.enable_metrics else [])
         )
 
     def get_multipex_server_env(self) -> Dict[str, str]:
         return {"DAGSTER_CURRENT_IMAGE": self.image} if self.image else {}
 
     def get_grpc_server_command(self) -> List[str]:
-        return ([self.executable_path, "-m"] if self.executable_path else []) + [
-            "dagster",
-            "api",
-            "grpc",
-        ]
+        return (
+            ([self.executable_path, "-m"] if self.executable_path else [])
+            + [
+                "dagster",
+                "api",
+                "grpc",
+            ]
+            + (["--enable-metrics"] if self.enable_metrics else [])
+        )
 
     def get_grpc_server_env(
         self,

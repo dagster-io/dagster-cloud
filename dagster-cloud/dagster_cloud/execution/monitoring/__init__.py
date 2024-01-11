@@ -3,6 +3,7 @@ import sys
 import threading
 from enum import Enum
 from typing import (
+    Any,
     Dict,
     Iterable,
     List,
@@ -42,6 +43,7 @@ class CloudCodeServerHeartbeat(
             ("location_name", str),
             ("server_status", CloudCodeServerStatus),
             ("error", Optional[SerializableErrorInfo]),
+            ("metadata", Mapping[str, Any]),
         ],
     )
 ):
@@ -50,12 +52,14 @@ class CloudCodeServerHeartbeat(
         location_name: str,
         server_status: CloudCodeServerStatus,
         error: Optional[SerializableErrorInfo] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
     ):
         return super(CloudCodeServerHeartbeat, cls).__new__(
             cls,
             location_name=check.str_param(location_name, "location_name"),
             server_status=check.inst_param(server_status, "server_status", CloudCodeServerStatus),
             error=check.opt_inst_param(error, "error", SerializableErrorInfo),
+            metadata=check.opt_mapping_param(metadata, "metadata"),
         )
 
 

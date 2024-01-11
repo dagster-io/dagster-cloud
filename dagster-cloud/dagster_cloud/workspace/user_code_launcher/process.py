@@ -119,8 +119,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     def requires_images(self) -> bool:
         return False
 
-    def start(self, run_reconcile_thread=True):
-        super().start(run_reconcile_thread=run_reconcile_thread)
+    def start(self, run_reconcile_thread=True, run_metrics_thread=True):
+        super().start(
+            run_reconcile_thread=run_reconcile_thread, run_metrics_thread=run_metrics_thread
+        )
         # TODO Identify if zombie processes are an issue on Windows and what
         # the proper way to clean them up is
         if sys.platform != "win32":
@@ -256,8 +258,8 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             heartbeat_thread = threading.Thread(
                 target=client_heartbeat_thread,
                 args=(client, heartbeat_shutdown_event),
+                daemon=True,
             )
-            heartbeat_thread.daemon = True
             heartbeat_thread.start()
 
             pid = server_process.pid

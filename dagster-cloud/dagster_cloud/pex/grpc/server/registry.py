@@ -14,6 +14,8 @@ from dagster import _check as check
 from dagster_cloud_cli.core.workspace import PexMetadata
 
 DEFAULT_PEX_FILES_DIR = "/tmp/pex-files"
+# https://boto3.amazonaws.com/v1/documentation/api/latest/reference/customizations/s3.html
+MULTIPART_DOWNLOAD_THREADS = 20  # Double the boto3 default of 10
 
 
 def _download_from_s3(filename: str, local_filepath: str):
@@ -37,6 +39,7 @@ def _download_from_s3(filename: str, local_filepath: str):
         Bucket=s3_bucket_name,
         Key=s3_key,
         Filename=local_tmp_filepath,
+        Config=boto3.s3.transfer.TransferConfig(max_concurrency=MULTIPART_DOWNLOAD_THREADS),
     )
     os.rename(local_tmp_filepath, local_filepath)
 

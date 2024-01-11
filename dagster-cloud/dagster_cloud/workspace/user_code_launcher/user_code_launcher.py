@@ -1,5 +1,6 @@
 # The following allows logging calls with extra arguments
 # ruff: noqa: PLE1205
+import json
 import logging
 import os
 import sys
@@ -78,6 +79,7 @@ ACTIVE_AGENT_HEARTBEAT_INTERVAL = 600
 
 
 USER_CODE_LAUNCHER_RECONCILE_SLEEP_SECONDS = 1
+USER_CODE_LAUNCHER_RECONCILE_METRICS_SLEEP_SECONDS = 60
 
 # Check on pending delete servers every 30th reconcile
 PENDING_DELETE_SERVER_CHECK_INTERVAL = 30
@@ -306,6 +308,7 @@ class DagsterCloudUserCodeLauncher(
         ] = {}
         self._pending_delete_grpc_server_handles: Set[ServerHandle] = set()
         self._grpc_servers_lock = threading.Lock()
+        self._per_location_metrics: Dict[DeploymentAndLocation, Dict[str, Any]] = {}
 
         self._multipex_servers: Dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
 
@@ -336,6 +339,9 @@ class DagsterCloudUserCodeLauncher(
         self._reconcile_count = 0
         self._reconcile_grpc_metadata_shutdown_event = threading.Event()
         self._reconcile_grpc_metadata_thread = None
+
+        self._reconcile_location_utilization_metrics_shutdown_event = threading.Event()
+        self._reconcile_location_utilization_metrics_thread = None
 
         self._server_process_startup_timeout = check.opt_int_param(
             server_process_startup_timeout,
@@ -399,7 +405,7 @@ class DagsterCloudUserCodeLauncher(
     def server_ttl_max_servers(self) -> int:
         return self._server_ttl_config.get("max_servers", DEFAULT_MAX_TTL_SERVERS)
 
-    def start(self, run_reconcile_thread=True):
+    def start(self, run_reconcile_thread=True, run_metrics_thread=True):
         # Initialize
         check.invariant(
             not self._started,
@@ -425,9 +431,18 @@ class DagsterCloudUserCodeLauncher(
                 target=self._reconcile_thread,
                 args=(self._reconcile_grpc_metadata_shutdown_event,),
                 name="grpc-reconcile-watch",
+                daemon=True,
             )
-            self._reconcile_grpc_metadata_thread.daemon = True
             self._reconcile_grpc_metadata_thread.start()
+
+        if run_metrics_thread:
+            self._reconcile_location_utilization_metrics_thread = threading.Thread(
+                target=self._update_metrics_thread,
+                args=(self._reconcile_location_utilization_metrics_shutdown_event,),
+                name="location-utilization-metrics",
+                daemon=True,
+            )
+            self._reconcile_location_utilization_metrics_thread.start()
 
     def _start_run_worker_monitoring(self):
         # Utility method to be overridden by serverless subclass to change the monitoring interval
@@ -922,6 +937,10 @@ class DagsterCloudUserCodeLauncher(
             self._run_worker_monitoring_thread_shutdown_event.set()
             self._run_worker_monitoring_thread.join()
 
+        if self._reconcile_location_utilization_metrics_thread:
+            self._reconcile_location_utilization_metrics_shutdown_event.set()
+            self._reconcile_location_utilization_metrics_thread.join()
+
         if self._started:
             self._graceful_cleanup_servers()
 
@@ -955,6 +974,21 @@ class DagsterCloudUserCodeLauncher(
                 key_to_keep: self._desired_entries[key_to_keep] for key_to_keep in keys_to_keep
             }
             self._desired_entries = merge_dicts(metadata_to_keep, desired_metadata)
+
+    def update_utilization_metrics_all_locations(self):
+        endpoints_or_errors = self.get_grpc_endpoints()
+        for (deployment_name, location_name), endpoint_or_error in endpoints_or_errors.items():
+            if isinstance(endpoint_or_error, ServerEndpoint):
+                endpoint = cast(ServerEndpoint, endpoint_or_error)
+                metadata = json.loads(
+                    endpoint.create_client()
+                    .ping("")
+                    .get("serialized_server_utilization_metrics", "{}")
+                )
+                self._logger.info(
+                    f"Updated metadata for location {location_name} in deployment {deployment_name}: {metadata}"
+                )
+                self._per_location_metrics[(deployment_name, location_name)] = metadata
 
     def _get_code_location_origin(self, location_name: str) -> RegisteredCodeLocationOrigin:
         return RegisteredCodeLocationOrigin(location_name)
@@ -1017,6 +1051,21 @@ class DagsterCloudUserCodeLauncher(
             )
 
         self._reconcile_count += 1
+
+    def _update_metrics_thread(self, shutdown_event):
+        while True:
+            shutdown_event.wait(USER_CODE_LAUNCHER_RECONCILE_METRICS_SLEEP_SECONDS)
+            if shutdown_event.is_set():
+                break
+
+            try:
+                self.update_utilization_metrics_all_locations()
+            except Exception:
+                self._logger.error(
+                    "Failure updating user code server metrics: {exc_info}".format(
+                        exc_info=serializable_error_info_from_exc_info(sys.exc_info()),
+                    )
+                )
 
     @property
     def ready_to_serve_requests(self) -> bool:
@@ -1649,6 +1698,7 @@ class DagsterCloudUserCodeLauncher(
         for entry_key in desired_entries:
             deployment_name, location_name = entry_key
             endpoint_or_error = endpoint_or_errors.get(entry_key)
+            utilization_metrics = self._per_location_metrics.get(entry_key, {})
 
             error = (
                 endpoint_or_error if isinstance(endpoint_or_error, SerializableErrorInfo) else None
@@ -1674,6 +1724,7 @@ class DagsterCloudUserCodeLauncher(
                         if isinstance(endpoint_or_error, SerializableErrorInfo)
                         else None
                     ),
+                    metadata={"utilization_metrics": utilization_metrics},
                 )
             )
 
