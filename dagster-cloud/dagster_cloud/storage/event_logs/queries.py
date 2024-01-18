@@ -477,6 +477,21 @@ mutation SetConcurrencySlots($concurrencyKey: String!, $num: Int!) {
 """
 )
 
+DELETE_CONCURRENCY_LIMIT_MUTATION = (
+    PYTHON_ERROR_FRAGMENT
+    + """
+mutation DeleteConcurrencyLimit($concurrencyKey: String!) {
+    eventLogs {
+        DeleteConcurrencyLimit(concurrencyKey: $concurrencyKey) {
+            success
+            error {
+                ...PythonErrorFragment
+            }
+        }
+    }
+}
+"""
+)
 INITIALIZE_CONCURRENCY_LIMIT_MUTATION = (
     PYTHON_ERROR_FRAGMENT
     + """

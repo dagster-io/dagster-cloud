@@ -7,6 +7,7 @@ package multi_pex_api;
 service MultiPexApi {
   rpc CreatePexServer (CreatePexServerRequest) returns (CreatePexServerReply) {}
   rpc GetPexServers (GetPexServersRequest) returns (GetPexServersReply) {}
+  rpc GetCrashedPexServers (GetCrashedPexServersRequest) returns (GetCrashedPexServersReply) {}
   rpc ShutdownPexServer (ShutdownPexServerRequest) returns (ShutdownPexServerReply) {}
   rpc Ping (PingRequest) returns (PingReply) {}
 }
@@ -27,6 +28,14 @@ message GetPexServersRequest {
 
 message GetPexServersReply {
   string get_pex_servers_response = 1;
+}
+
+message GetCrashedPexServersRequest {
+  string get_crashed_pex_servers_args = 1;
+}
+
+message GetCrashedPexServersReply {
+  string get_crashed_pex_servers_response = 1;
 }
 
 message ShutdownPexServerRequest {

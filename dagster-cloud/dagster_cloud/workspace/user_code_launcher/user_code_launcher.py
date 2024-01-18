@@ -12,9 +12,11 @@ from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Collection,
+    DefaultDict,
     Dict,
     Generic,
     List,
@@ -45,6 +47,7 @@ from dagster._grpc.types import GetCurrentImageResult
 from dagster._serdes import deserialize_value, serialize_value, whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.merger import merge_dicts
+from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from typing_extensions import Self, TypeAlias
@@ -59,6 +62,8 @@ from dagster_cloud.api.dagster_cloud_api import (
 from dagster_cloud.execution.monitoring import (
     CloudCodeServerHeartbeat,
     CloudCodeServerStatus,
+    CloudCodeServerUtilizationMetrics,
+    CloudContainerResourceLimits,
     CloudRunWorkerStatus,
     CloudRunWorkerStatuses,
     start_run_worker_monitoring_thread,
@@ -72,6 +77,10 @@ from dagster_cloud.pex.grpc.types import (
     ShutdownPexServerArgs,
 )
 from dagster_cloud.util import diff_serializable_namedtuple_map
+
+if TYPE_CHECKING:
+    from dagster._grpc.server import DagsterCodeServerUtilizationMetrics
+
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25
@@ -308,7 +317,9 @@ class DagsterCloudUserCodeLauncher(
         ] = {}
         self._pending_delete_grpc_server_handles: Set[ServerHandle] = set()
         self._grpc_servers_lock = threading.Lock()
-        self._per_location_metrics: Dict[DeploymentAndLocation, Dict[str, Any]] = {}
+        self._per_location_metrics: Dict[
+            DeploymentAndLocation, CloudCodeServerUtilizationMetrics
+        ] = DefaultDict(lambda: init_optional_typeddict(CloudCodeServerUtilizationMetrics))
 
         self._multipex_servers: Dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
 
@@ -805,7 +816,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-        metadata: CodeDeploymentMetadata,
+        desired_entry: UserCodeLauncherEntry,
         server_handle: ServerHandle,
         server_endpoint: ServerEndpoint,
     ) -> None:
@@ -975,20 +986,44 @@ class DagsterCloudUserCodeLauncher(
             }
             self._desired_entries = merge_dicts(metadata_to_keep, desired_metadata)
 
+    @abstractmethod
+    def get_code_server_resource_limits(
+        self, deployment_name: str, location_name: str
+    ) -> CloudContainerResourceLimits:
+        pass
+
+    def record_resource_limit_metrics_all_locations(self):
+        for (deployment_name, location_name), entry in self._actual_entries.items():
+            if entry.code_deployment_metadata.enable_metrics:
+                metadata = self.get_code_server_resource_limits(deployment_name, location_name)
+                self._per_location_metrics[(deployment_name, location_name)][
+                    "resource_limits"
+                ] = metadata
+                self._logger.info(
+                    f"Updated resource limits for location {location_name} in deployment {deployment_name}: {metadata}"
+                )
+
     def update_utilization_metrics_all_locations(self):
         endpoints_or_errors = self.get_grpc_endpoints()
         for (deployment_name, location_name), endpoint_or_error in endpoints_or_errors.items():
-            if isinstance(endpoint_or_error, ServerEndpoint):
+            entry = self._actual_entries.get((deployment_name, location_name))
+            if (
+                entry
+                and entry.code_deployment_metadata.enable_metrics
+                and isinstance(endpoint_or_error, ServerEndpoint)
+            ):
                 endpoint = cast(ServerEndpoint, endpoint_or_error)
-                metadata = json.loads(
-                    endpoint.create_client()
-                    .ping("")
-                    .get("serialized_server_utilization_metrics", "{}")
+                raw_metrics_str = (
+                    endpoint.create_client().ping("").get("serialized_server_utilization_metrics")
                 )
+                if not raw_metrics_str or raw_metrics_str == "":
+                    continue
+                metadata: "DagsterCodeServerUtilizationMetrics" = json.loads(raw_metrics_str)
                 self._logger.info(
                     f"Updated metadata for location {location_name} in deployment {deployment_name}: {metadata}"
                 )
-                self._per_location_metrics[(deployment_name, location_name)] = metadata
+                for key, val in metadata.items():
+                    self._per_location_metrics[(deployment_name, location_name)][key] = val
 
     def _get_code_location_origin(self, location_name: str) -> RegisteredCodeLocationOrigin:
         return RegisteredCodeLocationOrigin(location_name)
@@ -1059,6 +1094,7 @@ class DagsterCloudUserCodeLauncher(
                 break
 
             try:
+                self.record_resource_limit_metrics_all_locations()
                 self.update_utilization_metrics_all_locations()
             except Exception:
                 self._logger.error(
@@ -1364,7 +1400,7 @@ class DagsterCloudUserCodeLauncher(
                     self._wait_for_new_server_ready(
                         deployment_name,
                         location_name,
-                        code_deployment_metadata,
+                        desired_entries[to_update_key],
                         server_or_error.server_handle,
                         server_or_error.server_endpoint,
                     )

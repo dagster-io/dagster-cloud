@@ -33,6 +33,8 @@ from ..__generated__.multi_pex_api_pb2_grpc import (
 from ..types import (
     CreatePexServerArgs,
     CreatePexServerResponse,
+    GetCrashedPexServersArgs,
+    GetCrashedPexServersResponse,
     GetPexServersArgs,
     GetPexServersResponse,
     PexServerHandle,
@@ -89,6 +91,23 @@ class MultiPexApiServer(MultiPexApiServicer):
             get_pex_servers_response=serialize_value(response)
         )
 
+    def GetCrashedPexServers(self, request, _context):
+        get_crashed_pex_servers_args = deserialize_value(
+            request.get_crashed_pex_servers_args, GetCrashedPexServersArgs
+        )
+        try:
+            pex_server_handles = self._pex_manager.get_error_pex_server_handles(
+                get_crashed_pex_servers_args.deployment_name,
+                get_crashed_pex_servers_args.location_name,
+            )
+            response = GetCrashedPexServersResponse(server_handles=pex_server_handles)
+        except:
+            response = serializable_error_info_from_exc_info(sys.exc_info())
+
+        return multi_pex_api_pb2.GetCrashedPexServersReply(
+            get_crashed_pex_servers_response=serialize_value(response)
+        )
+
     def ShutdownPexServer(self, request, _context):
         shutdown_pex_server_args = deserialize_value(
             request.shutdown_pex_server_args, ShutdownPexServerArgs
@@ -139,8 +158,13 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             self._get_handle_from_metadata(context)
         )
         if isinstance(client_or_error, SerializableErrorInfo):
-            raise Exception(f"Code server failed: {client_or_error}")
-        return client_or_error._get_response(api_name, request, timeout)  # noqa: SLF001
+            context.abort(grpc.StatusCode.UNAVAILABLE, f"Code server failed: {client_or_error}")
+        else:
+            try:
+                return client_or_error._get_response(api_name, request, timeout)  # noqa: SLF001
+            except grpc.RpcError as e:
+                # Surface the grpc error to the caller
+                context.abort(e.code(), e.details())
 
     def _streaming_query(
         self, api_name: str, request, context, timeout: int = DEFAULT_GRPC_TIMEOUT
@@ -149,8 +173,13 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             self._get_handle_from_metadata(context)
         )
         if isinstance(client_or_error, SerializableErrorInfo):
-            raise Exception("Server failed to start up, no available client")
-        return client_or_error._get_streaming_response(api_name, request, timeout)  # noqa: SLF001
+            context.abort(grpc.StatusCode.UNAVAILABLE, f"Code server failed: {client_or_error}")
+        else:
+            try:
+                return client_or_error._get_streaming_response(api_name, request, timeout)  # noqa: SLF001
+            except grpc.RpcError as e:
+                # Surface the grpc error to the caller
+                context.abort(e.code(), e.details())
 
     def ExecutionPlanSnapshot(self, request, context):
         return self._query("ExecutionPlanSnapshot", request, context)
@@ -166,17 +195,6 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         return client_or_error._get_response("ListRepositories", request)  # noqa: SLF001
 
     def Ping(self, request, context):
-        client_or_error = self._pex_manager.get_pex_grpc_client_or_error(
-            self._get_handle_from_metadata(context)
-        )
-        # This is hacky, but if the server failed to start up, it's 'ready' in the sense that it
-        # will return an error as soon as ListRepositories is called, even though the server
-        # can't serve requests. TODO Find a better way to model that in a backwards compatible way
-        # so that _wait_for_dagster_server_process returns immediately
-        if isinstance(client_or_error, SerializableErrorInfo):
-            echo = request.echo
-            return api_pb2.PingReply(echo=echo)
-
         return self._query("Ping", request, context)
 
     def GetServerId(self, request, context):

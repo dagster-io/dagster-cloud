@@ -1,7 +1,8 @@
 from pathlib import Path
-from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, cast
 
 import boto3
+import grpc
 from dagster import (
     Array,
     Enum,
@@ -19,6 +20,10 @@ from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
+from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
+from dagster_cloud.pex.grpc.types import (
+    GetCrashedPexServersArgs,
+)
 from dagster_cloud.workspace.config_schema import SHARED_ECS_CONFIG
 from dagster_cloud.workspace.ecs.client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
 from dagster_cloud.workspace.ecs.service import Service
@@ -30,6 +35,7 @@ from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
 )
+from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
 from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
 
 from .client import get_debug_ecs_prompt
@@ -294,6 +300,21 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             ),
         }
 
+    def get_code_server_resource_limits(
+        self, deployment_name: str, location_name: str
+    ) -> CloudContainerResourceLimits:
+        self._logger.info(
+            f"Getting resource limits for {deployment_name}:{location_name}. resources: {self.server_resources}"
+        )
+        metadata = self._actual_entries[(deployment_name, location_name)].code_deployment_metadata
+        resources = metadata.container_context.get("ecs", {}).get("server_resources")
+        return {
+            "ecs": {
+                "cpu_limit": resources.get("cpu"),
+                "memory_limit": resources.get("memory"),
+            }
+        }
+
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
@@ -426,14 +447,14 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             ),
         )
 
-    def _get_timeout_debug_info(
+    def _get_update_failure_debug_info(
         self,
         task_arn,
     ):
         sections = []
 
         try:
-            logs = self.client.get_task_logs(task_arn, container_name=CONTAINER_NAME)
+            logs = self.client.get_task_logs(task_arn, container_name=CONTAINER_NAME, limit=25)
             task_logs = "Task logs:\n" + "\n".join(logs) if logs else "No logs in task."
             sections.append(task_logs)
         except:
@@ -446,25 +467,76 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _wait_for_new_server_ready(
         self,
-        _deployment_name: str,
-        _location_name: str,
-        _metadata: CodeDeploymentMetadata,
+        deployment_name: str,
+        location_name: str,
+        user_code_launcher_entry: UserCodeLauncherEntry,
         server_handle: Service,
         server_endpoint: ServerEndpoint,
     ) -> None:
+        metadata = user_code_launcher_entry.code_deployment_metadata
         self._logger.info(
             f"Waiting for service {server_handle.name} to be ready for gRPC server..."
         )
         task_arn = self.client.wait_for_new_service(
             server_handle, container_name=CONTAINER_NAME, logger=self._logger
         )
+
+        multipex_client = None
+
+        if metadata.pex_metadata:
+            multipex_server = check.not_none(
+                self._get_multipex_server(deployment_name, location_name, metadata)
+            )
+            multipex_endpoint = multipex_server.server_endpoint
+            multipex_client = multipex_endpoint.create_multipex_client()
+
+        def _assert_new_pex_server_did_not_crash():
+            self.client.assert_task_not_stopped(task_arn, CONTAINER_NAME, self._logger)
+
+            try:
+                crashed_pex_servers = (
+                    check.not_none(multipex_client)
+                    .get_crashed_pex_servers(
+                        GetCrashedPexServersArgs(
+                            deployment_name=deployment_name,
+                            location_name=location_name,
+                        )
+                    )
+                    .server_handles
+                )
+            except Exception as e:
+                # New gRPC method not implemented on old multipex server versions
+                if (
+                    isinstance(e.__cause__, grpc.RpcError)
+                    and cast(grpc.RpcError, e.__cause__).code() == grpc.StatusCode.UNIMPLEMENTED
+                ):
+                    crashed_pex_servers = []
+                else:
+                    raise
+
+            if any(
+                pex_server_handle.metadata_update_timestamp
+                == int(user_code_launcher_entry.update_timestamp)
+                for pex_server_handle in crashed_pex_servers
+            ):
+                failure_debug_info = self._get_update_failure_debug_info(task_arn)
+                raise Exception(
+                    "Code server failed to start up."
+                    + (f"\n\n{failure_debug_info}" if failure_debug_info else "")
+                )
+
+        if metadata.pex_metadata:
+            additional_check = lambda: _assert_new_pex_server_did_not_crash()
+        else:
+            additional_check = lambda: self.client.assert_task_not_stopped(
+                task_arn, CONTAINER_NAME, self._logger
+            )
+
         self._wait_for_dagster_server_process(
             client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
-            additional_check=lambda: self.client.assert_task_not_stopped(
-                task_arn, CONTAINER_NAME, self._logger
-            ),
-            get_timeout_debug_info=lambda: self._get_timeout_debug_info(task_arn),
+            additional_check=additional_check,
+            get_timeout_debug_info=lambda: self._get_update_failure_debug_info(task_arn),
         )
 
     def _remove_server_handle(self, server_handle: EcsServerHandleType) -> None:

@@ -17,6 +17,7 @@ from dagster._core.host_representation import (
 )
 from dagster._core.host_representation.origin import RegisteredCodeLocationOrigin
 from dagster._core.launcher.base import LaunchRunContext
+from dagster._core.utils import FuturesAwareThreadPoolExecutor
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import CancelExecutionRequest
 from dagster._serdes import (
@@ -29,11 +30,13 @@ from dagster._utils.container import (
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
+from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
+    AgentUtilizationMetrics,
     DagsterCloudApi,
     DagsterCloudApiErrorResponse,
     DagsterCloudApiGrpcResponse,
@@ -102,14 +105,13 @@ class DagsterCloudAgent:
         self._iteration = 0
 
         self._executor = self._exit_stack.enter_context(
-            ThreadPoolExecutor(
+            FuturesAwareThreadPoolExecutor(
                 max_workers=AGENT_MAX_THREADPOOL_WORKERS,
                 thread_name_prefix="dagster_cloud_agent_worker",
             )
         )
         self._request_ids_to_futures: Dict[str, Future] = {}
-        self._utilization_metrics = {}
-        self._update_utilization_metrics()
+        self._utilization_metrics = init_optional_typeddict(AgentUtilizationMetrics)
 
         self._last_heartbeat_time: Optional[pendulum.DateTime] = None
 
@@ -165,22 +167,17 @@ class DagsterCloudAgent:
                 )
 
     def _update_utilization_metrics(self):
-        utilization_metrics = retrieve_containerized_utilization_metrics(
+        container_utilization_metrics = retrieve_containerized_utilization_metrics(
             logger=self._logger,
-            previous_measurement_timestamp=self._utilization_metrics["measurement_timestamp"]
-            if self._utilization_metrics
-            else None,
-            previous_cpu_time=self._utilization_metrics["cpu_time"]
-            if self._utilization_metrics
-            else None,
+            previous_measurement_timestamp=self._utilization_metrics["container_utilization"][
+                "measurement_timestamp"
+            ],
+            previous_cpu_usage=self._utilization_metrics["container_utilization"]["cpu_usage"],
         )
-        self._utilization_metrics.update(
-            {
-                "dequeued_request_count": len(self._request_ids_to_futures),
-                "max_dequeued_request_count": AGENT_MAX_THREADPOOL_WORKERS,
-                **utilization_metrics,
-            }
+        self._utilization_metrics["request_utilization"].update(
+            self._executor.get_current_utilization_metrics()
         )
+        self._utilization_metrics["container_utilization"].update(container_utilization_metrics)
 
     def run_loop(
         self,
@@ -317,7 +314,11 @@ class DagsterCloudAgent:
                         metadata=merge_dicts(
                             {AGENT_VERSION_LABEL: __version__},
                             {"image_tag": agent_image_tag} if agent_image_tag else {},
-                            {"utilization_metrics": self._utilization_metrics},
+                            {
+                                "utilization_metrics": self._utilization_metrics
+                                if instance.agent_metrics_enabled
+                                else {}
+                            },
                         ),
                         run_worker_statuses=run_worker_statuses_dict[deployment_name],
                         code_server_heartbeats=code_server_heartbeats_dict.get(deployment_name, []),
@@ -327,11 +328,16 @@ class DagsterCloudAgent:
             }
             for deployment_name in self._active_deployment_names
         ]
-        dequeued_request_count = self._utilization_metrics["dequeued_request_count"]
-        max_dequeued_request_count = self._utilization_metrics["max_dequeued_request_count"]
-        self._logger.info(
-            f"Current agent threadpool utilization: {dequeued_request_count}/{max_dequeued_request_count} threads"
-        )
+        if instance.agent_metrics_enabled:
+            num_running_requests = self._utilization_metrics["request_utilization"][
+                "num_running_requests"
+            ]
+            max_concurrent_requests = self._utilization_metrics["request_utilization"][
+                "max_concurrent_requests"
+            ]
+            self._logger.info(
+                f"Current agent threadpool utilization: {num_running_requests}/{max_concurrent_requests} threads"
+            )
 
         self._last_heartbeat_time = curr_time
 
@@ -987,9 +993,13 @@ class DagsterCloudAgent:
                 if response:
                     yield response
 
-        if (
-            pendulum.now("UTC").timestamp() - self._utilization_metrics["measurement_timestamp"]
-            > AGENT_UTILIZATION_METRICS_INTERVAL_SECONDS
+        if instance.agent_metrics_enabled and (
+            self._utilization_metrics["container_utilization"]["measurement_timestamp"] is None
+            or (
+                pendulum.now("UTC").timestamp()
+                - self._utilization_metrics["container_utilization"]["measurement_timestamp"]
+                > AGENT_UTILIZATION_METRICS_INTERVAL_SECONDS
+            )
         ):
             self._update_utilization_metrics()
         self._iteration += 1

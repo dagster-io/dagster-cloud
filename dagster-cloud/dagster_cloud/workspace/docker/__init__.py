@@ -20,6 +20,9 @@ from dagster_docker.container_context import DockerContainerContext
 from docker.models.containers import Container
 from typing_extensions import Self
 
+from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
+from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
+
 from ..config_schema.docker import SHARED_DOCKER_CONFIG
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
@@ -244,6 +247,12 @@ class DockerUserCodeLauncher(
 
         return (container, endpoint)
 
+    def get_code_server_resource_limits(
+        self, deployment_name: str, location_name: str
+    ) -> CloudContainerResourceLimits:
+        # Empty because we don't currently internally monitor docker deployment resource usage.
+        return {}
+
     def _start_new_server_spinup(
         self,
         deployment_name: str,
@@ -312,7 +321,7 @@ class DockerUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-        metadata: CodeDeploymentMetadata,
+        user_code_launcher_entry: UserCodeLauncherEntry,
         server_handle: DagsterDockerContainer,
         server_endpoint: ServerEndpoint,
     ) -> None:

@@ -125,10 +125,13 @@ class MultiPexManager(AbstractContextManager):
         handle_id = server_handle.get_id()
         with self._pex_servers_lock:
             if handle_id not in self._pex_servers:
-                if handle_id in self._pending_startup_pex_servers:
-                    raise Exception("This server is still starting up")
-                else:
-                    raise Exception("No server created with the given handle")
+                try:
+                    if handle_id in self._pending_startup_pex_servers:
+                        raise Exception("This server is still starting up")
+                    else:
+                        raise Exception("No server created with the given handle")
+                except Exception:
+                    return serializable_error_info_from_exc_info(sys.exc_info())
 
             pex_server_or_error = self._pex_servers[handle_id]
             if isinstance(pex_server_or_error, PexErrorEntry):
@@ -144,12 +147,30 @@ class MultiPexManager(AbstractContextManager):
                 if self.is_server_active(server_id) and isinstance(server, PexProcessEntry)
             ]
 
+    def get_error_pex_servers(self) -> List[PexErrorEntry]:
+        with self._pex_servers_lock:
+            return [
+                server
+                for server_id, server in self._pex_servers.items()
+                if isinstance(server, PexErrorEntry)
+            ]
+
     def get_active_pex_server_handles(
         self, deployment_name, location_name: str
     ) -> List[PexServerHandle]:
         return [
             server.pex_server_handle
             for server in self.get_active_pex_servers()
+            if server.pex_server_handle.deployment_name == deployment_name
+            and server.pex_server_handle.location_name == location_name
+        ]
+
+    def get_error_pex_server_handles(
+        self, deployment_name, location_name: str
+    ) -> List[PexServerHandle]:
+        return [
+            server.pex_server_handle
+            for server in self.get_error_pex_servers()
             if server.pex_server_handle.deployment_name == deployment_name
             and server.pex_server_handle.location_name == location_name
         ]

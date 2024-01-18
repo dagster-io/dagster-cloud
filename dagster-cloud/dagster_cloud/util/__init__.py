@@ -1,5 +1,5 @@
 from collections import namedtuple
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
 
 from dagster import (
     Field,
@@ -74,3 +74,10 @@ def is_isolated_run(run):
 
 
 SERVER_HANDLE_TAG = ".dagster/server_handle"
+
+
+def keys_not_none(
+    keys: List[str],
+    dictionary: Mapping[str, Any],
+) -> bool:
+    return all(key in dictionary and dictionary[key] is not None for key in keys)

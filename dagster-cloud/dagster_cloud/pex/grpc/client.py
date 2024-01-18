@@ -16,6 +16,8 @@ from .__generated__ import MultiPexApiStub, multi_pex_api_pb2
 from .types import (
     CreatePexServerArgs,
     CreatePexServerResponse,
+    GetCrashedPexServersArgs,
+    GetCrashedPexServersResponse,
     GetPexServersArgs,
     GetPexServersResponse,
     ShutdownPexServerArgs,
@@ -42,7 +44,7 @@ class MultiPexGrpcClient:
         )
         return self._response_or_error(res.create_pex_server_response, CreatePexServerResponse)
 
-    def get_pex_servers(self, get_pex_servers_args: GetPexServersArgs):
+    def get_pex_servers(self, get_pex_servers_args: GetPexServersArgs) -> GetPexServersResponse:
         check.inst_param(get_pex_servers_args, "get_pex_servers_args", GetPexServersArgs)
         res = self._query(
             "GetPexServers",
@@ -50,6 +52,21 @@ class MultiPexGrpcClient:
             get_pex_servers_args=serialize_value(get_pex_servers_args),
         )
         return self._response_or_error(res.get_pex_servers_response, GetPexServersResponse)
+
+    def get_crashed_pex_servers(
+        self, get_crashed_pex_servers_args: GetCrashedPexServersArgs
+    ) -> GetCrashedPexServersResponse:
+        check.inst_param(
+            get_crashed_pex_servers_args, "get_crashed_pex_servers_args", GetCrashedPexServersArgs
+        )
+        res = self._query(
+            "GetCrashedPexServers",
+            multi_pex_api_pb2.GetCrashedPexServersRequest,
+            get_crashed_pex_servers_args=serialize_value(get_crashed_pex_servers_args),
+        )
+        return self._response_or_error(
+            res.get_crashed_pex_servers_response, GetCrashedPexServersResponse
+        )
 
     def shutdown_pex_server(self, shutdown_pex_server_args: ShutdownPexServerArgs):
         check.inst_param(

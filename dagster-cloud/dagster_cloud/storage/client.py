@@ -9,7 +9,11 @@ from dagster import (
     ScalarUnion,
     StringSource,
 )
-from dagster_cloud_cli.core.graphql_client import DEFAULT_RETRIES, DEFAULT_TIMEOUT
+from dagster_cloud_cli.core.graphql_client import (
+    DEFAULT_BACKOFF_FACTOR,
+    DEFAULT_RETRIES,
+    DEFAULT_TIMEOUT,
+)
 
 
 def dagster_cloud_api_config():
@@ -22,6 +26,7 @@ def dagster_cloud_api_config():
         "verify": Field(bool, default_value=True),
         "retries": Field(IntSource, default_value=DEFAULT_RETRIES),
         "method": Field(StringSource, default_value="POST"),
+        "backoff_factor": Field(float, default_value=DEFAULT_BACKOFF_FACTOR),
         "proxies": Field(Map(str, str), is_required=False),
         "agent_label": Field(StringSource, is_required=False),
         # Handle requests for a single non-branch deployment

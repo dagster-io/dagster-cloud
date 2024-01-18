@@ -1,8 +1,13 @@
+import os
+import tempfile
 from typing import Any, Dict, Generator, List, NamedTuple, Optional, Tuple, Union
 
 import dagster._check as check
+import requests
 from dagster import AssetExecutionContext, DagsterInstance, OpExecutionContext
 from dagster._annotations import experimental
+from dagster_cloud_cli.core.errors import raise_http_error
+from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 
@@ -89,6 +94,59 @@ def chunk_by_opaque_id(
         yield sorted_chunk_list[last_chunk_boundary:]
 
 
+def get_post_request_params(
+    instance: DagsterInstance,
+) -> Tuple[requests.Session, str, Dict[str, str], int, Optional[Dict[str, str]]]:
+    if not isinstance(instance, DagsterCloudAgentInstance):
+        raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
+
+    return (
+        instance.rest_requests_session,
+        instance.dagster_cloud_gen_insights_url_url,
+        instance.dagster_cloud_api_headers(DagsterCloudInstanceScope.DEPLOYMENT),
+        instance.dagster_cloud_api_timeout,
+        instance.dagster_cloud_api_proxies,
+    )
+
+
+def upload_cost_information(
+    context: Union[OpExecutionContext, AssetExecutionContext],
+    metric_name: str,
+    cost_information: List[Tuple[str, float]],
+):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        opaque_ids = pa.array([opaque_id for opaque_id, _ in cost_information])
+        costs = pa.array([cost for _, cost in cost_information])
+        metric_names = pa.array([metric_name for _, _ in cost_information])
+
+        cost_pq_file = os.path.join(temp_dir, "cost.parquet")
+        pq.write_table(
+            pa.Table.from_arrays(
+                [opaque_ids, costs, metric_names], ["opaque_id", "cost", "metric_name"]
+            ),
+            cost_pq_file,
+        )
+
+        instance = context.instance
+        session, url, headers, timeout, proxies = get_post_request_params(instance)
+
+        resp = session.post(url, headers=headers, timeout=timeout, proxies=proxies)
+        raise_http_error(resp)
+        resp_data = resp.json()
+
+        assert "url" in resp_data and "fields" in resp_data, resp_data
+
+        with open(cost_pq_file, "rb") as f:
+            session.post(
+                resp_data["url"],
+                data=resp_data["fields"],
+                files={"file": f},
+            )
+
+
 @experimental
 def put_cost_information(
     context: Union[OpExecutionContext, AssetExecutionContext],
@@ -98,6 +156,25 @@ def put_cost_information(
     end: float,
 ) -> None:
     chunk_size = _cost_information_chunk_size()
+    try:
+        import pyarrow as pyarrow  # pylint: disable=import-error
+
+        try:
+            upload_cost_information(context, metric_name, cost_information)
+        except Exception:
+            context.log.warn("Failed to upload cost information to S3.")
+    except ImportError:
+        context.log.warn(
+            "Dagster insights dependencies not installed. In the future, you will need to install dagster-cloud[insights] to use this feature."
+        )
+
+    cost_info_input = [
+        {
+            "opaqueId": opaque_id,
+            "cost": float(cost),
+        }
+        for opaque_id, cost in cost_information
+    ]
 
     # Chunk the cost information & keep each opaque id in the same chunk
     # to avoid the cost information for a single asset being split across

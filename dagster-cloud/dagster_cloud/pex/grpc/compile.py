@@ -54,6 +54,8 @@ def protoc(generated_dir: str):
             generated_dir,
             "--grpc_python_out",
             generated_dir,
+            "--mypy_out",
+            generated_dir,
             PROTOS_PATH,
         ]
     )

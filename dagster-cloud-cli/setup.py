@@ -30,7 +30,7 @@ setup(
     author="Elementl",
     license="Apache-2.0",
     classifiers=[
-        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
     ],

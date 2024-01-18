@@ -27,6 +27,7 @@ from kubernetes.client.rest import ApiException
 from typing_extensions import Self
 
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
+from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 
 from ..user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
@@ -34,6 +35,7 @@ from ..user_code_launcher import (
     DagsterCloudGrpcServer,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
+    UserCodeLauncherEntry,
 )
 from ..user_code_launcher.utils import deterministic_label_for_location
 from .utils import (
@@ -287,6 +289,23 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             run_k8s_config=UserDefinedDagsterK8sConfig.from_dict(self._run_k8s_config),
         ).merge(K8sContainerContext.create_from_config(metadata.container_context))
 
+    def get_code_server_resource_limits(
+        self, deployment_name: str, location_name: str
+    ) -> CloudContainerResourceLimits:
+        self._logger.info(
+            f"Getting resource limits for deployment {deployment_name} in location {location_name}: {self._resources}"
+        )
+        metadata = self._actual_entries[(deployment_name, location_name)].code_deployment_metadata
+        resources = self._resolve_container_context(metadata).resources
+        return {
+            "k8s": {
+                "cpu_limit": resources.get("limit", {}).get("cpu"),
+                "cpu_request": resources.get("request", {}).get("cpu"),
+                "memory_limit": resources.get("limit", {}).get("memory"),
+                "memory_request": resources.get("request", {}).get("memory"),
+            }
+        }
+
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
@@ -384,10 +403,12 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self,
         deployment_name: str,
         location_name: str,
-        metadata: CodeDeploymentMetadata,
+        user_code_launcher_entry: UserCodeLauncherEntry,
         server_handle: K8sHandle,
         server_endpoint: ServerEndpoint,
     ) -> None:
+        metadata = user_code_launcher_entry.code_deployment_metadata
+
         wait_for_deployment_complete(
             server_handle.name,
             server_handle.namespace,

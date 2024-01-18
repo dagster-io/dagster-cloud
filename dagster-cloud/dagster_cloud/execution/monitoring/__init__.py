@@ -13,7 +13,9 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    TypedDict,
     Union,
+    cast,
 )
 
 import dagster._check as check
@@ -21,8 +23,10 @@ import grpc
 from dagster import DagsterInstance, DagsterRunStatus
 from dagster._core.launcher import CheckRunHealthResult, WorkerStatus
 from dagster._core.storage.dagster_run import IN_PROGRESS_RUN_STATUSES, RunsFilter
+from dagster._grpc.server import DagsterCodeServerUtilizationMetrics
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
+from typing_extensions import NotRequired
 
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.util import SERVER_HANDLE_TAG, is_isolated_run
@@ -35,6 +39,43 @@ class CloudCodeServerStatus(Enum):
     FAILED = "FAILED"
 
 
+class ECSContainerResourceLimits(TypedDict):
+    cpu_limit: Optional[str]
+    memory_limit: Optional[str]
+
+
+class K8sContainerResourceLimits(TypedDict):
+    cpu_limit: Optional[str]
+    memory_limit: Optional[str]
+    cpu_request: Optional[str]
+    memory_request: Optional[str]
+
+
+class ServerlessContainerResourceLimits(TypedDict):
+    memory_limit: Optional[str]
+    cpu_limit: Optional[str]
+
+
+class ProcessResourceLimits(TypedDict):
+    cpu_limit: Optional[str]
+    memory_limit: Optional[str]
+
+
+class CloudContainerResourceLimits(TypedDict):
+    ecs: NotRequired[ECSContainerResourceLimits]
+    k8s: NotRequired[K8sContainerResourceLimits]
+    serverless: NotRequired[ServerlessContainerResourceLimits]
+    process: NotRequired[ProcessResourceLimits]
+
+
+class CloudCodeServerUtilizationMetrics(DagsterCodeServerUtilizationMetrics):
+    resource_limits: CloudContainerResourceLimits
+
+
+class CloudCodeServerHeartbeatMetadata(TypedDict):
+    utilization_metrics: NotRequired[CloudCodeServerUtilizationMetrics]
+
+
 @whitelist_for_serdes
 class CloudCodeServerHeartbeat(
     NamedTuple(
@@ -43,7 +84,7 @@ class CloudCodeServerHeartbeat(
             ("location_name", str),
             ("server_status", CloudCodeServerStatus),
             ("error", Optional[SerializableErrorInfo]),
-            ("metadata", Mapping[str, Any]),
+            ("metadata", CloudCodeServerHeartbeatMetadata),
         ],
     )
 ):
@@ -59,8 +100,13 @@ class CloudCodeServerHeartbeat(
             location_name=check.str_param(location_name, "location_name"),
             server_status=check.inst_param(server_status, "server_status", CloudCodeServerStatus),
             error=check.opt_inst_param(error, "error", SerializableErrorInfo),
-            metadata=check.opt_mapping_param(metadata, "metadata"),
+            metadata=cast(
+                CloudCodeServerHeartbeatMetadata, check.opt_mapping_param(metadata, "metadata")
+            ),
         )
+
+    def get_code_server_utilization_metrics(self) -> Optional[CloudCodeServerUtilizationMetrics]:
+        return self.metadata.get("utilization_metrics")
 
 
 @whitelist_for_serdes

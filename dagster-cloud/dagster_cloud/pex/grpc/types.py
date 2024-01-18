@@ -83,9 +83,34 @@ class GetPexServersArgs(
 
 
 @whitelist_for_serdes
+class GetCrashedPexServersArgs(
+    NamedTuple(
+        "_GetCrashedPexServersArgs",
+        [
+            ("deployment_name", str),
+            ("location_name", str),
+        ],
+    )
+):
+    pass
+
+
+@whitelist_for_serdes
 class GetPexServersResponse(
     NamedTuple(
         "_GetPexServersResponse",
+        [
+            ("server_handles", List[PexServerHandle]),
+        ],
+    )
+):
+    pass
+
+
+@whitelist_for_serdes
+class GetCrashedPexServersResponse(
+    NamedTuple(
+        "_GetCrashedPexServersResponse",
         [
             ("server_handles", List[PexServerHandle]),
         ],

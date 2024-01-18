@@ -23,6 +23,7 @@ from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from typing_extensions import Self
 
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
+from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.pex.grpc import MultiPexGrpcClient
 
 from .user_code_launcher import (
@@ -31,6 +32,7 @@ from .user_code_launcher import (
     DagsterCloudGrpcServer,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
+    UserCodeLauncherEntry,
 )
 
 CLEANUP_ZOMBIE_PROCESSES_INTERVAL = 5
@@ -118,6 +120,18 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     @property
     def requires_images(self) -> bool:
         return False
+
+    def get_code_server_resource_limits(
+        self, deployment_name: str, location_name: str
+    ) -> CloudContainerResourceLimits:
+        import psutil
+
+        return {
+            "process": {
+                "cpu_limit": str(os.cpu_count()),
+                "memory_limit": str(psutil.virtual_memory().total),
+            },
+        }
 
     def start(self, run_reconcile_thread=True, run_metrics_thread=True):
         super().start(
@@ -285,7 +299,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         self,
         deployment_name: str,
         location_name: str,
-        metadata: CodeDeploymentMetadata,
+        desired_entry: UserCodeLauncherEntry,
         server_handle: int,
         server_endpoint: ServerEndpoint,
     ) -> None:

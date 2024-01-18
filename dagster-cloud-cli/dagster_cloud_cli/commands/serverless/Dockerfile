@@ -1,4 +1,4 @@
-# base image is templated in (default: python:3.10-slim)
+# base image is templated in (default: python:3.11-slim)
 
 # copy both requirements.txt / setup.py to guarantee that at least one file will be copied over
 # for any pre-src COPY.  On some flavors of Docker (Linux), the COPY command will fail unless there

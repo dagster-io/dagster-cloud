@@ -1,6 +1,6 @@
 from datetime import timedelta
 from enum import Enum
-from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, Union
+from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, TypedDict, Union, cast
 
 import dagster._check as check
 import pendulum
@@ -11,12 +11,16 @@ from dagster._core.host_representation import (
     ExternalRepositoryData,
 )
 from dagster._core.storage.dagster_run import DagsterRun
+from dagster._core.utils import RequestUtilizationMetrics
 from dagster._serdes import whitelist_for_serdes
+from dagster._utils.container import ContainerUtilizationMetrics
 from dagster._utils.error import SerializableErrorInfo
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from typing_extensions import NotRequired
 
 from dagster_cloud.agent import AgentQueuesConfig
 from dagster_cloud.execution.monitoring import CloudCodeServerHeartbeat, CloudRunWorkerStatuses
+from dagster_cloud.util import keys_not_none
 
 DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
 
@@ -436,6 +440,19 @@ class TimestampedError(
         )
 
 
+class AgentUtilizationMetrics(TypedDict):
+    container_utilization: ContainerUtilizationMetrics
+    request_utilization: RequestUtilizationMetrics
+
+
+class AgentHeartbeatMetadata(TypedDict):
+    utilization_metrics: NotRequired[AgentUtilizationMetrics]
+    version: NotRequired[str]
+    image_tag: NotRequired[str]
+    type: NotRequired[str]
+    queues: NotRequired[List[str]]
+
+
 @whitelist_for_serdes
 class AgentHeartbeat(
     NamedTuple(
@@ -446,7 +463,7 @@ class AgentHeartbeat(
             ("agent_label", Optional[str]),
             ("agent_type", Optional[str]),
             ("errors", Optional[Sequence[TimestampedError]]),
-            ("metadata", Optional[Mapping[str, Any]]),
+            ("metadata", AgentHeartbeatMetadata),
             ("run_worker_statuses", Optional[CloudRunWorkerStatuses]),
             ("code_server_heartbeats", Optional[Sequence[CloudCodeServerHeartbeat]]),
             ("agent_queues_config", AgentQueuesConfig),
@@ -472,7 +489,9 @@ class AgentHeartbeat(
             agent_label=check.opt_str_param(agent_label, "agent_label"),
             agent_type=check.opt_str_param(agent_type, "agent_type"),
             errors=check.opt_list_param(errors, "errors", of_type=TimestampedError),
-            metadata=check.opt_mapping_param(metadata, "metadata", key_type=str),
+            metadata=cast(
+                AgentHeartbeatMetadata, check.opt_mapping_param(metadata, "metadata", key_type=str)
+            ),
             run_worker_statuses=check.opt_inst_param(
                 run_worker_statuses, "run_worker_statuses", CloudRunWorkerStatuses
             ),
@@ -484,3 +503,9 @@ class AgentHeartbeat(
                 or AgentQueuesConfig()
             ),
         )
+
+    def get_agent_utilization_metrics(self) -> Optional[AgentUtilizationMetrics]:
+        metrics = self.metadata.get("utilization_metrics")
+        if metrics and keys_not_none(["container_utilization", "request_utilization"], metrics):
+            return metrics
+        return None

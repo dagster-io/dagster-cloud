@@ -65,6 +65,7 @@ from .queries import (
     ADD_DYNAMIC_PARTITIONS_MUTATION,
     CHECK_CONCURRENCY_CLAIM_QUERY,
     CLAIM_CONCURRENCY_SLOT_MUTATION,
+    DELETE_CONCURRENCY_LIMIT_MUTATION,
     DELETE_DYNAMIC_PARTITION_MUTATION,
     DELETE_EVENTS_MUTATION,
     ENABLE_SECONDARY_INDEX_MUTATION,
@@ -912,6 +913,20 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             else:
                 raise GraphQLStorageError(res)
         return res
+
+    def delete_concurrency_limit(self, concurrency_key: str) -> None:
+        check.str_param(concurrency_key, "concurrency_key")
+        res = self._execute_query(
+            DELETE_CONCURRENCY_LIMIT_MUTATION,
+            variables={"concurrencyKey": concurrency_key},
+        )
+        result = res["data"]["eventLogs"]["DeleteConcurrencyLimit"]
+        error = result.get("error")
+        if error:
+            if error["className"] == "DagsterInvalidInvocationError":
+                raise DagsterInvalidInvocationError(error["message"])
+            else:
+                raise GraphQLStorageError(res)
 
     def get_concurrency_keys(self) -> Set[str]:
         res = self._execute_query(GET_CONCURRENCY_KEYS_QUERY)

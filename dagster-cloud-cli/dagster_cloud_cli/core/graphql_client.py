@@ -18,7 +18,7 @@ from .headers.auth import DagsterCloudInstanceScope
 from .headers.impl import get_dagster_cloud_api_headers
 
 DEFAULT_RETRIES = 6
-RETRY_BACKOFF_FACTOR = 0.5
+DEFAULT_BACKOFF_FACTOR = 0.5
 DEFAULT_TIMEOUT = 60
 
 logger = logging.getLogger("dagster_cloud")
@@ -47,6 +47,7 @@ class GqlShimClient:
         cookies: Optional[Dict[str, Any]] = None,
         proxies: Optional[Dict[str, Any]] = None,
         max_retries: int = 0,
+        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
     ):
         self._exit_stack = ExitStack()
 
@@ -58,6 +59,7 @@ class GqlShimClient:
         self._session = session
         self._proxies = proxies
         self._max_retries = max_retries
+        self._backoff_factor = backoff_factor
 
     @property
     def session(self) -> requests.Session:
@@ -106,7 +108,7 @@ class GqlShimClient:
                     if requested_sleep_time:
                         sleep_time = requested_sleep_time
                     elif retry_number > 1:
-                        sleep_time = RETRY_BACKOFF_FACTOR * (2 ** (retry_number - 1))
+                        sleep_time = self._backoff_factor * (2 ** (retry_number - 1))
 
                     if sleep_time > 0:
                         logger.warning(
@@ -226,6 +228,7 @@ def create_proxy_client(
         ),
         session=session,
         max_retries=config_value.get("retries", DEFAULT_RETRIES),
+        backoff_factor=config_value.get("backoff_factor", DEFAULT_BACKOFF_FACTOR),
     )
 
 

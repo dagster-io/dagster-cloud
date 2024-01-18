@@ -113,7 +113,7 @@ class CodeDeploymentMetadata(
             check.opt_dict_param(cloud_context_env, "cloud_context_env", key_type=str),
             check.opt_inst_param(pex_metadata, "pex_metadata", PexMetadata),
             check.bool_param(enable_metrics, "enable_metrics"),
-            check.opt_inst_param(agent_queue, "agent_queue", AgentQueue),
+            check.opt_str_param(agent_queue, "agent_queue"),
         )
 
     def with_cloud_context_env(self, cloud_context_env: Dict[str, Any]) -> "CodeDeploymentMetadata":
