@@ -40,6 +40,7 @@ class Location(BaseModel, extra=Extra.forbid):
     executable_path: Optional[str] = None
     attribute: Optional[str] = None
     container_context: Optional[Dict[str, Any]] = None
+    agent_queue: Optional[str] = None
 
 
 class DagsterCloudYaml(BaseModel, extra=Extra.forbid):

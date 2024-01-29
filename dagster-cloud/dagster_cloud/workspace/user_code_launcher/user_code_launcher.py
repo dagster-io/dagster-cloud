@@ -12,7 +12,6 @@ from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Collection,
@@ -20,6 +19,7 @@ from typing import (
     Dict,
     Generic,
     List,
+    Mapping,
     NamedTuple,
     Optional,
     Sequence,
@@ -61,6 +61,7 @@ from dagster_cloud.api.dagster_cloud_api import (
 )
 from dagster_cloud.execution.monitoring import (
     CloudCodeServerHeartbeat,
+    CloudCodeServerHeartbeatMetadata,
     CloudCodeServerStatus,
     CloudCodeServerUtilizationMetrics,
     CloudContainerResourceLimits,
@@ -77,10 +78,6 @@ from dagster_cloud.pex.grpc.types import (
     ShutdownPexServerArgs,
 )
 from dagster_cloud.util import diff_serializable_namedtuple_map
-
-if TYPE_CHECKING:
-    from dagster._grpc.server import DagsterCodeServerUtilizationMetrics
-
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25
@@ -311,6 +308,7 @@ class DagsterCloudUserCodeLauncher(
         server_process_startup_timeout=None,
         upload_snapshots_on_startup: bool = True,
         requires_healthcheck: bool = False,
+        code_server_metrics: Optional[Mapping[str, Any]] = None,
     ):
         self._grpc_servers: Dict[
             DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
@@ -359,6 +357,8 @@ class DagsterCloudUserCodeLauncher(
             "server_process_startup_timeout",
             DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
         )
+
+        self._code_server_metrics_config = code_server_metrics
         super().__init__()
 
     def get_active_grpc_server_handles(self) -> List[ServerHandle]:
@@ -386,6 +386,14 @@ class DagsterCloudUserCodeLauncher(
         else:
             self._logger.info(f"Active agent ids response: {result}")
             return set(agent_data["id"] for agent_data in result["data"]["agents"])
+
+    @property
+    def metrics_enabled(self) -> bool:
+        return (
+            self._code_server_metrics_config["enabled"]
+            if self._code_server_metrics_config
+            else False
+        )
 
     @property
     def server_ttl_enabled_for_full_deployments(self) -> bool:
@@ -446,7 +454,8 @@ class DagsterCloudUserCodeLauncher(
             )
             self._reconcile_grpc_metadata_thread.start()
 
-        if run_metrics_thread:
+        if run_metrics_thread and self.metrics_enabled:
+            self._logger.info("Starting metrics reconciliation thread")
             self._reconcile_location_utilization_metrics_thread = threading.Thread(
                 target=self._update_metrics_thread,
                 args=(self._reconcile_location_utilization_metrics_shutdown_event,),
@@ -454,6 +463,8 @@ class DagsterCloudUserCodeLauncher(
                 daemon=True,
             )
             self._reconcile_location_utilization_metrics_thread.start()
+        else:
+            self._logger.info("Metrics not enabled: not starting metrics reconciliation thread.")
 
     def _start_run_worker_monitoring(self):
         # Utility method to be overridden by serverless subclass to change the monitoring interval
@@ -993,8 +1004,8 @@ class DagsterCloudUserCodeLauncher(
         pass
 
     def record_resource_limit_metrics_all_locations(self):
-        for (deployment_name, location_name), entry in self._actual_entries.items():
-            if entry.code_deployment_metadata.enable_metrics:
+        for deployment_name, location_name in self._actual_entries.keys():
+            if self.metrics_enabled:
                 metadata = self.get_code_server_resource_limits(deployment_name, location_name)
                 self._per_location_metrics[(deployment_name, location_name)][
                     "resource_limits"
@@ -1006,23 +1017,18 @@ class DagsterCloudUserCodeLauncher(
     def update_utilization_metrics_all_locations(self):
         endpoints_or_errors = self.get_grpc_endpoints()
         for (deployment_name, location_name), endpoint_or_error in endpoints_or_errors.items():
-            entry = self._actual_entries.get((deployment_name, location_name))
-            if (
-                entry
-                and entry.code_deployment_metadata.enable_metrics
-                and isinstance(endpoint_or_error, ServerEndpoint)
-            ):
+            if isinstance(endpoint_or_error, ServerEndpoint):
                 endpoint = cast(ServerEndpoint, endpoint_or_error)
                 raw_metrics_str = (
                     endpoint.create_client().ping("").get("serialized_server_utilization_metrics")
                 )
                 if not raw_metrics_str or raw_metrics_str == "":
                     continue
-                metadata: "DagsterCodeServerUtilizationMetrics" = json.loads(raw_metrics_str)
+                metrics = json.loads(raw_metrics_str)
                 self._logger.info(
-                    f"Updated metadata for location {location_name} in deployment {deployment_name}: {metadata}"
+                    f"Updated code server metrics for location {location_name} in deployment {deployment_name}: {metrics}"
                 )
-                for key, val in metadata.items():
+                for key, val in metrics.items():
                     self._per_location_metrics[(deployment_name, location_name)][key] = val
 
     def _get_code_location_origin(self, location_name: str) -> RegisteredCodeLocationOrigin:
@@ -1096,6 +1102,9 @@ class DagsterCloudUserCodeLauncher(
             try:
                 self.record_resource_limit_metrics_all_locations()
                 self.update_utilization_metrics_all_locations()
+                self._logger.info(
+                    f"Current code server utilization metrics: {self._per_location_metrics}"
+                )
             except Exception:
                 self._logger.error(
                     "Failure updating user code server metrics: {exc_info}".format(
@@ -1734,7 +1743,11 @@ class DagsterCloudUserCodeLauncher(
         for entry_key in desired_entries:
             deployment_name, location_name = entry_key
             endpoint_or_error = endpoint_or_errors.get(entry_key)
-            utilization_metrics = self._per_location_metrics.get(entry_key, {})
+            metadata: CloudCodeServerHeartbeatMetadata = {}
+            if self.metrics_enabled:
+                metadata["utilization_metrics"] = self._per_location_metrics.get(
+                    entry_key, init_optional_typeddict(CloudCodeServerUtilizationMetrics)
+                )
 
             error = (
                 endpoint_or_error if isinstance(endpoint_or_error, SerializableErrorInfo) else None
@@ -1760,7 +1773,7 @@ class DagsterCloudUserCodeLauncher(
                         if isinstance(endpoint_or_error, SerializableErrorInfo)
                         else None
                     ),
-                    metadata={"utilization_metrics": utilization_metrics},
+                    metadata=metadata,
                 )
             )
 

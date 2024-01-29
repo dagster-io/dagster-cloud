@@ -178,6 +178,7 @@ class DagsterCloudAgent:
             self._executor.get_current_utilization_metrics()
         )
         self._utilization_metrics["container_utilization"].update(container_utilization_metrics)
+        self._logger.info(f"Current utilization metrics: {self._utilization_metrics}")
 
     def run_loop(
         self,

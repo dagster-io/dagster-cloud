@@ -194,6 +194,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                         "finish before shutting down. Generally only needed in tests/automation."
                     ),
                 ),
+                "code_server_metrics": Field(
+                    {"enabled": Field(bool, is_required=False, default_value=False)},
+                    is_required=False,
+                ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
@@ -226,7 +230,9 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         if metadata.pex_metadata:
             multipex_process = open_ipc_subprocess(
-                metadata.get_multipex_server_command(port, socket)
+                metadata.get_multipex_server_command(
+                    port, socket, metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+                )
             )
 
             pid = multipex_process.pid
@@ -240,7 +246,9 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
             self._active_multipex_pids[key].add(pid)
         else:
-            subprocess_args = metadata.get_grpc_server_command() + [
+            subprocess_args = metadata.get_grpc_server_command(
+                metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+            ) + [
                 "--heartbeat",
                 "--heartbeat-timeout",
                 str(self._heartbeat_ttl),

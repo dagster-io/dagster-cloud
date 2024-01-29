@@ -433,6 +433,10 @@ instance_class:
         }
 
     @classmethod
+    def _code_server_metrics_config_schema(cls):
+        return {"enabled": Field(bool, is_required=False, default_value=False)}
+
+    @classmethod
     def _agent_metrics_config_schema(cls):
         return {"enabled": Field(bool, is_required=False, default_value=False)}
 

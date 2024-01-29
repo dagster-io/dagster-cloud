@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, cast
 
@@ -240,6 +241,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                         "See https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_types.html"
                     ),
                 ),
+                "code_server_metrics": Field(
+                    {"enabled": Field(bool, is_required=False, default_value=False)},
+                    is_required=False,
+                ),
             },
             SHARED_ECS_CONFIG,
             SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -319,14 +324,18 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
         if metadata.pex_metadata:
-            command = metadata.get_multipex_server_command(PORT)
+            command = metadata.get_multipex_server_command(
+                PORT, metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+            )
             additional_env = metadata.get_multipex_server_env()
             tags = {
                 "dagster/multipex_server": "1",
                 "dagster/agent_id": self._instance.instance_uuid,
             }
         else:
-            command = metadata.get_grpc_server_command()
+            command = metadata.get_grpc_server_command(
+                metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+            )
             additional_env = metadata.get_grpc_server_env(
                 PORT, location_name, self._instance.ref_for_deployment(deployment_name)
             )
@@ -354,6 +363,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             container_context.get_environment_dict(),
             additional_env,
             self._get_additional_grpc_server_env(),
+            {"DAGSTER_GRPC_MAX_WORKERS": os.environ["DAGSTER_GRPC_MAX_WORKERS"]}
+            if os.environ.get("DAGSTER_GRPC_MAX_WORKERS")
+            else {},
         )
 
         self._logger.info(f"Creating a new service for {deployment_name}:{location_name}...")

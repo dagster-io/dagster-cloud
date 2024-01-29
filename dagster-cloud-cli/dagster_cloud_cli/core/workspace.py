@@ -57,6 +57,8 @@ class PexMetadata(
             return f"878483074102.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{agent_image_tag}"
 
 
+# History of CodeDeploymentMetadata
+# 1. Removal of `enable_metrics` field
 @whitelist_for_serdes
 class CodeDeploymentMetadata(
     NamedTuple(
@@ -73,7 +75,6 @@ class CodeDeploymentMetadata(
             ("container_context", Dict[str, Any]),
             ("cloud_context_env", Dict[str, Any]),
             ("pex_metadata", Optional[PexMetadata]),
-            ("enable_metrics", bool),
             ("agent_queue", Optional[AgentQueue]),
         ],
     )
@@ -91,7 +92,6 @@ class CodeDeploymentMetadata(
         container_context=None,
         cloud_context_env=None,
         pex_metadata=None,
-        enable_metrics=False,
         agent_queue=None,
     ):
         check.invariant(
@@ -112,7 +112,6 @@ class CodeDeploymentMetadata(
             check.opt_dict_param(container_context, "container_context", key_type=str),
             check.opt_dict_param(cloud_context_env, "cloud_context_env", key_type=str),
             check.opt_inst_param(pex_metadata, "pex_metadata", PexMetadata),
-            check.bool_param(enable_metrics, "enable_metrics"),
             check.opt_str_param(agent_queue, "agent_queue"),
         )
 
@@ -120,19 +119,22 @@ class CodeDeploymentMetadata(
         return self._replace(cloud_context_env=cloud_context_env)
 
     def get_multipex_server_command(
-        self, port: Optional[int], socket: Optional[str] = None
+        self,
+        port: Optional[int],
+        socket: Optional[str] = None,
+        metrics_enabled: bool = False,
     ) -> List[str]:
         return (
             ["dagster-cloud", "pex", "grpc", "--host", "0.0.0.0"]
             + (["--port", str(port)] if port else [])
             + (["--socket", str(socket)] if socket else [])
-            + (["--enable-metrics"] if self.enable_metrics else [])
+            + (["--enable-metrics"] if metrics_enabled else [])
         )
 
     def get_multipex_server_env(self) -> Dict[str, str]:
         return {"DAGSTER_CURRENT_IMAGE": self.image} if self.image else {}
 
-    def get_grpc_server_command(self) -> List[str]:
+    def get_grpc_server_command(self, metrics_enabled: bool = False) -> List[str]:
         return (
             ([self.executable_path, "-m"] if self.executable_path else [])
             + [
@@ -140,7 +142,7 @@ class CodeDeploymentMetadata(
                 "api",
                 "grpc",
             ]
-            + (["--enable-metrics"] if self.enable_metrics else [])
+            + (["--enable-metrics"] if metrics_enabled else [])
         )
 
     def get_grpc_server_env(

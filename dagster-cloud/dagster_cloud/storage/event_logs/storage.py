@@ -268,6 +268,8 @@ def _fetch_run_status_changes_filter_input(records_filter) -> Dict[str, Any]:
         "eventType": records_filter.event_type.value if records_filter.event_type else None,
         "afterTimestamp": records_filter.after_timestamp,
         "beforeTimestamp": records_filter.before_timestamp,
+        "afterStorageId": records_filter.after_storage_id,
+        "beforeStorageId": records_filter.before_storage_id,
         "storageIds": records_filter.storage_ids,
     }
 

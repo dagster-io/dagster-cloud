@@ -246,6 +246,10 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     is_required=False,
                     description="Raw Kubernetes configuration for launched code servers.",
                 ),
+                "code_server_metrics": Field(
+                    {"enabled": Field(bool, is_required=False, default_value=False)},
+                    is_required=False,
+                ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
@@ -292,24 +296,26 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
     def get_code_server_resource_limits(
         self, deployment_name: str, location_name: str
     ) -> CloudContainerResourceLimits:
-        self._logger.info(
-            f"Getting resource limits for deployment {deployment_name} in location {location_name}: {self._resources}"
-        )
         metadata = self._actual_entries[(deployment_name, location_name)].code_deployment_metadata
-        resources = self._resolve_container_context(metadata).resources
+        resources = metadata.container_context.get("k8s", {}).get("resources", {})
+        self._logger.info(
+            f"Getting resource limits for deployment {deployment_name} in location {location_name}: {resources}"
+        )
         return {
             "k8s": {
-                "cpu_limit": resources.get("limit", {}).get("cpu"),
-                "cpu_request": resources.get("request", {}).get("cpu"),
-                "memory_limit": resources.get("limit", {}).get("memory"),
-                "memory_request": resources.get("request", {}).get("memory"),
+                "cpu_limit": resources.get("limits", {}).get("cpu"),
+                "cpu_request": resources.get("requests", {}).get("cpu"),
+                "memory_limit": resources.get("limits", {}).get("memory"),
+                "memory_request": resources.get("requests", {}).get("memory"),
             }
         }
 
     def _start_new_server_spinup(
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
-        args = metadata.get_grpc_server_command()
+        args = metadata.get_grpc_server_command(
+            metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+        )
 
         resource_name = unique_k8s_resource_name(deployment_name, location_name)
 
