@@ -245,6 +245,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     {"enabled": Field(bool, is_required=False, default_value=False)},
                     is_required=False,
                 ),
+                "agent_metrics": Field(
+                    {"enabled": Field(bool, is_required=False, default_value=False)},
+                    is_required=False,
+                ),
             },
             SHARED_ECS_CONFIG,
             SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -325,7 +329,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     ) -> DagsterCloudGrpcServer:
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(
-                PORT, metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+                PORT, metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
             )
             additional_env = metadata.get_multipex_server_env()
             tags = {
@@ -334,7 +338,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             }
         else:
             command = metadata.get_grpc_server_command(
-                metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+                metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
             )
             additional_env = metadata.get_grpc_server_env(
                 PORT, location_name, self._instance.ref_for_deployment(deployment_name)

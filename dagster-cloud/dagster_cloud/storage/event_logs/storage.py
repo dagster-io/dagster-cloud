@@ -38,6 +38,7 @@ from dagster._core.storage.event_log.base import (
     AssetRecord,
     EventLogConnection,
     EventLogStorage,
+    PlannedMaterializationInfo,
 )
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
 from dagster._serdes import (
@@ -83,6 +84,7 @@ from .queries import (
     GET_EVENT_TAGS_FOR_ASSET,
     GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
     GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
+    GET_LATEST_PLANNED_MATERIALIZATION_INFO,
     GET_LATEST_STORAGE_ID_BY_PARTITION,
     GET_LATEST_TAGS_BY_PARTITION,
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
@@ -1123,3 +1125,23 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return _event_records_result_from_graphql(
             res["data"]["eventLogs"]["getRunStatusChangeEventRecords"]
         )
+
+    def get_latest_planned_materialization_info(
+        self,
+        asset_key: AssetKey,
+        partition: Optional[str] = None,
+    ) -> Optional[PlannedMaterializationInfo]:
+        res = self._execute_query(
+            GET_LATEST_PLANNED_MATERIALIZATION_INFO,
+            variables={
+                "assetKey": asset_key.to_string(),
+                "partition": partition,
+            },
+        )
+        info = res["data"]["eventLogs"]["getLatestPlannedMaterializationInfo"]
+        if info["runId"] and info["storageId"]:
+            return PlannedMaterializationInfo(
+                storage_id=int(info["storageId"]),
+                run_id=info["runId"],
+            )
+        return None

@@ -2,7 +2,7 @@ import copy
 import uuid
 from contextlib import ExitStack
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
 
 import yaml
 from dagster import (
@@ -110,13 +110,6 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             )
         else:
             self._isolated_agents = None
-
-        if agent_metrics:
-            self._agent_metrics = self._get_processed_config(
-                "agent_metrics", agent_metrics, self._agent_metrics_config_schema()
-            )
-        else:
-            self._agent_metrics = None
 
         processed_agent_queues_config = self._get_processed_config(
             "agent_queues", agent_queues, self._agent_queues_config_schema()
@@ -252,10 +245,6 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     @property
     def organization_name(self) -> Optional[str]:
         return get_organization_name_from_agent_token(self.dagster_cloud_agent_token)
-
-    @property
-    def agent_metrics_enabled(self) -> bool:
-        return cast(bool, self._agent_metrics["enabled"]) if self._agent_metrics else False
 
     @property
     def deployment_name(self) -> Optional[str]:
@@ -429,15 +418,10 @@ instance_class:
                 cls._isolated_agents_config_schema(), is_required=False
             ),  # deprecated in favor of isolated_agents
             "agent_queues": Field(cls._agent_queues_config_schema(), is_required=False),
-            "agent_metrics": Field(cls._agent_metrics_config_schema(), is_required=False),
         }
 
     @classmethod
     def _code_server_metrics_config_schema(cls):
-        return {"enabled": Field(bool, is_required=False, default_value=False)}
-
-    @classmethod
-    def _agent_metrics_config_schema(cls):
         return {"enabled": Field(bool, is_required=False, default_value=False)}
 
     @classmethod

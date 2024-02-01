@@ -162,7 +162,7 @@ def put_cost_information(
         try:
             upload_cost_information(context, metric_name, cost_information)
         except Exception:
-            context.log.warn("Failed to upload cost information to S3.")
+            context.log.warn("Failed to upload cost information to S3.", exc_info=True)
     except ImportError:
         context.log.warn(
             "Dagster insights dependencies not installed. In the future, you will need to install dagster-cloud[insights] to use this feature."

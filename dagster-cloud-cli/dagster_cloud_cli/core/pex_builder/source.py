@@ -11,6 +11,8 @@ from uuid import uuid4
 
 import click
 
+from dagster_cloud_cli import ui
+
 from . import deps, util
 
 # inspired by https://github.com/github/gitignore/blob/main/Python.gitignore
@@ -86,17 +88,31 @@ def build_pex_using_setup_py(
         )
 
         # We always include the code_directory source in a special package called working_directory
-        logging.info("Bunding the source %r into the 'working_directory' package", code_directory)
+        logging.info(
+            "Bundling the source %r into the 'working_directory' package at %r",
+            code_directory,
+            sources_dir,
+        )
         _prepare_working_directory(code_directory, sources_dir)
         included_dirs.append(sources_dir)
 
         # note this may include tests directories
-        util.build_pex(
+        proc = util.build_pex(
             included_dirs,
             requirements_filepaths=[],
             pex_flags=util.get_pex_flags(python_version),
             output_pex_path=tmp_pex_path,
         )
+
+        if proc.returncode:
+            logging.error("build source pex stdout:")
+            logging.error(util.indent(proc.stdout.decode("utf-8")))
+            logging.error("build source pex stderr:")
+            logging.error(util.indent(proc.stderr.decode("utf-8")))
+            raise ui.error(
+                f"Failed to package source code into a source pex, error code: {proc.returncode}"
+            )
+        ui.print(f"Built source pex: {tmp_pex_path}")
 
 
 def _prepare_working_directory(code_directory, sources_directory):

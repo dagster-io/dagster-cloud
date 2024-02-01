@@ -654,3 +654,15 @@ query getRunStatusChangeEventRecordsQuery($recordsFilter: RunStatusChangeRecords
 }
 """
 )
+
+GET_LATEST_PLANNED_MATERIALIZATION_INFO = """
+    query getLatestPlannedMaterializationInfo($assetKey: String!, $partition: String) {
+        eventLogs {
+            getLatestPlannedMaterializationInfo(assetKey: $assetKey, partition: $partition) {
+                storageId
+                runId
+            }
+        }
+    }
+
+"""

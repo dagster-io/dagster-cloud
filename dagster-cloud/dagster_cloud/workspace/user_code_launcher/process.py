@@ -198,6 +198,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                     {"enabled": Field(bool, is_required=False, default_value=False)},
                     is_required=False,
                 ),
+                "agent_metrics": Field(
+                    {"enabled": Field(bool, is_required=False, default_value=False)},
+                    is_required=False,
+                ),
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
@@ -231,7 +235,9 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         if metadata.pex_metadata:
             multipex_process = open_ipc_subprocess(
                 metadata.get_multipex_server_command(
-                    port, socket, metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+                    port,
+                    socket,
+                    metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled,
                 )
             )
 
@@ -247,7 +253,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             self._active_multipex_pids[key].add(pid)
         else:
             subprocess_args = metadata.get_grpc_server_command(
-                metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+                metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
             ) + [
                 "--heartbeat",
                 "--heartbeat-timeout",

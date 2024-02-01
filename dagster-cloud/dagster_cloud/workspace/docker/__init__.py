@@ -282,7 +282,8 @@ class DockerUserCodeLauncher(
 
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(
-                grpc_port, metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+                grpc_port,
+                metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled,
             )
             environment = metadata.get_multipex_server_env()
             labels = {
@@ -292,7 +293,7 @@ class DockerUserCodeLauncher(
             }
         else:
             command = metadata.get_grpc_server_command(
-                metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+                metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
             )
             environment = metadata.get_grpc_server_env(
                 grpc_port, location_name, self._instance.ref_for_deployment(deployment_name)

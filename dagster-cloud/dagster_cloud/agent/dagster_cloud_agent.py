@@ -317,7 +317,7 @@ class DagsterCloudAgent:
                             {"image_tag": agent_image_tag} if agent_image_tag else {},
                             {
                                 "utilization_metrics": self._utilization_metrics
-                                if instance.agent_metrics_enabled
+                                if instance.user_code_launcher.agent_metrics_enabled
                                 else {}
                             },
                         ),
@@ -329,7 +329,7 @@ class DagsterCloudAgent:
             }
             for deployment_name in self._active_deployment_names
         ]
-        if instance.agent_metrics_enabled:
+        if instance.user_code_launcher.agent_metrics_enabled:
             num_running_requests = self._utilization_metrics["request_utilization"][
                 "num_running_requests"
             ]
@@ -994,7 +994,7 @@ class DagsterCloudAgent:
                 if response:
                     yield response
 
-        if instance.agent_metrics_enabled and (
+        if instance.user_code_launcher.agent_metrics_enabled and (
             self._utilization_metrics["container_utilization"]["measurement_timestamp"] is None
             or (
                 pendulum.now("UTC").timestamp()

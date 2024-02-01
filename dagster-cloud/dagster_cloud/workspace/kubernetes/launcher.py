@@ -7,8 +7,10 @@ from typing import Any, Collection, Dict, List, NamedTuple, Optional, Set, Tuple
 import kubernetes
 import kubernetes.client as client
 from dagster import (
+    Array,
     Field,
     IntSource,
+    Map,
     Noneable,
     Permissive,
     Shape,
@@ -26,6 +28,7 @@ from kubernetes.client.models.v1_deployment_list import V1DeploymentList
 from kubernetes.client.rest import ApiException
 from typing_extensions import Self
 
+from dagster_cloud.constants import RESERVED_ENV_VAR_NAMES
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 
@@ -87,6 +90,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         k8s_apps_api_client=None,
         k8s_core_api_client=None,
         security_context=None,
+        only_allow_user_defined_k8s_config_fields=None,
+        only_allow_user_defined_env_vars=None,
         **kwargs,
     ):
         self._inst_data = inst_data
@@ -141,6 +146,34 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
         self._security_context = security_context
 
+        if only_allow_user_defined_k8s_config_fields is not None:
+            # Dagster Cloud always sets some environment variables whenever it launched code.
+            # If only_allow_user_defined_k8s_config_fields is being used to lock down which
+            # k8s config can be set by the control plane and "container_config.env" is not
+            # in that allowlist, add it to that allowlist so that we don't fail every pod that
+            # is launched, but restrict the set of env vars that can be configured to only
+            # a fixed set of known Dagster Cloud environment variables, defined in code.
+
+            if not only_allow_user_defined_k8s_config_fields.get("container_config", {}).get("env"):
+                only_allow_user_defined_k8s_config_fields = {
+                    **only_allow_user_defined_k8s_config_fields,
+                    "container_config": {
+                        **only_allow_user_defined_k8s_config_fields.get("container_config", {}),
+                        "env": True,
+                    },
+                }
+
+                if only_allow_user_defined_env_vars is None:
+                    only_allow_user_defined_env_vars = []
+
+        if only_allow_user_defined_env_vars is not None:
+            only_allow_user_defined_env_vars = (
+                only_allow_user_defined_env_vars + RESERVED_ENV_VAR_NAMES
+            )
+
+        self._only_allow_user_defined_k8s_config_fields = only_allow_user_defined_k8s_config_fields
+        self._only_allow_user_defined_env_vars = only_allow_user_defined_env_vars
+
         super(K8sUserCodeLauncher, self).__init__(**kwargs)
 
         self._launcher = CloudK8sRunLauncher(
@@ -164,6 +197,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             kubeconfig_file=kubeconfig_file,
             load_incluster_config=not kubeconfig_file,
             security_context=self._security_context,
+            only_allow_user_defined_k8s_config_fields=self._only_allow_user_defined_k8s_config_fields,
+            only_allow_user_defined_env_vars=self._only_allow_user_defined_env_vars,
         )
 
         # mutable set of observed namespaces to assist with cleanup
@@ -246,7 +281,45 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     is_required=False,
                     description="Raw Kubernetes configuration for launched code servers.",
                 ),
+                "only_allow_user_defined_k8s_config_fields": Field(
+                    Shape(
+                        {
+                            "container_config": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "pod_spec_config": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "pod_template_spec_metadata": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "job_metadata": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "job_spec_config": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "namespace": Field(bool, is_required=False),
+                        }
+                    ),
+                    is_required=False,
+                    description="Dictionary of fields that are allowed to be configured on a "
+                    "per-run or per-code-location basis - e.g. using tags on the run. "
+                    "Can be used to prevent user code or the Dagster Cloud control plane from "
+                    "being able to set arbitrary kubernetes config on the resources launched "
+                    "by the agent.",
+                ),
+                "only_allow_user_defined_env_vars": Field(
+                    Array(str),
+                    is_required=False,
+                    description="List of environment variable names that are allowed to be set on "
+                    "a per-run or per-code-location basis - e.g. using tags on the run. ",
+                ),
                 "code_server_metrics": Field(
+                    {"enabled": Field(bool, is_required=False, default_value=False)},
+                    is_required=False,
+                ),
+                "agent_metrics": Field(
                     {"enabled": Field(bool, is_required=False, default_value=False)},
                     is_required=False,
                 ),
@@ -274,6 +347,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             yield client.AppsV1Api(api_client)
 
     def _resolve_container_context(self, metadata: CodeDeploymentMetadata) -> K8sContainerContext:
+        user_defined_container_context = K8sContainerContext.create_from_config(
+            metadata.container_context
+        ).validate_user_k8s_config(
+            self._only_allow_user_defined_k8s_config_fields, self._only_allow_user_defined_env_vars
+        )
         return K8sContainerContext(
             image_pull_policy=self._pull_policy,
             image_pull_secrets=self._image_pull_secrets,
@@ -291,7 +369,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             security_context=self._security_context,
             server_k8s_config=UserDefinedDagsterK8sConfig.from_dict(self._server_k8s_config),
             run_k8s_config=UserDefinedDagsterK8sConfig.from_dict(self._run_k8s_config),
-        ).merge(K8sContainerContext.create_from_config(metadata.container_context))
+        ).merge(user_defined_container_context)
 
     def get_code_server_resource_limits(
         self, deployment_name: str, location_name: str
@@ -314,7 +392,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
     ) -> DagsterCloudGrpcServer:
         args = metadata.get_grpc_server_command(
-            metrics_enabled=self._instance.user_code_launcher.metrics_enabled
+            metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
         )
 
         resource_name = unique_k8s_resource_name(deployment_name, location_name)
