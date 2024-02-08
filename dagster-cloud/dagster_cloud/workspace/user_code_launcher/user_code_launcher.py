@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 import zlib
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 from concurrent.futures import ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager
 from typing import (
@@ -58,6 +58,7 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadRepositoryData,
     DagsterCloudUploadWorkspaceEntry,
     DagsterCloudUploadWorkspaceResponse,
+    UserCodeDeploymentType,
 )
 from dagster_cloud.execution.monitoring import (
     CloudCodeServerHeartbeat,
@@ -425,6 +426,10 @@ class DagsterCloudUserCodeLauncher(
         return self._server_ttl_config.get("branch_deployments", {}).get(
             "ttl_seconds", DEFAULT_SERVER_TTL_SECONDS
         )
+
+    @abstractproperty
+    def user_code_deployment_type(self) -> UserCodeDeploymentType:
+        raise NotImplementedError()
 
     @property
     def server_ttl_max_servers(self) -> int:

@@ -28,6 +28,9 @@ from kubernetes.client.models.v1_deployment_list import V1DeploymentList
 from kubernetes.client.rest import ApiException
 from typing_extensions import Self
 
+from dagster_cloud.api.dagster_cloud_api import (
+    UserCodeDeploymentType,
+)
 from dagster_cloud.constants import RESERVED_ENV_VAR_NAMES
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
@@ -326,6 +329,10 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
+
+    @property
+    def user_code_deployment_type(self) -> UserCodeDeploymentType:
+        return UserCodeDeploymentType.K8S
 
     @classmethod
     def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Any) -> Self:

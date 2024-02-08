@@ -1,6 +1,6 @@
 from contextlib import suppress
 from enum import Enum, EnumMeta
-from typing import List, Tuple
+from typing import Tuple
 
 
 class CliEventType(Enum):
@@ -9,8 +9,34 @@ class CliEventType(Enum):
     BUILD = "build"
 
 
-def tags(key: str, values: List[str]):
-    return Enum(key, {value.replace("-", "_"): f"{key}:{value}" for value in values})
+AgentStrategyTags = Enum(
+    "agent-strategy", {"hybrid": "agent-strategy:hybrid", "serverless": "agent-strategy:serverless"}
+)
+ServerStrategyTags = Enum(
+    "server-strategy", {"docker": "server-strategy:docker", "pex": "server-strategy:pex"}
+)
+SourceTags = Enum(
+    "source",
+    {
+        "bitbucket": "source:bitbucket",
+        "buildkite": "source:buildkite",
+        "circle_ci": "source:circle-ci",
+        "cli": "source:cli",
+        "codebuild": "source:codebuild",
+        "github": "source:github",
+        "gitlab": "source:gitlab",
+        "jenkins": "source:jenkins",
+        "travis": "source:travis",
+        "unknown": "source:unknown",
+    },
+)
+SubcommandTags = Enum(
+    "subcommand",
+    {
+        "dagster_cloud_ci": "subcommand:dagster-cloud-ci",
+        "dagster_cloud_serverless": "subcommand:dagster-cloud-serverless",
+    },
+)
 
 
 class CliEventTags:
@@ -37,24 +63,7 @@ class CliEventTags:
             return (parts[0], parts[1])
         raise ValueError("Invalid tag value", value)
 
-    agent_strategy = tags("agent-strategy", ["hybrid", "serverless"])
-    server_strategy = tags("server-strategy", ["docker", "pex"])
-    source = tags(
-        "source",
-        [
-            "bitbucket",
-            "buildkite",
-            "circle-ci",
-            "cli",
-            "codebuild",
-            "github",
-            "gitlab",
-            "jenkins",
-            "travis",
-            "unknown",
-        ],
-    )
-    subcommand = tags(
-        "subcommand",
-        ["dagster-cloud-ci", "dagster-cloud-serverless"],
-    )
+    agent_strategy = AgentStrategyTags
+    server_strategy = ServerStrategyTags
+    source = SourceTags
+    subcommand = SubcommandTags

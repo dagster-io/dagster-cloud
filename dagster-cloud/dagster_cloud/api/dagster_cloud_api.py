@@ -1,3 +1,4 @@
+import enum
 from datetime import timedelta
 from enum import Enum
 from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, TypedDict, Union, cast
@@ -19,7 +20,11 @@ from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from typing_extensions import NotRequired
 
 from dagster_cloud.agent import AgentQueuesConfig
-from dagster_cloud.execution.monitoring import CloudCodeServerHeartbeat, CloudRunWorkerStatuses
+from dagster_cloud.execution.monitoring import (
+    CloudCodeServerHeartbeat,
+    CloudContainerResourceLimits,
+    CloudRunWorkerStatuses,
+)
 from dagster_cloud.util import keys_not_none
 
 DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
@@ -440,9 +445,27 @@ class TimestampedError(
         )
 
 
+class UserCodeDeploymentType(enum.Enum):
+    SERVERLESS = "serverless"
+    ECS = "ecs"
+    K8S = "k8s"
+    DOCKER = "docker"
+    PROCESS = "process"
+    UNKNOWN = "unknown"
+
+    @property
+    def supports_utilization_metrics(self) -> bool:
+        return self in [
+            UserCodeDeploymentType.ECS,
+            UserCodeDeploymentType.K8S,
+            UserCodeDeploymentType.SERVERLESS,
+        ]
+
+
 class AgentUtilizationMetrics(TypedDict):
     container_utilization: ContainerUtilizationMetrics
     request_utilization: RequestUtilizationMetrics
+    resource_limits: CloudContainerResourceLimits
 
 
 class AgentHeartbeatMetadata(TypedDict):

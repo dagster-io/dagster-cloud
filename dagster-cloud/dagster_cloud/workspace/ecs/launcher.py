@@ -21,6 +21,9 @@ from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
+from dagster_cloud.api.dagster_cloud_api import (
+    UserCodeDeploymentType,
+)
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.pex.grpc.types import (
     GetCrashedPexServersArgs,
@@ -261,6 +264,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     @property
     def inst_data(self) -> Optional[ConfigurableClassData]:
         return self._inst_data
+
+    @property
+    def user_code_deployment_type(self) -> UserCodeDeploymentType:
+        return UserCodeDeploymentType.ECS
 
     def _write_liveness_sentinel(self) -> None:
         # Write to a sentinel file to indicate that we've finished our initial

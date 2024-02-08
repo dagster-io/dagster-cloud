@@ -166,7 +166,36 @@ class DagsterCloudAgent:
                     " agent configuration to make sure it is serving the correct deployment.",
                 )
 
-    def _update_utilization_metrics(self):
+    def _update_agent_resource_limits(
+        self, user_code_launcher: DagsterCloudUserCodeLauncher
+    ) -> None:
+        # If the env var DAGSTER_CLOUD_AGENT_MEMORY_LIMIT is set, use that as the memory limit.
+        memory_limit = os.getenv("DAGSTER_CLOUD_AGENT_MEMORY_LIMIT")
+        # If the env var DAGSTER_CLOUD_AGENT_CPU_LIMIT is set, use that as the cpu limit.
+        cpu_limit = os.getenv("DAGSTER_CLOUD_AGENT_CPU_LIMIT")
+        if not user_code_launcher.user_code_deployment_type.supports_utilization_metrics:
+            self._logger.info(
+                f"Cannot interpret resource limits for agent type {user_code_launcher.user_code_deployment_type.value}. Skipping utilization metrics retrieval."
+            )
+            return
+
+        limits = {
+            "cpu_limit": cpu_limit,
+            "memory_limit": memory_limit,
+        }
+        cpu_request = os.getenv("DAGSTER_CLOUD_AGENT_CPU_REQUEST")
+        memory_request = os.getenv("DAGSTER_CLOUD_AGENT_MEMORY_REQUEST")
+        if cpu_request:
+            limits["cpu_request"] = cpu_request
+        if memory_request:
+            limits["memory_request"] = memory_request
+
+        # At this point, the only agent types possible are serverless, ecs, and k8s, all of which are supported. The linter isn't smart enough to realize this, so we disable it.
+        self._utilization_metrics["resource_limits"][
+            user_code_launcher.user_code_deployment_type.value
+        ] = limits  # type: ignore
+
+    def _update_utilization_metrics(self, user_code_launcher: DagsterCloudUserCodeLauncher):
         container_utilization_metrics = retrieve_containerized_utilization_metrics(
             logger=self._logger,
             previous_measurement_timestamp=self._utilization_metrics["container_utilization"][
@@ -178,6 +207,9 @@ class DagsterCloudAgent:
             self._executor.get_current_utilization_metrics()
         )
         self._utilization_metrics["container_utilization"].update(container_utilization_metrics)
+
+        self._update_agent_resource_limits(user_code_launcher)
+
         self._logger.info(f"Current utilization metrics: {self._utilization_metrics}")
 
     def run_loop(
@@ -1002,7 +1034,7 @@ class DagsterCloudAgent:
                 > AGENT_UTILIZATION_METRICS_INTERVAL_SECONDS
             )
         ):
-            self._update_utilization_metrics()
+            self._update_utilization_metrics(user_code_launcher)
         self._iteration += 1
 
         yield None

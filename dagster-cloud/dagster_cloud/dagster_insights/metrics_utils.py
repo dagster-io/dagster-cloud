@@ -112,20 +112,22 @@ def get_post_request_params(
 def upload_cost_information(
     context: Union[OpExecutionContext, AssetExecutionContext],
     metric_name: str,
-    cost_information: List[Tuple[str, float]],
+    cost_information: List[Tuple[str, float, str]],
 ):
     import pyarrow as pa
     import pyarrow.parquet as pq
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        opaque_ids = pa.array([opaque_id for opaque_id, _ in cost_information])
-        costs = pa.array([cost for _, cost in cost_information])
-        metric_names = pa.array([metric_name for _, _ in cost_information])
+        opaque_ids = pa.array([opaque_id for opaque_id, _, _ in cost_information])
+        costs = pa.array([cost for _, cost, _ in cost_information])
+        query_ids = pa.array([query_id for _, _, query_id in cost_information])
+        metric_names = pa.array([metric_name for _, _, _ in cost_information])
 
         cost_pq_file = os.path.join(temp_dir, "cost.parquet")
         pq.write_table(
             pa.Table.from_arrays(
-                [opaque_ids, costs, metric_names], ["opaque_id", "cost", "metric_name"]
+                [opaque_ids, costs, metric_names, query_ids],
+                ["opaque_id", "cost", "metric_name", "query_id"],
             ),
             cost_pq_file,
         )
@@ -151,7 +153,7 @@ def upload_cost_information(
 def put_cost_information(
     context: Union[OpExecutionContext, AssetExecutionContext],
     metric_name: str,
-    cost_information: List[Tuple[str, float]],
+    cost_information: List[Tuple[str, float, str]],
     start: float,
     end: float,
 ) -> None:
@@ -173,13 +175,15 @@ def put_cost_information(
             "opaqueId": opaque_id,
             "cost": float(cost),
         }
-        for opaque_id, cost in cost_information
+        for opaque_id, cost, _ in cost_information
     ]
 
     # Chunk the cost information & keep each opaque id in the same chunk
     # to avoid the cost information for a single asset being split across
     # multiple steps
-    for chunk in chunk_by_opaque_id(cost_information, chunk_size):
+    for chunk in chunk_by_opaque_id(
+        [(opaque_id, cost) for opaque_id, cost, _ in cost_information], chunk_size
+    ):
         cost_info_input = [
             {
                 "opaqueId": opaque_id,

@@ -22,6 +22,9 @@ from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from typing_extensions import Self
 
+from dagster_cloud.api.dagster_cloud_api import (
+    UserCodeDeploymentType,
+)
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.pex.grpc import MultiPexGrpcClient
@@ -205,6 +208,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             },
             SHARED_USER_CODE_LAUNCHER_CONFIG,
         )
+
+    @property
+    def user_code_deployment_type(self) -> UserCodeDeploymentType:
+        return UserCodeDeploymentType.PROCESS
 
     @classmethod
     def from_config_value(

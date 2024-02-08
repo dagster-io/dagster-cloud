@@ -20,6 +20,7 @@ from dagster_docker.container_context import DockerContainerContext
 from docker.models.containers import Container
 from typing_extensions import Self
 
+from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
 
@@ -77,6 +78,9 @@ class DockerUserCodeLauncher(
     @property
     def requires_images(self):
         return True
+
+    def user_code_deployment_type(self) -> UserCodeDeploymentType:
+        return UserCodeDeploymentType.DOCKER
 
     @property
     def inst_data(self):
