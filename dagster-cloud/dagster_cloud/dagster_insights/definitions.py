@@ -51,6 +51,7 @@ def create_snowflake_insights_asset_and_schedule(
     snowflake_usage_latency: int = SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS,
     partition_end_offset_hrs: int = 1,
     schedule_batch_size_hrs: int = 1,
+    submit_to_s3_only: bool = False,
 ) -> SnowflakeInsightsDefinitions:
     """Generates a pre-defined Dagster asset and schedule that can be used to import Snowflake cost
     data into Dagster Insights.
@@ -141,6 +142,7 @@ def create_snowflake_insights_asset_and_schedule(
                 cost_information=costs,
                 start=start_hour.timestamp(),
                 end=end_hour.timestamp(),
+                submit_gql=not submit_to_s3_only,
             )
 
     insights_job = define_asset_job(

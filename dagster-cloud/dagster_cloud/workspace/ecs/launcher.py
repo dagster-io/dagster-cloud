@@ -516,6 +516,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         def _assert_new_pex_server_did_not_crash():
             self.client.assert_task_not_stopped(task_arn, CONTAINER_NAME, self._logger)
 
+            crashed_pex_servers = []
+
             try:
                 crashed_pex_servers = (
                     check.not_none(multipex_client)
@@ -528,14 +530,14 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     .server_handles
                 )
             except Exception as e:
-                # New gRPC method not implemented on old multipex server versions
                 if (
                     isinstance(e.__cause__, grpc.RpcError)
                     and cast(grpc.RpcError, e.__cause__).code() == grpc.StatusCode.UNIMPLEMENTED
                 ):
-                    crashed_pex_servers = []
+                    # New gRPC method not implemented on old multipex server versions
+                    pass
                 else:
-                    raise
+                    self._logger.exception("Error attempting to fetch crashed PEX servers")
 
             if any(
                 pex_server_handle.metadata_update_timestamp

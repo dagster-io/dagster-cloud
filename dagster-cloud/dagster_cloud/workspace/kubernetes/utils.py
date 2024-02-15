@@ -1,13 +1,15 @@
 import copy
 import re
 import time
-from typing import Optional
+from typing import Mapping, Optional
 
 import kubernetes
 from dagster._utils.merger import merge_dicts
 from dagster_k8s.client import DagsterKubernetesClient
 from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
+
+from dagster_cloud.instance import DagsterCloudAgentInstance
 
 from ..user_code_launcher.utils import (
     deterministic_label_for_location,
@@ -17,6 +19,18 @@ from ..user_code_launcher.utils import (
 
 MANAGED_RESOURCES_LABEL = {"managed_by": "K8sUserCodeLauncher"}
 SERVICE_PORT = 4000
+
+
+def _get_dagster_k8s_labels(
+    deployment_name: str, location_name: str, instance: DagsterCloudAgentInstance
+) -> Mapping[str, str]:
+    return {
+        **MANAGED_RESOURCES_LABEL,
+        "location_hash": deterministic_label_for_location(deployment_name, location_name),
+        "location_name": get_k8s_human_readable_label(location_name),
+        "deployment_name": get_k8s_human_readable_label(deployment_name),
+        "agent_id": instance.instance_uuid,
+    }
 
 
 def _sanitize_k8s_resource_name(name):
@@ -59,7 +73,7 @@ def get_k8s_human_readable_label(name):
 
 
 def construct_code_location_service(
-    deployment_name, location_name, service_name, container_context
+    deployment_name, location_name, service_name, container_context, instance
 ):
     labels = container_context.labels
 
@@ -68,10 +82,7 @@ def construct_code_location_service(
             name=service_name,
             labels={
                 **labels,
-                **MANAGED_RESOURCES_LABEL,
-                "location_hash": deterministic_label_for_location(deployment_name, location_name),
-                "location_name": get_k8s_human_readable_label(location_name),
-                "deployment_name": get_k8s_human_readable_label(deployment_name),
+                **_get_dagster_k8s_labels(deployment_name, location_name, instance),
             },
         ),
         spec=client.V1ServiceSpec(
@@ -98,7 +109,6 @@ def construct_code_location_deployment(
     volume_mounts = container_context.volume_mounts
 
     volumes = container_context.volumes
-    labels = container_context.labels
     resources = container_context.resources
 
     scheduler_name = container_context.scheduler_name
@@ -170,11 +180,7 @@ def construct_code_location_deployment(
             "name": k8s_deployment_name,
             "labels": {
                 **container_context.labels,
-                **MANAGED_RESOURCES_LABEL,
-                "location_hash": deterministic_label_for_location(deployment_name, location_name),
-                "location_name": get_k8s_human_readable_label(location_name),
-                "deployment_name": get_k8s_human_readable_label(deployment_name),
-                "agent_id": instance.instance_uuid,
+                **_get_dagster_k8s_labels(deployment_name, location_name, instance),
             },
         },
         "spec": {  # DeploymentSpec
@@ -184,8 +190,9 @@ def construct_code_location_deployment(
                     **pod_template_spec_metadata,
                     "labels": {
                         "user-deployment": k8s_deployment_name,
-                        **labels,
+                        **container_context.labels,
                         **user_defined_pod_template_labels,
+                        **_get_dagster_k8s_labels(deployment_name, location_name, instance),
                     },
                 },
                 "spec": pod_spec_config,

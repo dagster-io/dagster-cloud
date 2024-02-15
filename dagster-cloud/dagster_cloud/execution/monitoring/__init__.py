@@ -147,12 +147,13 @@ class CloudRunWorkerStatus(
         cls,
         run_id: str,
         result: CheckRunHealthResult,
+        run_worker_debug_info: Optional[str] = None,
     ) -> "CloudRunWorkerStatus":
         check.inst_param(result, "result", CheckRunHealthResult)
         return CloudRunWorkerStatus(
             run_id,
             result.status,
-            result.msg,
+            (result.msg or "") + (f"\n{run_worker_debug_info}" if run_worker_debug_info else ""),
             transient=result.transient,
             run_worker_id=result.run_worker_id,
         )
@@ -260,9 +261,24 @@ def get_cloud_run_worker_statuses(
             for run in runs:
                 if is_isolated_run(run):
                     launcher = scoped_instance.run_launcher
+
+                    run_worker_health = launcher.check_run_worker_health(run)
+                    run_worker_debug_info = None
+
+                    if run_worker_health.status == WorkerStatus.FAILED:
+                        try:
+                            run_worker_debug_info = instance.run_launcher.get_run_worker_debug_info(
+                                run, include_container_logs=False
+                            )
+                        except Exception:
+                            logger.exception("Failure fetching debug info for failed run worker")
+
                     statuses_for_deployment.append(
                         CloudRunWorkerStatus.from_check_run_health_result(
-                            run.run_id, launcher.check_run_worker_health(run)
+                            run.run_id,
+                            run_worker_health,
+                            # Truncate to ensure that the debug info doesn't hit a size upload limit
+                            run_worker_debug_info[:1000] if run_worker_debug_info else None,
                         )
                     )
                 else:

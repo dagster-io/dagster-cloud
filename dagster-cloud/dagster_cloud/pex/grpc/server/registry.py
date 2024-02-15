@@ -196,8 +196,8 @@ class PexS3Registry:
                 in_use_local_paths.update(local_paths)
 
         unused_local_paths = all_local_paths - in_use_local_paths
-        if unused_local_paths:
-            unused_paths_present = [path for path in unused_local_paths if os.path.exists(path)]
+        unused_paths_present = [path for path in unused_local_paths if os.path.exists(path)]
+        if unused_paths_present:
             logging.info(
                 "Cleaning up %s unused local paths: %r",
                 len(unused_paths_present),

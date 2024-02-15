@@ -156,8 +156,10 @@ def put_cost_information(
     cost_information: List[Tuple[str, float, str]],
     start: float,
     end: float,
+    submit_gql: bool = True,
 ) -> None:
     chunk_size = _cost_information_chunk_size()
+
     try:
         import pyarrow as pyarrow  # pylint: disable=import-error
 
@@ -165,10 +167,20 @@ def put_cost_information(
             upload_cost_information(context, metric_name, cost_information)
         except Exception:
             context.log.warn("Failed to upload cost information to S3.", exc_info=True)
+            # if we're not submitting via GQL API as well, raise the exception more loudly
+            if not submit_gql:
+                raise
     except ImportError:
         context.log.warn(
             "Dagster insights dependencies not installed. In the future, you will need to install dagster-cloud[insights] to use this feature."
         )
+        # if we're not submitting via GQL API as well, raise the exception more loudly
+        if not submit_gql:
+            raise
+
+    # early exit if we're not submitting via GQL API as well
+    if not submit_gql:
+        return
 
     cost_info_input = [
         {

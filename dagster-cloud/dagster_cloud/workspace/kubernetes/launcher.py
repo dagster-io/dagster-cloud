@@ -440,7 +440,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             api_response = self._get_core_api_client().create_namespaced_service(
                 namespace,
                 construct_code_location_service(
-                    deployment_name, location_name, resource_name, container_context
+                    deployment_name,
+                    location_name,
+                    resource_name,
+                    container_context,
+                    self._instance,
                 ),
             )
             self._logger.info(
