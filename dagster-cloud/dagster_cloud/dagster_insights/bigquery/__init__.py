@@ -1,0 +1,1 @@
+from .insights_bigquery_resource import InsightsBigQueryResource as InsightsBigQueryResource

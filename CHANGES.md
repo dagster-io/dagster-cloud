@@ -1,5 +1,9 @@
 # Dagster Cloud Changelog
 
+> [!IMPORTANT]
+> This changelog is deprecated. New releases will be documented in the main [Dagster Changelog](https://github.com/dagster-io/dagster/blob/master/CHANGES.md).
+
+
 # 1.2.7
 
 ### New

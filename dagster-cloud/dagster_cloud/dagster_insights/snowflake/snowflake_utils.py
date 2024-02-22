@@ -1,16 +1,13 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 from uuid import uuid4 as uuid
 
-import dagster._check as check
 from dagster import (
     AssetExecutionContext,
     AssetKey,
     AssetObservation,
-    DagsterInvariantViolationError,
     JobDefinition,
     OpExecutionContext,
 )
-from dagster._core.errors import DagsterInvalidPropertyError
 
 # Metadata key prefix used to tag Snowflake queries with opaque IDs
 OPAQUE_ID_METADATA_KEY_PREFIX = "dagster_snowflake_opaque_id:"
@@ -21,20 +18,6 @@ OUTPUT_NON_ASSET_SIGIL = "__snowflake_query_metadata_"
 
 def build_opaque_id_metadata(opaque_id: str) -> dict:
     return {f"{OPAQUE_ID_METADATA_KEY_PREFIX}{opaque_id}": True}
-
-
-def get_current_context_and_asset_key() -> (
-    Tuple[Union[OpExecutionContext, AssetExecutionContext], Optional[AssetKey]]
-):
-    asset_key = None
-    try:
-        context = AssetExecutionContext.get()
-        if len(context.assets_def.keys_by_output_name.keys()) == 1:
-            asset_key = context.asset_key
-    except (DagsterInvalidPropertyError, DagsterInvariantViolationError):
-        context = OpExecutionContext.get()
-
-    return check.not_none(context), asset_key
 
 
 def meter_snowflake_query(

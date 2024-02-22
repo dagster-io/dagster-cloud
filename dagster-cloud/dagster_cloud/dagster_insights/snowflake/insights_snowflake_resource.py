@@ -23,7 +23,11 @@ from dagster._core.storage.event_log.sql_event_log import SqlDbConnection
 from dagster_snowflake import SnowflakeConnection, SnowflakeResource
 from snowflake.connector.cursor import SnowflakeCursor
 
-from .snowflake_utils import get_current_context_and_asset_key, meter_snowflake_query
+from dagster_cloud.dagster_insights.insights_utils import (
+    get_current_context_and_asset_key,
+)
+
+from .snowflake_utils import meter_snowflake_query
 
 
 class InsightsSnowflakeCursor(SnowflakeCursor):

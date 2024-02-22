@@ -582,11 +582,33 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             return deployments.pop().metadata.labels.get("agent_id")
 
     def _remove_server_handle(self, server_handle: K8sHandle) -> None:
+        # Since we track which servers to delete by listing the k8s deployments,
+        # delete the k8s service first to ensure that it can't be left dangling
+        try:
+            self._get_core_api_client().delete_namespaced_service(
+                server_handle.name, server_handle.namespace
+            )
+        except ApiException as e:
+            if e.reason == "Not found":
+                self._logger.exception(
+                    f"Tried to delete service {server_handle.name} but it was not found"
+                )
+            else:
+                raise
+
         with self._get_apps_api_instance() as api_instance:
-            api_instance.delete_namespaced_deployment(server_handle.name, server_handle.namespace)
-        self._get_core_api_client().delete_namespaced_service(
-            server_handle.name, server_handle.namespace
-        )
+            try:
+                api_instance.delete_namespaced_deployment(
+                    server_handle.name, server_handle.namespace
+                )
+            except ApiException as e:
+                if e.reason == "Not found":
+                    self._logger.exception(
+                        f"Tried to delete deployment {server_handle.name} but it was not found"
+                    )
+                else:
+                    raise
+
         self._logger.info(
             "Removed deployment and service {} in namespace {}".format(
                 server_handle.name, server_handle.namespace
