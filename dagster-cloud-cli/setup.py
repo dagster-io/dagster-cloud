@@ -26,7 +26,11 @@ setup(
         "PyYAML>=5.1",
         "github3.py",
     ],
-    extras_require={"tests": ["freezegun"]},
+    extras_require={
+        "tests": [
+            "freezegun",
+        ],
+    },
     author="Elementl",
     license="Apache-2.0",
     classifiers=[

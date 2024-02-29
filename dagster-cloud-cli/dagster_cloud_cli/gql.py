@@ -350,6 +350,9 @@ ALERT_POLICIES_QUERY = """
                     slackWorkspaceName
                     slackChannelName
                 }
+                ... on MicrosoftTeamsAlertPolicyNotification {
+                    webhookUrl
+                }
             }
             enabled
         }
@@ -376,6 +379,9 @@ RECONCILE_ALERT_POLICIES_FROM_DOCUMENT_MUTATION = """
                 }
             }
             ... on UnauthorizedError {
+                message
+            }
+            ... on InvalidAlertPolicyError {
                 message
             }
             ... on PythonError {

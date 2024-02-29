@@ -281,13 +281,28 @@ class Client:
     def delete_service(
         self,
         service,
+        logger=None,
     ):
+        logger = logger or logging.getLogger("dagster_cloud.EcsClient")
+
         # Reduce running tasks to 0
-        self.ecs.update_service(
-            cluster=self.cluster_name,
-            service=service.name,
-            desiredCount=0,
-        )
+        try:
+            self.ecs.update_service(
+                cluster=self.cluster_name,
+                service=service.name,
+                desiredCount=0,
+            )
+        except botocore.exceptions.ClientError as error:
+            if error.response["Error"]["Code"] in [
+                "ServiceNotFoundException",
+                "ServiceNotActiveException",
+            ]:
+                logger.warning(
+                    f"Service {self.cluster_name}/{service.name} is not found or inactive: {error}"
+                )
+                return
+            raise
+
         # Delete the ECS service
         self.ecs.delete_service(
             cluster=self.cluster_name,
@@ -335,8 +350,15 @@ class Client:
         if tags:
             if not self._use_legacy_tag_filtering:
                 try:
-                    paginator = self.tags_client.get_paginator("get_resources")
-                    for page in paginator.paginate(
+                    # obtain services present in the cluster
+                    ecs_services_paginator = self.ecs.get_paginator("list_services")
+                    actual_services = []
+                    for page in ecs_services_paginator.paginate(cluster=self.cluster_name):
+                        actual_services.extend(page["serviceArns"])
+
+                    # obtain services with the specified tags
+                    tag_paginator = self.tags_client.get_paginator("get_resources")
+                    for page in tag_paginator.paginate(
                         TagFilters=[
                             {
                                 "Key": key,
@@ -347,9 +369,12 @@ class Client:
                         ResourceTypeFilters=["ecs:service"],
                     ):
                         for resource in page["ResourceTagMappingList"]:
-                            arn = resource["ResourceARN"]
-                            if self.cluster_name in arn:
-                                services.append(Service(client=self, arn=arn))
+                            resource_arn = resource["ResourceARN"]
+                            # note: the Resource Group Tagging API may return resources corresponding to services
+                            # that are no longer present in the cluster, so we filter out those that are not present
+                            if resource_arn in actual_services:
+                                services.append(Service(client=self, arn=resource_arn))
+
                 except botocore.exceptions.ClientError as error:
                     if error.response["Error"]["Code"] == "AccessDeniedException":
                         self._use_legacy_tag_filtering = True
@@ -374,10 +399,10 @@ class Client:
                 return filtered_services
 
         else:
-            paginator = self.ecs.get_paginator("list_services")
-            for page in paginator.paginate(cluster=self.cluster_name):
-                for arn in page.get("serviceArns"):
-                    service = Service(client=self, arn=arn)
+            service_paginator = self.ecs.get_paginator("list_services")
+            for page in service_paginator.paginate(cluster=self.cluster_name):
+                for service_arn in page.get("serviceArns"):
+                    service = Service(client=self, arn=service_arn)
                     services.append(service)
 
         return services

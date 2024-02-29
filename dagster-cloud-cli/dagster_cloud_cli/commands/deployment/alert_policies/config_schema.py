@@ -163,6 +163,19 @@ ALERT_POLICY_SCHEMA = Shape(
                             }
                         )
                     ),
+                    "email_owners": Field(config=Shape(fields={})),
+                    "microsoft_teams": Field(
+                        config=Shape(
+                            fields={
+                                "webhook_url": Field(
+                                    config=str,
+                                    is_required=True,
+                                    description="The incoming webhook URL for your Microsoft Team connector. "
+                                    "Must match the form https://xxxxx.webhook.office.com/xxxxx",
+                                )
+                            }
+                        )
+                    ),
                 }
             ),
             is_required=True,
