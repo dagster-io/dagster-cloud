@@ -1,4 +1,5 @@
 """Decodes PexMetadata to download S3 files locally and setup a runnable PEX environment."""
+
 import hashlib
 import logging
 import os
@@ -6,6 +7,7 @@ import shutil
 import subprocess
 import threading
 from dataclasses import dataclass
+from os.path import expanduser
 from pathlib import Path
 from typing import Dict, List, NamedTuple, Optional, Set
 from uuid import uuid4
@@ -171,6 +173,12 @@ class PexS3Registry:
             "PATH": bin_paths + ":" + os.environ["PATH"],
             "PYTHONPATH": pythonpaths,
         }
+
+        # remove the PEX_ROOT transient cache to keep disk usage in check
+        pex_root = os.getenv("PEX_ROOT", expanduser("~/.pex"))
+        if pex_root and os.path.exists(pex_root):
+            shutil.rmtree(pex_root)
+
         return PexExecutable(
             entrypoint,
             [source_pex_filepath] + deps_pex_filepaths,

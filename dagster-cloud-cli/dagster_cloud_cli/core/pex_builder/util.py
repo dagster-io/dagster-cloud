@@ -56,7 +56,8 @@ def get_pex_flags(python_version: version.Version, build_sdists: bool = True) ->
         # the best dependency resolution logic. added in
         # https://github.com/pantsbuild/pex/releases/tag/v2.1.132
         "--pip-version=latest",
-        "-v",  # verbose logging, level 2
+        "-v",  # verbose logging, level 3
+        "-v",
         "-v",
         *resolve_local,
     ]

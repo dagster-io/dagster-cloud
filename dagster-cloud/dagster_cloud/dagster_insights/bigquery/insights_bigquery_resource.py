@@ -1,9 +1,10 @@
 from contextlib import contextmanager, nullcontext
 from typing import (
     Iterator,
+    List,
 )
 
-from dagster import AssetKey, AssetObservation, JobDefinition
+from dagster import AssetObservation
 from dagster._annotations import experimental
 from dagster_gcp import BigQueryResource
 from dagster_gcp.bigquery.utils import setup_gcp_creds
@@ -13,6 +14,8 @@ from dagster_cloud.dagster_insights.insights_utils import (
     get_current_context_and_asset_key,
 )
 
+from .bigquery_utils import build_bigquery_cost_metadata, marker_asset_key_for_job
+
 OUTPUT_NON_ASSET_SIGIL = "__bigquery_query_metadata_"
 
 
@@ -20,19 +23,27 @@ class WrappedBigQueryClient(bigquery.Client):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._query_bytes = []
+        self._query_slots_ms = []
+        self._job_ids = []
 
     def query(self, *args, **kwargs) -> bigquery.QueryJob:
         bq_job = super().query(*args, **kwargs)
-        self._query_bytes.append(bq_job.total_bytes_billed)
+        self._query_bytes.append(bq_job.total_bytes_billed or 0)
+        self._query_slots_ms.append(bq_job.slot_millis or 0)
+        self._job_ids.append(bq_job.job_id)
         return bq_job
 
     @property
-    def has_bytes_billed(self) -> bool:
-        return len(self._query_bytes) > 0
+    def job_ids(self) -> List[str]:
+        return self._job_ids
 
     @property
     def total_bytes_billed(self) -> int:
-        return sum(self._query_bytes)
+        return sum([x for x in self._query_bytes])
+
+    @property
+    def total_slots_ms(self) -> int:
+        return sum([x for x in self._query_slots_ms])
 
 
 @experimental
@@ -72,19 +83,15 @@ class InsightsBigQueryResource(BigQueryResource):
 
             yield client
 
-            if client.has_bytes_billed:
-                if not asset_key:
-                    asset_key = _bigquery_asset_key_for_job(context.job_def)
+            if not asset_key:
+                asset_key = marker_asset_key_for_job(context.job_def)
 
+            if client.total_bytes_billed or client.total_slots_ms:
                 context.log_event(
                     AssetObservation(
                         asset_key=asset_key,
-                        metadata={
-                            "bytes_billed": client.total_bytes_billed,
-                        },
+                        metadata=build_bigquery_cost_metadata(
+                            client.job_ids, client.total_bytes_billed, client.total_slots_ms
+                        ),
                     )
                 )
-
-
-def _bigquery_asset_key_for_job(job: JobDefinition) -> AssetKey:
-    return AssetKey(path=[f"{OUTPUT_NON_ASSET_SIGIL}{job.name}"])

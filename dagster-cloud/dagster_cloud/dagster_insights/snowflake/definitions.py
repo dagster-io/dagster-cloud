@@ -23,10 +23,10 @@ from dagster import (
     schedule,
 )
 
+from ..metrics_utils import put_cost_information
 from .dagster_snowflake_insights import (
     get_cost_data_for_hour,
 )
-from .metrics_utils import put_cost_information
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection

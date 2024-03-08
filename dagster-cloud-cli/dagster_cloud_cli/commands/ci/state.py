@@ -67,16 +67,13 @@ class LocationState(BaseModel, extra=Extra.forbid):
 
 class Store(metaclass=ABCMeta):
     @abstractmethod
-    def load(self, location_name: str) -> LocationState:
-        ...
+    def load(self, location_name: str) -> LocationState: ...
 
     @abstractmethod
-    def save(self, location_state: LocationState):
-        ...
+    def save(self, location_state: LocationState): ...
 
     @abstractmethod
-    def list_locations(self) -> List[LocationState]:
-        ...
+    def list_locations(self) -> List[LocationState]: ...
 
     def list_selected_locations(self) -> List[LocationState]:
         return [location for location in self.list_locations() if location.selected]

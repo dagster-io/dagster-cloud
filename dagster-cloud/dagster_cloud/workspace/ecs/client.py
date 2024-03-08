@@ -225,6 +225,7 @@ class Client:
         cpu=None,
         memory=None,
         ephemeral_storage=None,
+        replica_count=None,
         repository_credentials=None,
         allow_ecs_exec=False,
         runtime_platform=None,
@@ -274,6 +275,7 @@ class Client:
             service_name=service_name,
             service_registry_arn=service_registry_arn,
             task_definition_arn=task_definition_arn,
+            replica_count=replica_count,
             tags=tags,
             allow_ecs_exec=allow_ecs_exec,
         )
@@ -476,6 +478,7 @@ class Client:
         service_name,
         task_definition_arn,
         service_registry_arn,
+        replica_count=None,
         tags=None,
         allow_ecs_exec=False,
     ):
@@ -484,7 +487,7 @@ class Client:
             serviceName=service_name,
             taskDefinition=task_definition_arn,
             launchType=self.launch_type,
-            desiredCount=1,
+            desiredCount=replica_count or 1,
             enableExecuteCommand=allow_ecs_exec,
             propagateTags="SERVICE",
         )
@@ -503,7 +506,7 @@ class Client:
 
         return Service(client=self, arn=arn)
 
-    def wait_for_new_service(self, service, container_name, logger=None) -> str:
+    def wait_for_new_service(self, service, container_name, logger=None) -> dict:
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         service_name = service.name
         start_time = time.time()
@@ -513,9 +516,10 @@ class Client:
                 services=[service_name],
             )
             if response.get("services"):
-                return self.check_service_has_running_task(
+                running_tasks = self.check_service_has_running_tasks(
                     service_name, container_name, logger=logger
                 )
+                return running_tasks[0]
 
             failures = response.get("failures")
 
@@ -563,73 +567,67 @@ class Client:
         if task.get("lastStatus") == "STOPPED":
             self._raise_failed_task(task, container_name, logger)
 
-    def check_service_has_running_task(self, service_name, container_name, logger=None) -> str:
+    def check_service_has_running_tasks(
+        self, service_name, container_name, logger=None
+    ) -> List[dict]:
         # return the ARN of the task if it starts
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         start_time = time.time()
 
-        task_to_track = None
+        tasks_to_track = None
 
         while start_time + self.timeout > time.time():
-            # Check for a running task to track
-            if not task_to_track:
-                running = self.ecs.list_tasks(
+            # Check for running tasks to track
+            if not tasks_to_track:
+                services = self.ecs.describe_services(
                     cluster=self.cluster_name,
-                    serviceName=service_name,
-                    desiredStatus="RUNNING",
-                ).get("taskArns")
+                    services=[service_name],
+                )
+                if not services:
+                    raise Exception(
+                        f"Service description not found for {self.cluster_name}/{service_name}"
+                    )
 
-                if running:
-                    task_to_track = running[0]
-                elif time.time() > start_time + STOPPED_TASK_GRACE_PERIOD:
-                    # If there are still no running tasks after a certain grace period, check for stopped tasks
-                    stopped = self.ecs.list_tasks(
+                service = services.get("services")[0]
+                desired_count = service.get("desiredCount")
+                running_count = service.get("runningCount")
+
+                # If the service has reached the desired count, we can start tracking the tasks
+                if desired_count == running_count:
+                    running_tasks = self.ecs.list_tasks(
                         cluster=self.cluster_name,
                         serviceName=service_name,
-                        desiredStatus="STOPPED",
+                        desiredStatus="RUNNING",
                     ).get("taskArns")
 
-                    if stopped:
-                        stopped_tasks = self.ecs.describe_tasks(
-                            cluster=self.cluster_name, tasks=stopped
-                        ).get("tasks")
-
-                        stopped_tasks = sorted(
-                            stopped_tasks,
-                            key=lambda task: task["createdAt"].timestamp(),
-                            reverse=True,
+                    if not running_tasks:
+                        raise Exception(
+                            f"Unexpected error obtaining tasks for {service_name} in {self.cluster_name}"
                         )
 
+                    tasks_to_track = running_tasks
+                elif time.time() > start_time + STOPPED_TASK_GRACE_PERIOD:
+                    # If there are still no running_tasks tasks after a certain grace period, check for stopped tasks
+                    stopped_tasks = self._check_for_stopped_tasks(service_name)
+                    if stopped_tasks:
                         self._raise_failed_task(stopped_tasks[0], container_name, logger)
 
-            if task_to_track:
-                task = self.ecs.describe_tasks(
-                    cluster=self.cluster_name, tasks=[task_to_track]
-                ).get("tasks")[0]
+            if tasks_to_track:
+                tasks = self.ecs.describe_tasks(
+                    cluster=self.cluster_name, tasks=tasks_to_track
+                ).get("tasks")
 
-                if task.get("lastStatus") == "RUNNING":
-                    task_definition = self.ecs.describe_task_definition(
-                        taskDefinition=task.get("taskDefinitionArn"),
-                    ).get("taskDefinition")
+                # Wait for all tasks essential containers to be running
+                all_tasks_running = len(tasks) > 0
+                for task in tasks:
+                    if task.get("lastStatus") == "RUNNING":
+                        if not self._check_all_essential_containers_are_running(task):
+                            all_tasks_running = False
+                    elif task.get("lastStatus") == "STOPPED":
+                        self._raise_failed_task(task, container_name, logger)
 
-                    essential_containers = {
-                        container["name"]
-                        for container in task_definition["containerDefinitions"]
-                        if container["essential"]
-                    }
-
-                    # Just because the task is RUNNING doesn't mean everything has started up correctly -
-                    # sometimes it briefly thinks it is RUNNING even though individual containers have STOPPED.
-                    # Wait for all essential containers to be running too before declaring victory.
-                    if all(
-                        container["name"] not in essential_containers
-                        or container["lastStatus"] == "RUNNING"
-                        for container in task["containers"]
-                    ):
-                        return task_to_track
-
-                elif task.get("lastStatus") == "STOPPED":
-                    self._raise_failed_task(task, container_name, logger)
+                if all_tasks_running:
+                    return tasks_to_track
 
             time.sleep(20)
 
@@ -651,6 +649,44 @@ class Client:
         raise Exception(
             f"Timed out waiting for a running task for service: {service_name}."
             f" {service_events_str}"
+        )
+
+    def _check_for_stopped_tasks(self, service_name):
+        stopped = self.ecs.list_tasks(
+            cluster=self.cluster_name,
+            serviceName=service_name,
+            desiredStatus="STOPPED",
+        ).get("taskArns")
+        if stopped:
+            stopped_tasks = self.ecs.describe_tasks(cluster=self.cluster_name, tasks=stopped).get(
+                "tasks"
+            )
+
+            stopped_tasks = sorted(
+                stopped_tasks,
+                key=lambda task: task["createdAt"].timestamp(),
+                reverse=True,
+            )
+            return stopped_tasks
+        return []
+
+    def _check_all_essential_containers_are_running(self, task) -> bool:
+        task_definition = self.ecs.describe_task_definition(
+            taskDefinition=task.get("taskDefinitionArn"),
+        ).get("taskDefinition")
+
+        essential_containers = {
+            container["name"]
+            for container in task_definition["containerDefinitions"]
+            if container["essential"]
+        }
+
+        # Just because the task is RUNNING doesn't mean everything has started up correctly -
+        # sometimes it briefly thinks it is RUNNING even though individual containers have STOPPED.
+        # Wait for all essential containers to be running_tasks too before declaring victory.
+        return all(
+            container["name"] not in essential_containers or container["lastStatus"] == "RUNNING"
+            for container in task["containers"]
         )
 
     def _get_service_discovery_id(self, hostname):

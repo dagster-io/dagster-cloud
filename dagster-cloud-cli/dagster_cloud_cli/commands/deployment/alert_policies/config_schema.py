@@ -123,6 +123,10 @@ ALERT_POLICY_SCHEMA = Shape(
                                 "Alert when a planned asset check fails with severity error."
                             ),
                         ),
+                        EnumValue(
+                            "ASSET_OVERDUE",
+                            description="Alert when an asset is overdue, based on its freshness policy.",
+                        ),
                     ],
                 )
             ),

@@ -294,6 +294,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     ) -> Optional[int]:
         return container_context.server_resources.get("ephemeral_storage")
 
+    def _get_service_code_server_replicas_count_override(
+        self, container_context: EcsContainerContext
+    ) -> Optional[int]:
+        return container_context.server_resources.get("replica_count")
+
     def _get_service_repository_credentials_override(
         self, container_context: EcsContainerContext
     ) -> Optional[str]:
@@ -370,6 +375,19 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             run_ecs_tags=self.run_ecs_tags,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
+        # disallow multiple replicas for code locations acting as pex servers
+        if metadata.pex_metadata:
+            replica_count = (
+                metadata.container_context.get("ecs", {})
+                .get("server_resources", {})
+                .get("replica_count", None)
+            )
+            if replica_count and replica_count > 1:
+                reason = "multiple replica_count are not supported for pex servers"
+                raise Exception(
+                    f"Cannot use multiple replicas for {deployment_name}:{location_name}: {reason}."
+                )
+
         environment = merge_dicts(
             container_context.get_environment_dict(),
             additional_env,
@@ -417,6 +435,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             cpu=self._get_service_cpu_override(container_context),
             memory=self._get_service_memory_override(container_context),
             ephemeral_storage=self._get_service_ephemeral_storage_override(container_context),
+            replica_count=self._get_service_code_server_replicas_count_override(container_context),
             repository_credentials=self._get_service_repository_credentials_override(
                 container_context
             ),
@@ -444,7 +463,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             f"Checking whether service {multipex_server.server_handle.name} is ready for existing"
             " multipex server..."
         )
-        self.client.check_service_has_running_task(
+        self.client.check_service_has_running_tasks(
             multipex_server.server_handle.name, container_name=CONTAINER_NAME, logger=self._logger
         )
         super()._check_running_multipex_server(multipex_server)

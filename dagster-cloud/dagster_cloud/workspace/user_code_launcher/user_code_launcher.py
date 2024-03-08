@@ -1018,9 +1018,9 @@ class DagsterCloudUserCodeLauncher(
         for deployment_name, location_name in self._actual_entries.keys():
             if self.code_server_metrics_enabled:
                 metadata = self.get_code_server_resource_limits(deployment_name, location_name)
-                self._per_location_metrics[(deployment_name, location_name)][
-                    "resource_limits"
-                ] = metadata
+                self._per_location_metrics[(deployment_name, location_name)]["resource_limits"] = (
+                    metadata
+                )
                 self._logger.info(
                     f"Updated resource limits for location {location_name} in deployment {deployment_name}: {metadata}"
                 )
@@ -1268,9 +1268,9 @@ class DagsterCloudUserCodeLauncher(
 
             # First check what multipex servers already exist for this location (any that are
             # no longer used will be cleaned up at the end)
-            existing_multipex_server_handles[
-                to_update_key
-            ] = self._get_multipex_server_handles_for_location(deployment_name, location_name)
+            existing_multipex_server_handles[to_update_key] = (
+                self._get_multipex_server_handles_for_location(deployment_name, location_name)
+            )
 
             if code_deployment_metadata.pex_metadata:
                 try:
@@ -1373,10 +1373,10 @@ class DagsterCloudUserCodeLauncher(
                 code_deployment_metadata = desired_entry.code_deployment_metadata
 
                 self._logger.info(f"Updating server for {deployment_name}:{location_name}")
-                existing_standalone_dagster_server_handles[
-                    to_update_key
-                ] = self._get_standalone_dagster_server_handles_for_location(
-                    deployment_name, location_name
+                existing_standalone_dagster_server_handles[to_update_key] = (
+                    self._get_standalone_dagster_server_handles_for_location(
+                        deployment_name, location_name
+                    )
                 )
 
                 existing_pex_server_handles[to_update_key] = self._get_existing_pex_servers(

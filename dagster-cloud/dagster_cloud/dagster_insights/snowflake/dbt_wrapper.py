@@ -20,7 +20,8 @@ from dagster import (
     Output,
 )
 
-from .snowflake.snowflake_utils import (
+from ..insights_utils import extract_asset_info_from_event
+from .snowflake_utils import (
     OPAQUE_ID_SQL_SIGIL,
     build_opaque_id_metadata,
     marker_asset_key_for_job,
@@ -28,17 +29,6 @@ from .snowflake.snowflake_utils import (
 
 if TYPE_CHECKING:
     from dagster_dbt import DbtCliInvocation
-
-
-def _opt_asset_key_for_output(
-    context: Union[OpExecutionContext, AssetExecutionContext], output_name: str
-) -> Optional[AssetKey]:
-    asset_info = context.job_def.asset_layer.asset_info_for_output(
-        node_handle=context.op_handle, output_name=output_name
-    )
-    if asset_info is None:
-        return None
-    return asset_info.key
 
 
 def dbt_with_snowflake_insights(
@@ -113,50 +103,15 @@ def dbt_with_snowflake_insights(
 
     asset_and_partition_key_to_unique_id: List[Tuple[AssetKey, Optional[str], Any]] = []
     for dagster_event in dagster_events:
-        # When calling dbt from an asset context, the dbt CLI invocation will emit Outputs,
-        # in the op context it'll be AssetObservations - we can extract the same data from both
-        if isinstance(dagster_event, (Output, AssetMaterialization)):
+        if isinstance(dagster_event, (AssetMaterialization, AssetObservation, Output)):
             unique_id = dagster_event.metadata["unique_id"].value
-
-            if isinstance(dagster_event, Output):
-                asset_key = _opt_asset_key_for_output(context, dagster_event.output_name)
-                partition_key = None
-                if asset_key and context._step_execution_context.has_asset_partitions_for_output(  # noqa: SLF001
-                    dagster_event.output_name
-                ):
-                    # We associate cost with the first partition key in the case that an output
-                    # maps to multiple partitions. This is a temporary solution, but partition key
-                    # is not used in Insights at the moment.
-                    # TODO: Find a long-term solution for this
-                    partition_key = next(
-                        iter(context.asset_partition_keys_for_output(dagster_event.output_name))
-                    )
-            else:
-                asset_key = dagster_event.asset_key
-                partition_key = dagster_event.partition
-
-            if asset_key:
-                asset_and_partition_key_to_unique_id.append((asset_key, partition_key, unique_id))
-            else:
-                # Outputs should only be emitted in the context of an SDA, so this should be a dead
-                # code path after https://github.com/dagster-io/dagster/pull/17405/files, but we
-                # retain it as a fallback in case users have any old-style custom dbt event conversion logic
-                asset_and_partition_key_to_unique_id.append(
-                    (marker_asset_key_for_job(context.job_def), None, unique_id)
-                )
-
-        elif isinstance(dagster_event, AssetObservation):
-            unique_id = dagster_event.metadata["unique_id"].value
-            if record_observation_usage:
-                asset_key = dagster_event.asset_key
-                partition_key = dagster_event.partition
-            else:
-                # If we don't want to record usage associated with an asset, we still want to
-                # record the usage associated with the job, so we use a special sigil for the
-                # emitted observation to make sure it doesn't get associated with a real asset key
+            asset_key, partition = extract_asset_info_from_event(
+                context, dagster_event, record_observation_usage
+            )
+            if not asset_key:
                 asset_key = marker_asset_key_for_job(context.job_def)
-                partition_key = None
-            asset_and_partition_key_to_unique_id.append((asset_key, partition_key, unique_id))
+
+            asset_and_partition_key_to_unique_id.append((asset_key, partition, unique_id))
 
         yield dagster_event
 

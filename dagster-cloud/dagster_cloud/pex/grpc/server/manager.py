@@ -199,9 +199,9 @@ class MultiPexManager(AbstractContextManager):
         instance_ref: Optional[InstanceRef],
     ):
         # we keep track of pex metadata in use to help cleanup unused resources over time
-        self._pex_metadata_for_handle[
-            server_handle.get_id()
-        ] = code_deployment_metadata.pex_metadata
+        self._pex_metadata_for_handle[server_handle.get_id()] = (
+            code_deployment_metadata.pex_metadata
+        )
 
         # install pex files and launch them - do it asynchronously to not block this call
         def _create_pex_server() -> None:
