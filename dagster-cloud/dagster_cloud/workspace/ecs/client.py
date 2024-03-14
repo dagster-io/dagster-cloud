@@ -19,6 +19,12 @@ DEFAULT_ECS_GRACE_PERIOD = 30
 
 STOPPED_TASK_GRACE_PERIOD = 30
 
+
+ECS_EXEC_LINUX_PARAMETERS = {
+    "capabilities": {"add": ["SYS_PTRACE"]},
+    "initProcessEnabled": True,
+}
+
 config = Config(retries={"max_attempts": 50, "mode": "standard"})
 
 
@@ -141,6 +147,7 @@ class Client:
         runtime_platform=None,
         mount_points=None,
         volumes=None,
+        linux_parameters=None,
     ):
         container_name = container_name or family
 
@@ -179,6 +186,7 @@ class Client:
             runtime_platform=runtime_platform,
             mount_points=mount_points,
             volumes=volumes,
+            linux_parameters=linux_parameters,
         )
 
         try:
@@ -257,6 +265,7 @@ class Client:
             runtime_platform=runtime_platform,
             mount_points=mount_points,
             volumes=volumes,
+            linux_parameters=ECS_EXEC_LINUX_PARAMETERS if allow_ecs_exec else None,
         )
 
         service_registry_arn = None

@@ -35,13 +35,13 @@ from dagster import BoolSource, Field, IntSource
 from dagster._api.list_repositories import sync_list_repositories_grpc
 from dagster._core.definitions.selector import JobSelector
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._core.host_representation import ExternalRepositoryOrigin
-from dagster._core.host_representation.origin import (
+from dagster._core.instance import MayHaveInstanceWeakref
+from dagster._core.launcher import RunLauncher
+from dagster._core.remote_representation import ExternalRepositoryOrigin
+from dagster._core.remote_representation.origin import (
     CodeLocationOrigin,
     RegisteredCodeLocationOrigin,
 )
-from dagster._core.instance import MayHaveInstanceWeakref
-from dagster._core.launcher import RunLauncher
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import GetCurrentImageResult
 from dagster._serdes import deserialize_value, serialize_value, whitelist_for_serdes

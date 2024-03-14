@@ -29,7 +29,12 @@ from dagster_cloud.pex.grpc.types import (
     GetCrashedPexServersArgs,
 )
 from dagster_cloud.workspace.config_schema import SHARED_ECS_CONFIG
-from dagster_cloud.workspace.ecs.client import DEFAULT_ECS_GRACE_PERIOD, DEFAULT_ECS_TIMEOUT, Client
+from dagster_cloud.workspace.ecs.client import (
+    DEFAULT_ECS_GRACE_PERIOD,
+    DEFAULT_ECS_TIMEOUT,
+    ECS_EXEC_LINUX_PARAMETERS,
+    Client,
+)
 from dagster_cloud.workspace.ecs.service import Service
 from dagster_cloud.workspace.ecs.utils import get_ecs_human_readable_label, unique_ecs_resource_name
 from dagster_cloud.workspace.user_code_launcher import (
@@ -642,6 +647,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 **({"runtime_platform": self.runtime_platform} if self.runtime_platform else {}),
                 **({"mount_points": self.mount_points} if self.mount_points else {}),
                 **({"volumes": self.volumes} if self.volumes else {}),
+                **(
+                    {"linux_parameters": ECS_EXEC_LINUX_PARAMETERS}
+                    if self._get_enable_ecs_exec()
+                    else {}
+                ),
             },
             secrets=self.secrets,
             secrets_tag=self.secrets_tag,
@@ -651,6 +661,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 "cluster": self.cluster,
                 "networkConfiguration": self.client.network_configuration,
                 "launchType": self.launch_type,
+                **({"enableExecuteCommand": True} if self._get_enable_ecs_exec() else {}),
             },
             run_ecs_tags=self.run_ecs_tags,
             container_name=CONTAINER_NAME,

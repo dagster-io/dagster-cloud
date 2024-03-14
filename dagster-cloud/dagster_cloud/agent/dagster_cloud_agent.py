@@ -12,11 +12,11 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
 import dagster._check as check
 import pendulum
 from dagster import DagsterInstance
-from dagster._core.host_representation import (
+from dagster._core.launcher.base import LaunchRunContext
+from dagster._core.remote_representation import (
     CodeLocationOrigin,
 )
-from dagster._core.host_representation.origin import RegisteredCodeLocationOrigin
-from dagster._core.launcher.base import LaunchRunContext
+from dagster._core.remote_representation.origin import RegisteredCodeLocationOrigin
 from dagster._core.utils import FuturesAwareThreadPoolExecutor
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import CancelExecutionRequest

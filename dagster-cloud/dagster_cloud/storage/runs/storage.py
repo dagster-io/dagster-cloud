@@ -22,7 +22,7 @@ from dagster._core.errors import (
 )
 from dagster._core.events import DagsterEvent
 from dagster._core.execution.backfill import BulkActionStatus, PartitionBackfill
-from dagster._core.host_representation.origin import ExternalJobOrigin
+from dagster._core.remote_representation.origin import ExternalJobOrigin
 from dagster._core.snap import (
     ExecutionPlanSnapshot,
     JobSnapshot,
@@ -305,18 +305,14 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_run_tags(
         self,
-        tag_keys: Optional[Sequence[str]] = None,
+        tag_keys: Sequence[str],
         value_prefix: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> Sequence[Tuple[str, Set[str]]]:
         res = self._execute_query(
             GET_RUN_TAGS_QUERY,
             variables={
-                "jsonTagKeys": (
-                    json.dumps(check.list_param(tag_keys, "tag_keys", of_type=str))
-                    if tag_keys
-                    else None
-                ),
+                "jsonTagKeys": (json.dumps(check.list_param(tag_keys, "tag_keys", of_type=str))),
                 "valuePrefix": check.opt_str_param(value_prefix, "value_prefix"),
                 "limit": check.opt_int_param(limit, "limit"),
             },

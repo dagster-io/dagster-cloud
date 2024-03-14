@@ -132,7 +132,7 @@ GET_RUN_RECORDS_QUERY = (
 )
 
 GET_RUN_TAGS_QUERY = """
-    query getRunTagsQuery($jsonTagKeys: JSONString, $valuePrefix: String, $limit: Int) {
+    query getRunTagsQuery($jsonTagKeys: JSONString!, $valuePrefix: String, $limit: Int) {
         runs {
             getRunTags(jsonTagKeys: $jsonTagKeys, valuePrefix: $valuePrefix, limit: $limit) {
                 key
