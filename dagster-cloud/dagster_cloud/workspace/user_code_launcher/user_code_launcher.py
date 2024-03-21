@@ -31,6 +31,7 @@ from typing import (
 )
 
 import dagster._check as check
+import pendulum
 from dagster import BoolSource, Field, IntSource
 from dagster._api.list_repositories import sync_list_repositories_grpc
 from dagster._core.definitions.selector import JobSelector
@@ -93,6 +94,8 @@ PENDING_DELETE_SERVER_CHECK_INTERVAL = 30
 
 # How often to sync actual_entries with pex server liveness
 MULTIPEX_ACTUAL_ENTRIES_REFRESH_INTERVAL = 30
+
+CLEANUP_SERVER_GRACE_PERIOD_SECONDS = 3600
 
 ServerHandle = TypeVar("ServerHandle")
 
@@ -814,7 +817,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-        metadata: CodeDeploymentMetadata,
+        desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
         """Create a new server for the given location using the given metadata as configuration
         and return a ServerHandle indicating where it can be found. Any waiting for the server
@@ -925,6 +928,10 @@ class DagsterCloudUserCodeLauncher(
     def get_agent_id_for_server(self, handle: ServerHandle) -> Optional[str]:
         """Returns the agent_id that created a particular GRPC server."""
 
+    @abstractmethod
+    def get_server_create_timestamp(self, handle: ServerHandle) -> Optional[float]:
+        """Returns the update_timestamp value from the given code server."""
+
     def _can_cleanup_server(self, handle: ServerHandle, active_agent_ids: Set[str]) -> bool:
         """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active)."""
         agent_id_for_server = self.get_agent_id_for_server(handle)
@@ -933,11 +940,31 @@ class DagsterCloudUserCodeLauncher(
             f" {self._instance.instance_uuid}."
         )
         self._logger.info(f"All active agent ids: {active_agent_ids}")
-        return (
-            not agent_id_for_server
-            or self._instance.instance_uuid == agent_id_for_server
-            or agent_id_for_server not in cast(Set[str], active_agent_ids)
-        )
+
+        # If this server was created by the current agent, it can always be cleaned up
+        # (or if its a legacy server that never set an agent ID)
+        if not agent_id_for_server or self._instance.instance_uuid == agent_id_for_server:
+            return True
+
+        try:
+            update_timestamp_for_server = self.get_server_create_timestamp(handle)
+        except:
+            self._logger.exception(f"Failure fetching service creation timestamp for {handle}")
+            return False
+
+        # Clean up servers that were created more than CLEANUP_SERVER_GRACE_PERIOD_SECONDS
+        # seconds ago (to avoid race conditions) and were created by some agent that is now
+        # inactive, to ensure that servers are eventually cleaned up by the next agent
+        # when an agent crashes
+        if (
+            update_timestamp_for_server
+            and update_timestamp_for_server
+            >= pendulum.now("UTC").timestamp() - CLEANUP_SERVER_GRACE_PERIOD_SECONDS
+        ):
+            self._logger.info("Not cleaning up server since it was recently created")
+            return False
+
+        return agent_id_for_server not in cast(Set[str], active_agent_ids)
 
     def _graceful_cleanup_servers(self):  # ServerHandles
         active_agent_ids = self.get_active_agent_ids()
@@ -1301,10 +1328,10 @@ class DagsterCloudUserCodeLauncher(
                         self._logger.info(
                             f"Creating new multipex server for {multipex_server_repr}"
                         )
-                        # confirm it's a valid image since _create_multipex_server will launch a container
+                        # confirm it's a valid image since _start_new_server_spinup will launch a container
                         self._check_for_image(desired_entry.code_deployment_metadata)
-                        multipex_server = self._create_multipex_server(
-                            deployment_name, location_name, desired_entry.code_deployment_metadata
+                        multipex_server = self._start_new_server_spinup(
+                            deployment_name, location_name, desired_entry
                         )
                         self._multipex_servers[to_update_key] = multipex_server
                         assert self._get_multipex_server(
@@ -1641,14 +1668,6 @@ class DagsterCloudUserCodeLauncher(
 
         return None
 
-    def _create_multipex_server(self, deployment_name, location_name, code_deployment_metadata):
-        multipex_server = self._start_new_server_spinup(
-            deployment_name,
-            location_name,
-            code_deployment_metadata,
-        )
-        return multipex_server
-
     def _create_pex_server(
         self,
         deployment_name: str,
@@ -1699,9 +1718,7 @@ class DagsterCloudUserCodeLauncher(
                 desired_entry.code_deployment_metadata,
             )
         else:
-            return self._start_new_server_spinup(
-                deployment_name, location_name, desired_entry.code_deployment_metadata
-            )
+            return self._start_new_server_spinup(deployment_name, location_name, desired_entry)
 
     def get_grpc_endpoint(
         self,

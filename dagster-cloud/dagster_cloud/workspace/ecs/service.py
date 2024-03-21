@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from dagster._utils.cached_method import cached_method
 
@@ -76,19 +77,15 @@ class Service:
 
     @property
     @cached_method
-    def created_at(self):
-        task_arns = self.client.ecs.list_tasks(
-            cluster=self.client.cluster_name,
-            serviceName=self.name,
-        ).get("taskArns")
+    def create_timestamp(self) -> Optional[float]:
+        response = self.client.ecs.describe_services(
+            cluster=self.client.cluster_name, services=[self.name]
+        )
 
-        # Assume there's only one task per service
-        task = self.client.ecs.describe_tasks(
-            cluster=self.client.cluster_name,
-            tasks=task_arns,
-        ).get("tasks")[0]
+        service_description = response["services"][0]
 
-        return task.get("createdAt")
+        # Extract the creation timestamp
+        return service_description["createdAt"].timestamp()
 
     @property
     @cached_method

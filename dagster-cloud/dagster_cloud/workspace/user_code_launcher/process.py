@@ -19,7 +19,6 @@ from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.merger import merge_dicts
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from typing_extensions import Self
 
 from dagster_cloud.api.dagster_cloud_api import (
@@ -223,8 +222,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         self,
         deployment_name: str,
         location_name: str,
-        metadata: CodeDeploymentMetadata,
+        desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
+        metadata = desired_entry.code_deployment_metadata
+
         key = (deployment_name, location_name)
 
         client: Union[MultiPexGrpcClient, DagsterGrpcClient]
@@ -390,6 +391,9 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
     def get_agent_id_for_server(self, handle: int) -> Optional[str]:
         return self._instance.instance_uuid
+
+    def get_server_create_timestamp(self, handle: int) -> Optional[float]:
+        return None
 
     def __exit__(self, exception_type, exception_value, traceback):
         super().__exit__(exception_value, exception_value, traceback)

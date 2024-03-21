@@ -59,13 +59,6 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
         key = self._get_path(context)
         return self._has_object(key)
 
-    def _rm_object(self, key):
-        check.str_param(key, "key")
-        check.param_invariant(len(key) > 0, "key")
-
-        # delete_object wont fail even if the item has been deleted.
-        self._s3.delete_object(Bucket=self._bucket, Key=key)
-
     def _has_object(self, key):
         check.str_param(key, "key")
         check.param_invariant(len(key) > 0, "key")
@@ -100,9 +93,6 @@ class PickledObjectServerlessIOManager(MemoizableIOManager):
             return None
 
         key = self._get_path(context)
-
-        if self._has_object(key):
-            self._rm_object(key)
 
         pickled_obj = pickle.dumps(obj, PICKLE_PROTOCOL)
         pickled_obj_bytes = io.BytesIO(pickled_obj)

@@ -22,7 +22,10 @@ SERVICE_PORT = 4000
 
 
 def _get_dagster_k8s_labels(
-    deployment_name: str, location_name: str, instance: DagsterCloudAgentInstance
+    deployment_name: str,
+    location_name: str,
+    instance: DagsterCloudAgentInstance,
+    server_timestamp: float,
 ) -> Mapping[str, str]:
     return {
         **MANAGED_RESOURCES_LABEL,
@@ -30,6 +33,7 @@ def _get_dagster_k8s_labels(
         "location_name": get_k8s_human_readable_label(location_name),
         "deployment_name": get_k8s_human_readable_label(deployment_name),
         "agent_id": instance.instance_uuid,
+        "server_timestamp": str(server_timestamp),
     }
 
 
@@ -73,7 +77,12 @@ def get_k8s_human_readable_label(name):
 
 
 def construct_code_location_service(
-    deployment_name, location_name, service_name, container_context, instance
+    deployment_name,
+    location_name,
+    service_name,
+    container_context,
+    instance,
+    server_timestamp: float,
 ):
     labels = container_context.labels
 
@@ -82,7 +91,9 @@ def construct_code_location_service(
             name=service_name,
             labels={
                 **labels,
-                **_get_dagster_k8s_labels(deployment_name, location_name, instance),
+                **_get_dagster_k8s_labels(
+                    deployment_name, location_name, instance, server_timestamp
+                ),
             },
         ),
         spec=client.V1ServiceSpec(
@@ -100,6 +111,7 @@ def construct_code_location_deployment(
     metadata,
     container_context,
     args,
+    server_timestamp: float,
 ):
     pull_policy = container_context.image_pull_policy
     env_config_maps = container_context.env_config_maps
@@ -180,7 +192,9 @@ def construct_code_location_deployment(
             "name": k8s_deployment_name,
             "labels": {
                 **container_context.labels,
-                **_get_dagster_k8s_labels(deployment_name, location_name, instance),
+                **_get_dagster_k8s_labels(
+                    deployment_name, location_name, instance, server_timestamp
+                ),
             },
         },
         "spec": {  # DeploymentSpec
@@ -192,7 +206,9 @@ def construct_code_location_deployment(
                         "user-deployment": k8s_deployment_name,
                         **container_context.labels,
                         **user_defined_pod_template_labels,
-                        **_get_dagster_k8s_labels(deployment_name, location_name, instance),
+                        **_get_dagster_k8s_labels(
+                            deployment_name, location_name, instance, server_timestamp
+                        ),
                     },
                 },
                 "spec": pod_spec_config,

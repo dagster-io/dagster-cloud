@@ -180,6 +180,17 @@ ALERT_POLICY_SCHEMA = Shape(
                             }
                         )
                     ),
+                    "pagerduty": Field(
+                        config=Shape(
+                            fields={
+                                "integration_key": Field(
+                                    config=str,
+                                    is_required=True,
+                                    description="The integration key for your PagerDuty app.",
+                                )
+                            }
+                        )
+                    ),
                 }
             ),
             is_required=True,

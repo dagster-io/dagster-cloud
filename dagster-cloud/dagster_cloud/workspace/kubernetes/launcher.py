@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Collection, Dict, List, NamedTuple, Optional, Set, Tuple, cast
+from typing import Any, Collection, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple
 
 import kubernetes
 import kubernetes.client as client
@@ -24,7 +24,6 @@ from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.job import UserDefinedDagsterK8sConfig
 from dagster_k8s.models import k8s_snake_case_dict
-from kubernetes.client.models.v1_deployment_list import V1DeploymentList
 from kubernetes.client.rest import ApiException
 from typing_extensions import Self
 
@@ -62,6 +61,8 @@ from ..config_schema.kubernetes import SHARED_K8S_CONFIG
 class K8sHandle(NamedTuple):
     namespace: str
     name: str
+    labels: Mapping[str, str]
+    creation_timestamp: Optional[float]
 
     def __str__(self):
         return f"{self.namespace}/{self.name}"
@@ -396,8 +397,13 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         }
 
     def _start_new_server_spinup(
-        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
+        self,
+        deployment_name: str,
+        location_name: str,
+        desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
+        metadata = desired_entry.code_deployment_metadata
+
         args = metadata.get_grpc_server_command(
             metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
         )
@@ -406,9 +412,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
         container_context = self._resolve_container_context(metadata)
 
+        deployment_reponse = None
+
         try:
             with self._get_apps_api_instance() as api_instance:
-                api_response = api_instance.create_namespaced_deployment(
+                deployment_reponse = api_instance.create_namespaced_deployment(
                     container_context.namespace,
                     body=construct_code_location_deployment(
                         self._instance,
@@ -418,11 +426,12 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                         metadata,
                         container_context,
                         args=args,
+                        server_timestamp=desired_entry.update_timestamp,
                     ),
                 )
             self._logger.info(
                 "Created deployment {} in namespace {}".format(
-                    api_response.metadata.name,
+                    deployment_reponse.metadata.name,
                     container_context.namespace,
                 )
             )
@@ -437,7 +446,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self._used_namespaces[(deployment_name, location_name)].add(namespace)
 
         try:
-            api_response = self._get_core_api_client().create_namespaced_service(
+            service_response = self._get_core_api_client().create_namespaced_service(
                 namespace,
                 construct_code_location_service(
                     deployment_name,
@@ -445,10 +454,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     resource_name,
                     container_context,
                     self._instance,
+                    server_timestamp=desired_entry.update_timestamp,
                 ),
             )
             self._logger.info(
-                f"Created service {api_response.metadata.name} in namespace {namespace}"
+                f"Created service {service_response.metadata.name} in namespace {namespace}"
             )
         except ApiException as e:
             self._logger.error(
@@ -466,7 +476,16 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         )
 
         return DagsterCloudGrpcServer(
-            K8sHandle(namespace=namespace, name=resource_name), endpoint, metadata
+            K8sHandle(
+                namespace=namespace,
+                name=resource_name,
+                labels=deployment_reponse.metadata.labels,
+                creation_timestamp=deployment_reponse.metadata.creation_timestamp.timestamp()
+                if deployment_reponse.metadata.creation_timestamp
+                else None,
+            ),
+            endpoint,
+            metadata,
         )
 
     def _get_timeout_debug_info(
@@ -540,7 +559,16 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     ),
                 ).items
                 for deployment in deployments:
-                    handles.append(K8sHandle(namespace=namespace, name=deployment.metadata.name))
+                    handles.append(
+                        K8sHandle(
+                            namespace=namespace,
+                            name=deployment.metadata.name,
+                            labels=deployment.metadata.labels,
+                            creation_timestamp=deployment.metadata.creation_timestamp.timestamp()
+                            if deployment.metadata.creation_timestamp
+                            else None,
+                        )
+                    )
 
         return handles
 
@@ -559,27 +587,24 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     label_selector="managed_by=K8sUserCodeLauncher",
                 ).items
                 for deployment in deployments:
-                    handles.append(K8sHandle(namespace, deployment.metadata.name))
+                    handles.append(
+                        K8sHandle(
+                            namespace,
+                            deployment.metadata.name,
+                            deployment.metadata.labels,
+                            deployment.metadata.creation_timestamp.timestamp()
+                            if deployment.metadata.creation_timestamp
+                            else None,
+                        )
+                    )
         self._logger.info(f"Listing server handles: {handles}")
         return handles
 
     def get_agent_id_for_server(self, handle: K8sHandle) -> Optional[str]:
-        with self._get_apps_api_instance() as api_instance:
-            deployments = cast(
-                V1DeploymentList,
-                api_instance.list_namespaced_deployment(
-                    handle.namespace,
-                    label_selector="managed_by=K8sUserCodeLauncher",
-                    field_selector=f"metadata.name={handle.name}",
-                ),
-            ).items
-            if not deployments:
-                self._logger.warning(
-                    f"Attempted to retrieve agent_id for server with handle {handle}; but no"
-                    " deployments found."
-                )
-                return None
-            return deployments.pop().metadata.labels.get("agent_id")
+        return handle.labels.get("agent_id")
+
+    def get_server_create_timestamp(self, handle: K8sHandle) -> Optional[float]:
+        return handle.creation_timestamp
 
     def _remove_server_handle(self, server_handle: K8sHandle) -> None:
         # Since we track which servers to delete by listing the k8s deployments,

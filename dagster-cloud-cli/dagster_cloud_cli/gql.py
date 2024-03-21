@@ -353,6 +353,9 @@ ALERT_POLICIES_QUERY = """
                 ... on MicrosoftTeamsAlertPolicyNotification {
                     webhookUrl
                 }
+                ... on PagerdutyAlertPolicyNotification {
+                    integrationKey
+                }
             }
             enabled
         }

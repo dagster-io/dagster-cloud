@@ -59,11 +59,8 @@ def _build_check_for_asset(
             headers={"Dagster-Cloud-Api-Token": instance.dagster_cloud_agent_token},
         )
         client = Client(transport=transport, fetch_schema_from_transport=True)
-        asset_key = context.asset_checks_def.asset_key
-        asset = context.job_def.asset_layer.assets_defs_by_key.get(
-            asset_key
-        ) or context.job_def.asset_layer.source_assets_by_key.get(asset_key)
-        if asset is None:
+        asset_key = next(iter(context.assets_def.check_keys)).asset_key
+        if not context.job_def.asset_layer.has(asset_key):
             raise Exception(f"Could not find targeted asset {asset_key.to_string()}.")
         result = client.execute(
             gql(ANOMALY_DETECTION_INFERENCE_MUTATION),

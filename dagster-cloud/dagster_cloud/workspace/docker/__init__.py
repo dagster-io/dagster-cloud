@@ -14,9 +14,9 @@ from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster._utils import find_free_port
 from dagster._utils.merger import merge_dicts
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
+from dateutil.parser import parse
 from docker.models.containers import Container
 from typing_extensions import Self
 
@@ -38,6 +38,8 @@ from .utils import unique_docker_resource_name
 GRPC_SERVER_LABEL = "dagster_grpc_server"
 MULTIPEX_SERVER_LABEL = "dagster_multipex_server"
 AGENT_LABEL = "dagster_agent_id"
+SERVER_TIMESTAMP_LABEL = "dagster_server_timestamp"
+
 
 IMAGE_PULL_LOG_INTERVAL = 15
 
@@ -261,8 +263,9 @@ class DockerUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-        metadata: CodeDeploymentMetadata,
+        desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
+        metadata = desired_entry.code_deployment_metadata
         container_name = unique_docker_resource_name(deployment_name, location_name)
 
         container_context = DockerContainerContext(
@@ -294,6 +297,7 @@ class DockerUserCodeLauncher(
                 MULTIPEX_SERVER_LABEL: "",
                 deterministic_label_for_location(deployment_name, location_name): "",
                 AGENT_LABEL: self._instance.instance_uuid,
+                SERVER_TIMESTAMP_LABEL: str(desired_entry.update_timestamp),
             }
         else:
             command = metadata.get_grpc_server_command(
@@ -306,6 +310,7 @@ class DockerUserCodeLauncher(
                 GRPC_SERVER_LABEL: "",
                 deterministic_label_for_location(deployment_name, location_name): "",
                 AGENT_LABEL: self._instance.instance_uuid,
+                SERVER_TIMESTAMP_LABEL: str(desired_entry.update_timestamp),
             }
 
         container, server_endpoint = self._launch_container(
@@ -350,6 +355,10 @@ class DockerUserCodeLauncher(
 
     def get_agent_id_for_server(self, handle: DagsterDockerContainer) -> Optional[str]:
         return handle.container.labels.get(AGENT_LABEL)
+
+    def get_server_create_timestamp(self, handle: DagsterDockerContainer) -> Optional[float]:
+        created_time_str = handle.container.attrs["Created"]
+        return parse(created_time_str).timestamp()
 
     def _list_server_handles(self) -> List[DagsterDockerContainer]:
         client = docker.client.from_env()

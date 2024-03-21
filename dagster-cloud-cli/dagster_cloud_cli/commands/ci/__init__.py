@@ -292,7 +292,7 @@ def notify(
     source = metrics.get_source()
     if source == CliEventTags.source.github:
         event = github_context.get_github_event(project_dir)
-        msg = "Your pull request is automatically being deployed to Dagster Cloud."
+        msg = f"Your pull request at commit `{event.github_sha}` is automatically being deployed to Dagster Cloud."
         event.update_pr_comment(
             msg + "\n\n" + report.markdown_report(location_states),
             orig_author="github-actions[bot]",

@@ -25,7 +25,8 @@ app = Typer(help="Configure the Dagster Cloud CLI.")
 @app.command()
 @dagster_cloud_options()
 def set_deployment(
-    ctx: Context, deployment: str = Argument(..., autocompletion=available_deployment_names)
+    ctx: Context,
+    deployment: str = Argument(..., autocompletion=available_deployment_names),
 ):
     """Set the default deployment for CLI commands."""
     deployments = available_deployment_names(ctx=ctx)
@@ -42,7 +43,10 @@ def set_deployment(
 @app.command()
 def view(
     show_token: bool = Option(
-        False, "--show-token", "-s", help="Whether to display the user token in plaintext."
+        False,
+        "--show-token",
+        "-s",
+        help="Whether to display the user token in plaintext.",
     ),
 ):
     """View the current CLI configuration."""
@@ -198,7 +202,7 @@ def _setup(organization: str, deployment: str, api_token: str):
             deployment_name = deployment if deployment else "prod"
             ui.print(
                 "\nTo create a new user token or find an existing token, visit"
-                f" https://dagster.cloud/{new_org}/{deployment_name}/cloud-settings/tokens"
+                f" https://dagster.cloud/{new_org}/{deployment_name}/org-settings/tokens"
             )
         new_api_token = (
             ui.password_input("Dagster Cloud user token:", default=api_token or "") or None
@@ -232,7 +236,9 @@ def _setup(organization: str, deployment: str, api_token: str):
 
     write_config(
         DagsterCloudCliConfig(
-            organization=new_org, default_deployment=new_deployment, user_token=new_api_token
+            organization=new_org,
+            default_deployment=new_deployment,
+            user_token=new_api_token,
         )
     )
 

@@ -19,7 +19,6 @@ from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils.merger import merge_dicts
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from dagster_cloud.api.dagster_cloud_api import (
     UserCodeDeploymentType,
@@ -342,8 +341,13 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         }
 
     def _start_new_server_spinup(
-        self, deployment_name: str, location_name: str, metadata: CodeDeploymentMetadata
+        self,
+        deployment_name: str,
+        location_name: str,
+        desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
+        metadata = desired_entry.code_deployment_metadata
+
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(
                 PORT, metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
@@ -352,6 +356,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             tags = {
                 "dagster/multipex_server": "1",
                 "dagster/agent_id": self._instance.instance_uuid,
+                "dagster/server_timestamp": str(desired_entry.update_timestamp),
             }
         else:
             command = metadata.get_grpc_server_command(
@@ -360,7 +365,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             additional_env = metadata.get_grpc_server_env(
                 PORT, location_name, self._instance.ref_for_deployment(deployment_name)
             )
-            tags = {"dagster/grpc_server": "1", "dagster/agent_id": self._instance.instance_uuid}
+            tags = {
+                "dagster/grpc_server": "1",
+                "dagster/agent_id": self._instance.instance_uuid,
+                "dagster/server_timestamp": str(desired_entry.update_timestamp),
+            }
 
         container_context = EcsContainerContext(
             secrets=self.secrets,
@@ -631,6 +640,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def get_agent_id_for_server(self, handle: EcsServerHandleType) -> Optional[str]:
         # Need to get container for server handle, then get the agent tag from that.
         return handle.tags.get("dagster/agent_id")
+
+    def get_server_create_timestamp(self, handle: EcsServerHandleType) -> Optional[float]:
+        return handle.create_timestamp
 
     def _run_launcher_kwargs(self) -> Dict[str, Any]:
         return dict(
