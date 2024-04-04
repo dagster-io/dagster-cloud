@@ -103,7 +103,9 @@ def dbt_with_snowflake_insights(
 
     asset_and_partition_key_to_unique_id: List[Tuple[AssetKey, Optional[str], Any]] = []
     for dagster_event in dagster_events:
-        if isinstance(dagster_event, (AssetMaterialization, AssetObservation, Output)):
+        if isinstance(
+            dagster_event, (AssetMaterialization, AssetObservation, Output, AssetCheckResult)
+        ):
             unique_id = dagster_event.metadata["unique_id"].value
             asset_key, partition = extract_asset_info_from_event(
                 context, dagster_event, record_observation_usage

@@ -1,6 +1,8 @@
 import json
+import os
 from collections import defaultdict
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -57,10 +59,16 @@ from dagster._utils.concurrency import (
 )
 from dagster._utils.error import SerializableErrorInfo
 from dagster._utils.merger import merge_dicts
-from dagster_cloud_cli.core.errors import GraphQLStorageError
+from dagster_cloud_cli.core.errors import DagsterCloudAgentServerError
 from typing_extensions import Self
 
+from dagster_cloud.api.dagster_cloud_api import StoreEventBatchRequest
 from dagster_cloud.storage.event_logs.utils import truncate_event
+from dagster_cloud.util import compressed_namedtuple_upload_file
+
+if TYPE_CHECKING:
+    from dagster_cloud.instance import DagsterCloudAgentInstance
+
 
 from .queries import (
     ADD_DYNAMIC_PARTITIONS_MUTATION,
@@ -100,6 +108,7 @@ from .queries import (
     IS_PERSISTENT_QUERY,
     REINDEX_MUTATION,
     SET_CONCURRENCY_SLOTS_MUTATION,
+    STORE_EVENT_BATCH_MUTATION,
     STORE_EVENT_MUTATION,
     UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
     UPGRADE_EVENT_LOG_STORAGE_MUTATION,
@@ -107,6 +116,20 @@ from .queries import (
     WIPE_ASSET_MUTATION,
     WIPE_EVENT_LOG_STORAGE_MUTATION,
 )
+
+
+def _input_for_event(event: EventLogEntry):
+    event = truncate_event(event)
+    return {
+        "errorInfo": _input_for_serializable_error_info(event.error_info),
+        "level": event.level,
+        "userMessage": event.user_message,
+        "runId": event.run_id,
+        "timestamp": event.timestamp,
+        "stepKey": event.step_key,
+        "pipelineName": event.job_name,
+        "dagsterEvent": _input_for_dagster_event(event.dagster_event),
+    }
 
 
 def _input_for_serializable_error_info(serializable_error_info: Optional[SerializableErrorInfo]):
@@ -395,16 +418,19 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             else self._instance.graphql_client
         )
 
+    @property
+    def agent_instance(self) -> "DagsterCloudAgentInstance":
+        from dagster_cloud.instance import DagsterCloudAgentInstance
+
+        return cast(DagsterCloudAgentInstance, self._instance)
+
     def _execute_query(self, query, variables=None, headers=None, idempotent_mutation=False):
-        res = self._graphql_client.execute(
+        return self._graphql_client.execute(
             query,
             variable_values=variables,
             headers=headers,
             idempotent_mutation=idempotent_mutation,
         )
-        if "errors" in res:
-            raise GraphQLStorageError(res)
-        return res
 
     def get_records_for_run(
         self,
@@ -509,29 +535,44 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             for stats in step_stats
         ]
 
+    def _store_events_http(self, headers, events: Sequence[EventLogEntry]):
+        batch_request = StoreEventBatchRequest(event_log_entries=events)
+        with compressed_namedtuple_upload_file(batch_request) as f:
+            self.agent_instance.http_client.post(
+                url=self.agent_instance.dagster_cloud_store_events_url,
+                headers=headers,
+                files={"store_events.tmp": f},
+            )
+
     def store_event(self, event: EventLogEntry):
         check.inst_param(event, "event", EventLogEntry)
-
-        event = truncate_event(event)
-
         headers = {"Idempotency-Key": str(uuid4())}
 
-        self._execute_query(
-            STORE_EVENT_MUTATION,
-            variables={
-                "eventRecord": {
-                    "errorInfo": _input_for_serializable_error_info(event.error_info),
-                    "level": event.level,
-                    "userMessage": event.user_message,
-                    "runId": event.run_id,
-                    "timestamp": event.timestamp,
-                    "stepKey": event.step_key,
-                    "pipelineName": event.job_name,
-                    "dagsterEvent": _input_for_dagster_event(event.dagster_event),
-                }
-            },
-            headers=headers,
-        )
+        if os.getenv("DAGSTER_CLOUD_STORE_EVENT_OVER_HTTP"):
+            self._store_events_http(headers, [event])
+        else:
+            self._execute_query(
+                STORE_EVENT_MUTATION,
+                variables={
+                    "eventRecord": _input_for_event(event),
+                },
+                headers=headers,
+            )
+
+    def store_event_batch(self, events: Sequence[EventLogEntry]):
+        check.sequence_param(events, "events", of_type=EventLogEntry)
+        headers = {"Idempotency-Key": str(uuid4())}
+
+        if os.getenv("DAGSTER_CLOUD_STORE_EVENT_OVER_HTTP"):
+            self._store_events_http(headers, events)
+        else:
+            self._execute_query(
+                STORE_EVENT_BATCH_MUTATION,
+                variables={
+                    "eventRecords": [_input_for_event(event) for event in events],
+                },
+                headers=headers,
+            )
 
     def delete_events(self, run_id: str):
         self._execute_query(
@@ -802,9 +843,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 "afterStorageId": after_storage_id,
             },
         )
-        return res["data"]["eventLogs"][
+        result = res["data"]["eventLogs"][
             "getLatestAssetPartitionMaterializationAttemptsWithoutMaterializations"
         ]
+
+        # Translate list to tuple
+        return {key: tuple(val) for key, val in result.items()}
 
     def get_event_tags_for_asset(
         self,
@@ -898,7 +942,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             if error["className"] == "DagsterInvalidInvocationError":
                 raise DagsterInvalidInvocationError(error["message"])
             else:
-                raise GraphQLStorageError(res)
+                raise DagsterCloudAgentServerError(res)
         return result.get("success")
 
     def set_concurrency_slots(self, concurrency_key: str, num: int) -> None:
@@ -915,7 +959,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             if error["className"] == "DagsterInvalidInvocationError":
                 raise DagsterInvalidInvocationError(error["message"])
             else:
-                raise GraphQLStorageError(res)
+                raise DagsterCloudAgentServerError(res)
         return res
 
     def delete_concurrency_limit(self, concurrency_key: str) -> None:
@@ -930,7 +974,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             if error["className"] == "DagsterInvalidInvocationError":
                 raise DagsterInvalidInvocationError(error["message"])
             else:
-                raise GraphQLStorageError(res)
+                raise DagsterCloudAgentServerError(res)
 
     def get_concurrency_keys(self) -> Set[str]:
         res = self._execute_query(GET_CONCURRENCY_KEYS_QUERY)

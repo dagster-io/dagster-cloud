@@ -20,8 +20,9 @@ from dagster._core.launcher import DefaultRunLauncher, RunLauncher
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._serdes import ConfigurableClassData
 from dagster_cloud_cli.core.graphql_client import (
+    create_agent_graphql_client,
+    create_agent_http_client,
     create_graphql_requests_session,
-    create_proxy_client,
     get_agent_headers,
 )
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
@@ -91,6 +92,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._graphql_requests_session: Optional[Session] = None
         self._rest_requests_session: Optional[Session] = None
         self._graphql_client = None
+        self._http_client = None
 
         assert self.dagster_cloud_url
 
@@ -157,16 +159,16 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return my_ref._replace(custom_instance_class_data=new_class_data)
 
     def organization_scoped_graphql_client(self):
-        return create_proxy_client(
-            self.graphql_requests_session,
+        return create_agent_graphql_client(
+            self.client_managed_retries_requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config_for_deployment(None),
             scope=DagsterCloudInstanceScope.ORGANIZATION,
         )
 
     def graphql_client_for_deployment(self, deployment_name: Optional[str]):
-        return create_proxy_client(
-            self.graphql_requests_session,
+        return create_agent_graphql_client(
+            self.client_managed_retries_requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config_for_deployment(deployment_name),
             scope=DagsterCloudInstanceScope.DEPLOYMENT,
@@ -181,15 +183,15 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     def create_graphql_client(
         self, scope: DagsterCloudInstanceScope = DagsterCloudInstanceScope.DEPLOYMENT
     ):
-        return create_proxy_client(
-            self.graphql_requests_session,
+        return create_agent_graphql_client(
+            self.client_managed_retries_requests_session,
             self.dagster_cloud_graphql_url,
             self._dagster_cloud_api_config,
             scope=scope,
         )
 
     @property
-    def graphql_requests_session(self):
+    def client_managed_retries_requests_session(self):
         """A shared requests Session to use between GraphQL clients.
 
         Retries handled in GraphQL client layer.
@@ -202,7 +204,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._graphql_requests_session
 
     @property
-    def rest_requests_session(self):
+    def requests_managed_retries_session(self):
         """A requests session to use for non-GraphQL Rest API requests.
 
         Retries handled by requests.
@@ -227,6 +229,17 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             )
 
         return self._graphql_client
+
+    @property
+    def http_client(self):
+        if self._http_client is None:
+            self._http_client = create_agent_http_client(
+                self.client_managed_retries_requests_session,
+                self._dagster_cloud_api_config,
+                scope=DagsterCloudInstanceScope.DEPLOYMENT,
+            )
+
+        return self._http_client
 
     @property
     def dagster_cloud_url(self):
@@ -285,6 +298,10 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return f"{self.dagster_cloud_url}/graphql"
 
     @property
+    def dagster_cloud_store_events_url(self):
+        return f"{self.dagster_cloud_url}/store_events"
+
+    @property
     def dagster_cloud_upload_logs_url(self):
         return f"{self.dagster_cloud_url}/upload_logs"
 
@@ -295,14 +312,6 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     @property
     def dagster_cloud_gen_insights_url_url(self) -> str:
         return f"{self.dagster_cloud_url}/gen_insights_url"
-
-    @property
-    def dagster_cloud_gen_artifacts_post(self) -> str:
-        return f"{self.dagster_cloud_url}/gen_artifacts_post"
-
-    @property
-    def dagster_cloud_gen_artifacts_get(self) -> str:
-        return f"{self.dagster_cloud_url}/gen_artifacts_get"
 
     @property
     def dagster_cloud_upload_job_snap_url(self):

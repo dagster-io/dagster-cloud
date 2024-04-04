@@ -9,6 +9,16 @@ from pydantic import BaseModel
 class AnomalyDetectionModelVersion(Enum):
     FRESHNESS_BETA = "FRESHNESS_BETA"
 
+    @property
+    def minimum_required_records(self) -> int:
+        if self == AnomalyDetectionModelVersion.FRESHNESS_BETA:
+            return 15
+        raise NotImplementedError(f"Minimum required records not implemented for {self}")
+
+    @property
+    def minimum_required_records_msg(self) -> str:
+        return f"Not enough records found to detect anomalies. Need at least {self.minimum_required_records}."
+
 
 ### INTERNAL MODEL PARAMETER SETS ###
 

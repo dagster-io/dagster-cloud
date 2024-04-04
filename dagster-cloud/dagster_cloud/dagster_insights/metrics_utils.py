@@ -101,7 +101,7 @@ def get_post_request_params(
         raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
 
     return (
-        instance.rest_requests_session,
+        instance.requests_managed_retries_session,
         instance.dagster_cloud_gen_insights_url_url,
         instance.dagster_cloud_api_headers(DagsterCloudInstanceScope.DEPLOYMENT),
         instance.dagster_cloud_api_timeout,

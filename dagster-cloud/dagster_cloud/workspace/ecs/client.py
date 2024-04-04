@@ -148,6 +148,7 @@ class Client:
         mount_points=None,
         volumes=None,
         linux_parameters=None,
+        health_check=None,
     ):
         container_name = container_name or family
 
@@ -187,6 +188,7 @@ class Client:
             mount_points=mount_points,
             volumes=volumes,
             linux_parameters=linux_parameters,
+            health_check=health_check,
         )
 
         try:
@@ -239,6 +241,7 @@ class Client:
         runtime_platform=None,
         mount_points=None,
         volumes=None,
+        health_check=None,
     ):
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
 
@@ -266,6 +269,7 @@ class Client:
             mount_points=mount_points,
             volumes=volumes,
             linux_parameters=ECS_EXEC_LINUX_PARAMETERS if allow_ecs_exec else None,
+            health_check=health_check,
         )
 
         service_registry_arn = None

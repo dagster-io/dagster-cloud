@@ -5,13 +5,13 @@ from dagster_cloud_cli.types import (
     CliEventType,
 )
 
-from .core.graphql_client import GqlShimClient, create_cloud_webserver_client
+from .core.graphql_client import DagsterCloudGraphQLClient, create_cloud_webserver_client
 
 
 @contextmanager
 def graphql_client_from_url(
     url: str, token: str, retries: int = 3
-) -> Generator[GqlShimClient, None, None]:
+) -> Generator[DagsterCloudGraphQLClient, None, None]:
     with create_cloud_webserver_client(url.rstrip("/"), token, retries) as client:
         yield client
 
@@ -38,7 +38,7 @@ query CliDeploymentsQuery {
 """
 
 
-def fetch_full_deployments(client: GqlShimClient) -> List[Any]:
+def fetch_full_deployments(client: DagsterCloudGraphQLClient) -> List[Any]:
     return client.execute(FULL_DEPLOYMENTS_QUERY)["data"]["fullDeployments"]
 
 
@@ -112,7 +112,7 @@ query CliAgentStatus {
 """
 
 
-def fetch_agent_status(client: GqlShimClient) -> List[Any]:
+def fetch_agent_status(client: DagsterCloudGraphQLClient) -> List[Any]:
     return client.execute(AGENT_STATUS_QUERY)["data"]["agents"]
 
 
@@ -128,7 +128,7 @@ query CliWorkspaceEntries {
 """
 
 
-def fetch_workspace_entries(client: GqlShimClient) -> List[Any]:
+def fetch_workspace_entries(client: DagsterCloudGraphQLClient) -> List[Any]:
     return client.execute(WORKSPACE_ENTRIES_QUERY)["data"]["workspace"]["workspaceEntries"]
 
 
@@ -149,6 +149,13 @@ query CliLocationsQuery {
                 ... on PythonError {
                     message
                     stack
+                    errorChain {
+                        isExplicitLink
+                        error {
+                            message
+                            stack
+                        }
+                    }
                 }
             }
         }
@@ -162,7 +169,7 @@ query CliLocationsQuery {
 """
 
 
-def fetch_code_locations(client: GqlShimClient) -> List[Any]:
+def fetch_code_locations(client: DagsterCloudGraphQLClient) -> List[Any]:
     result = client.execute(REPOSITORY_LOCATIONS_QUERY)["data"]["workspaceOrError"]
     if result["__typename"] != "Workspace":
         raise Exception("Unable to query code locations: ", result["message"])
@@ -188,7 +195,9 @@ mutation CliAddOrUpdateLocation($document: GenericScalar!) {
 """
 
 
-def add_or_update_code_location(client: GqlShimClient, location_document: Dict[str, Any]) -> None:
+def add_or_update_code_location(
+    client: DagsterCloudGraphQLClient, location_document: Dict[str, Any]
+) -> None:
     result = client.execute(
         ADD_OR_UPDATE_LOCATION_FROM_DOCUMENT_MUTATION,
         variable_values={"document": location_document},
@@ -215,7 +224,7 @@ mutation CliDeleteLocation($locationName: String!) {
 """
 
 
-def delete_code_location(client: GqlShimClient, location_name: str) -> None:
+def delete_code_location(client: DagsterCloudGraphQLClient, location_name: str) -> None:
     result = client.execute(
         DELETE_LOCATION_MUTATION, variable_values={"locationName": location_name}
     )
@@ -246,7 +255,7 @@ mutation CliReconcileLocationsFromDoc($document: GenericScalar!) {
 
 
 def reconcile_code_locations(
-    client: GqlShimClient, locations_document: Dict[str, Any]
+    client: DagsterCloudGraphQLClient, locations_document: Dict[str, Any]
 ) -> List[str]:
     result = client.execute(
         RECONCILE_LOCATIONS_FROM_DOCUMENT_MUTATION,
@@ -279,7 +288,7 @@ query CliLocationsAsDocument {
 """
 
 
-def fetch_locations_as_document(client: GqlShimClient) -> Dict[str, Any]:
+def fetch_locations_as_document(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
     result = client.execute(GET_LOCATIONS_AS_DOCUMENT_QUERY)
 
     return result["data"]["locationsAsDocument"]["document"]
@@ -304,7 +313,9 @@ SET_DEPLOYMENT_SETTINGS_MUTATION = """
 """
 
 
-def set_deployment_settings(client: GqlShimClient, deployment_settings: Dict[str, Any]) -> None:
+def set_deployment_settings(
+    client: DagsterCloudGraphQLClient, deployment_settings: Dict[str, Any]
+) -> None:
     result = client.execute(
         SET_DEPLOYMENT_SETTINGS_MUTATION,
         variable_values={"deploymentSettings": deployment_settings},
@@ -323,7 +334,7 @@ DEPLOYMENT_SETTINGS_QUERY = """
 """
 
 
-def get_deployment_settings(client: GqlShimClient) -> Dict[str, Any]:
+def get_deployment_settings(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
     result = client.execute(DEPLOYMENT_SETTINGS_QUERY)
 
     if result.get("data", {}).get("deploymentSettings", {}).get("settings") is None:
@@ -363,7 +374,7 @@ ALERT_POLICIES_QUERY = """
 """
 
 
-def get_alert_policies(client: GqlShimClient) -> Dict[str, Any]:
+def get_alert_policies(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
     result = client.execute(ALERT_POLICIES_QUERY)
 
     if result.get("data", {}).get("alertPolicies", {}) is None:
@@ -397,7 +408,7 @@ RECONCILE_ALERT_POLICIES_FROM_DOCUMENT_MUTATION = """
 
 
 def reconcile_alert_policies(
-    client: GqlShimClient, alert_policy_inputs: Sequence[dict]
+    client: DagsterCloudGraphQLClient, alert_policy_inputs: Sequence[dict]
 ) -> Sequence[str]:
     result = client.execute(
         RECONCILE_ALERT_POLICIES_FROM_DOCUMENT_MUTATION,
@@ -435,7 +446,9 @@ SET_ORGANIZATION_SETTINGS_MUTATION = """
 """
 
 
-def set_organization_settings(client: GqlShimClient, organization_settings: Dict[str, Any]) -> None:
+def set_organization_settings(
+    client: DagsterCloudGraphQLClient, organization_settings: Dict[str, Any]
+) -> None:
     result = client.execute(
         SET_ORGANIZATION_SETTINGS_MUTATION,
         variable_values={"organizationSettings": organization_settings},
@@ -454,7 +467,7 @@ ORGANIZATION_SETTINGS_QUERY = """
 """
 
 
-def get_organization_settings(client: GqlShimClient) -> Dict[str, Any]:
+def get_organization_settings(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
     result = client.execute(ORGANIZATION_SETTINGS_QUERY)
 
     if result.get("data", {}).get("organizationSettings", {}).get("settings") is None:
@@ -483,7 +496,7 @@ mutation CliCreateOrUpdateBranchDeployment(
 
 
 def create_or_update_branch_deployment(
-    client: GqlShimClient,
+    client: DagsterCloudGraphQLClient,
     repo_name: str,
     branch_name: str,
     commit_hash: str,
@@ -558,7 +571,7 @@ LAUNCH_RUN_MUTATION = """
 
 
 def launch_run(
-    client: GqlShimClient,
+    client: DagsterCloudGraphQLClient,
     location_name: str,
     repo_name: str,
     job_name: str,
@@ -601,7 +614,7 @@ query CliGetEcrInfo {
 """
 
 
-def get_ecr_info(client: GqlShimClient) -> Any:
+def get_ecr_info(client: DagsterCloudGraphQLClient) -> Any:
     data = client.execute(GET_ECR_CREDS_QUERY)["data"]
     return {
         "registry_url": data["serverless"]["registryUrl"],
@@ -624,7 +637,7 @@ query CliGetRunStatus($runId: ID!) {
 """
 
 
-def run_status(client: GqlShimClient, run_id: str) -> Any:
+def run_status(client: DagsterCloudGraphQLClient, run_id: str) -> Any:
     data = client.execute(
         GET_RUN_STATUS_QUERY,
         variable_values={"runId": run_id},
@@ -650,7 +663,7 @@ MARK_CLI_EVENT_MUTATION = """
 
 
 def mark_cli_event(
-    client: GqlShimClient,
+    client: DagsterCloudGraphQLClient,
     event_type: CliEventType,
     duration_seconds: float,
     success: bool = True,
@@ -700,7 +713,7 @@ mutation CliDeleteDeployment($deploymentId: Int!) {
 """
 
 
-def get_deployment_by_name(client: GqlShimClient, deployment: str) -> Dict[str, Any]:
+def get_deployment_by_name(client: DagsterCloudGraphQLClient, deployment: str) -> Dict[str, Any]:
     result = client.execute(
         GET_DEPLOYMENT_BY_NAME_QUERY, variable_values={"deploymentName": deployment}
     )["data"]["deploymentByName"]
@@ -711,7 +724,7 @@ def get_deployment_by_name(client: GqlShimClient, deployment: str) -> Dict[str, 
     raise Exception(f"Unable to find deployment {deployment}")
 
 
-def delete_branch_deployment(client: GqlShimClient, deployment: str) -> Any:
+def delete_branch_deployment(client: DagsterCloudGraphQLClient, deployment: str) -> Any:
     deployment_info = get_deployment_by_name(client, deployment)
     if not deployment_info["deploymentType"] == "BRANCH":
         raise Exception(f"Deployment {deployment} is not a branch deployment")

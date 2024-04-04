@@ -4,7 +4,6 @@ import time
 from typing import Mapping, Optional
 
 import kubernetes
-from dagster._utils.merger import merge_dicts
 from dagster_k8s.client import DagsterKubernetesClient
 from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
@@ -113,75 +112,34 @@ def construct_code_location_deployment(
     args,
     server_timestamp: float,
 ):
-    pull_policy = container_context.image_pull_policy
-    env_config_maps = container_context.env_config_maps
-    env_secrets = container_context.env_secrets
-    service_account_name = container_context.service_account_name
-    image_pull_secrets = container_context.image_pull_secrets
-    volume_mounts = container_context.volume_mounts
-
-    volumes = container_context.volumes
-    resources = container_context.resources
-
-    scheduler_name = container_context.scheduler_name
-    security_context = container_context.security_context
-
-    env = merge_dicts(
-        metadata.get_grpc_server_env(
-            SERVICE_PORT, location_name, instance.ref_for_deployment(deployment_name)
-        ),
-        container_context.get_environment_dict(),
+    env = metadata.get_grpc_server_env(
+        SERVICE_PORT, location_name, instance.ref_for_deployment(deployment_name)
     )
 
     user_defined_config = container_context.server_k8s_config
 
     container_config = copy.deepcopy(user_defined_config.container_config)
 
-    container_config["args"] = args
-
-    if pull_policy:
-        container_config["image_pull_policy"] = pull_policy
-
     user_defined_env_vars = container_config.pop("env", [])
-    user_defined_env_from = container_config.pop("env_from", [])
-    user_defined_volume_mounts = container_config.pop("volume_mounts", [])
-    user_defined_resources = container_config.pop("resources", {})
-    user_defined_security_context = container_config.pop("security_context", None)
-
-    container_name = container_config.get("name", "dagster")
+    container_name = container_config.pop("name", "dagster")
 
     container_config = {
         **container_config,
+        "args": args,
         "name": container_name,
         "image": metadata.image,
-        "env": [{"name": key, "value": value} for key, value in env.items()]
-        + user_defined_env_vars,
-        "env_from": (
-            [{"config_map_ref": {"name": config_map}} for config_map in env_config_maps]
-            + [{"secret_ref": {"name": secret_name}} for secret_name in env_secrets]
-            + user_defined_env_from
+        "env": (
+            [{"name": key, "value": value} for key, value in env.items()] + user_defined_env_vars
         ),
-        "volume_mounts": volume_mounts + user_defined_volume_mounts,
-        "resources": user_defined_resources or resources,
-        "security_context": user_defined_security_context or security_context,
     }
 
     pod_spec_config = copy.deepcopy(user_defined_config.pod_spec_config)
 
-    user_defined_image_pull_secrets = pod_spec_config.pop("image_pull_secrets", [])
-    user_defined_service_account_name = pod_spec_config.pop("service_account_name", None)
     user_defined_containers = pod_spec_config.pop("containers", [])
-    user_defined_volumes = pod_spec_config.pop("volumes", [])
-    user_defined_scheduler_name = pod_spec_config.pop("scheduler_name", None)
 
     pod_spec_config = {
         **pod_spec_config,
-        "image_pull_secrets": [{"name": x["name"]} for x in image_pull_secrets]
-        + user_defined_image_pull_secrets,
-        "service_account_name": user_defined_service_account_name or service_account_name,
         "containers": [container_config] + user_defined_containers,
-        "volumes": volumes + user_defined_volumes,
-        "scheduler_name": user_defined_scheduler_name or scheduler_name,
     }
 
     pod_template_spec_metadata = copy.deepcopy(user_defined_config.pod_template_spec_metadata)

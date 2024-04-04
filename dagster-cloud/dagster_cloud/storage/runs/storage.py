@@ -22,7 +22,7 @@ from dagster._core.errors import (
 )
 from dagster._core.events import DagsterEvent
 from dagster._core.execution.backfill import BulkActionStatus, PartitionBackfill
-from dagster._core.remote_representation.origin import ExternalJobOrigin
+from dagster._core.remote_representation.origin import RemoteJobOrigin
 from dagster._core.snap import (
     ExecutionPlanSnapshot,
     JobSnapshot,
@@ -47,7 +47,7 @@ from dagster._serdes import (
 )
 from dagster._utils import utc_datetime_from_timestamp
 from dagster._utils.merger import merge_dicts
-from dagster_cloud_cli.core.errors import GraphQLStorageError
+from dagster_cloud_cli.core.errors import DagsterCloudAgentServerError
 from typing_extensions import Self
 
 from .queries import (
@@ -172,12 +172,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
 
     def _execute_query(self, query, variables=None, idempotent_mutation=False):
-        res = self._graphql_client.execute(
+        return self._graphql_client.execute(
             query, variable_values=variables, idempotent_mutation=idempotent_mutation
         )
-        if "errors" in res:
-            raise GraphQLStorageError(res)
-        return res
 
     def add_run(self, dagster_run: DagsterRun):
         check.inst_param(dagster_run, "dagster_run", DagsterRun)
@@ -196,7 +193,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             if error["className"] == "DagsterSnapshotDoesNotExist":
                 raise DagsterSnapshotDoesNotExist(error["message"])
             else:
-                raise GraphQLStorageError(res)
+                raise DagsterCloudAgentServerError(res)
 
         return dagster_run
 
@@ -513,7 +510,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return NotImplementedError("KVS is not supported from the user cloud")
 
     # Migrating run history
-    def replace_job_origin(self, run: DagsterRun, job_origin: ExternalJobOrigin):
+    def replace_job_origin(self, run: DagsterRun, job_origin: RemoteJobOrigin):
         self._execute_query(
             MUTATE_JOB_ORIGIN,
             variables={

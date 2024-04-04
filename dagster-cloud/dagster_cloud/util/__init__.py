@@ -1,11 +1,15 @@
+import zlib
 from collections import namedtuple
-from typing import Any, Dict, List, Mapping
+from contextlib import contextmanager
+from io import BytesIO
+from typing import Any, Dict, List, Mapping, NamedTuple
 
 from dagster import (
     Field,
     _check as check,
 )
 from dagster._config import BoolSourceType, IntSourceType, StringSourceType
+from dagster._serdes import serialize_value
 from dagster._serdes.utils import create_snapshot_id
 
 
@@ -81,3 +85,10 @@ def keys_not_none(
     dictionary: Mapping[str, Any],
 ) -> bool:
     return all(key in dictionary and dictionary[key] is not None for key in keys)
+
+
+@contextmanager
+def compressed_namedtuple_upload_file(to_serialize: NamedTuple):
+    compressed_data = zlib.compress(serialize_value(to_serialize).encode("utf-8"))
+    with BytesIO(compressed_data) as f:
+        yield f

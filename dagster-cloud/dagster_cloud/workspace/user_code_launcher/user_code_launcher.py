@@ -9,7 +9,7 @@ import threading
 import time
 import zlib
 from abc import abstractmethod, abstractproperty
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from contextlib import AbstractContextManager
 from typing import (
     Any,
@@ -31,6 +31,7 @@ from typing import (
 )
 
 import dagster._check as check
+import grpc
 import pendulum
 from dagster import BoolSource, Field, IntSource
 from dagster._api.list_repositories import sync_list_repositories_grpc
@@ -38,7 +39,7 @@ from dagster._core.definitions.selector import JobSelector
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.instance import MayHaveInstanceWeakref
 from dagster._core.launcher import RunLauncher
-from dagster._core.remote_representation import ExternalRepositoryOrigin
+from dagster._core.remote_representation import RemoteRepositoryOrigin
 from dagster._core.remote_representation.origin import (
     CodeLocationOrigin,
     RegisteredCodeLocationOrigin,
@@ -49,7 +50,7 @@ from dagster._serdes import deserialize_value, serialize_value, whitelist_for_se
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
-from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
+from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from typing_extensions import Self, TypeAlias
 
@@ -92,8 +93,8 @@ USER_CODE_LAUNCHER_RECONCILE_METRICS_SLEEP_SECONDS = 60
 # Check on pending delete servers every 30th reconcile
 PENDING_DELETE_SERVER_CHECK_INTERVAL = 30
 
-# How often to sync actual_entries with pex server liveness
-MULTIPEX_ACTUAL_ENTRIES_REFRESH_INTERVAL = 30
+# How often to sync actual_entries with server liveness
+ACTUAL_ENTRIES_REFRESH_INTERVAL = 30
 
 CLEANUP_SERVER_GRACE_PERIOD_SECONDS = 3600
 
@@ -318,6 +319,8 @@ class DagsterCloudUserCodeLauncher(
         self._grpc_servers: Dict[
             DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
         ] = {}
+        self._first_unavailable_times: Dict[DeploymentAndLocation, float] = {}
+
         self._pending_delete_grpc_server_handles: Set[ServerHandle] = set()
         self._grpc_servers_lock = threading.Lock()
         self._per_location_metrics: Dict[
@@ -387,11 +390,8 @@ class DagsterCloudUserCodeLauncher(
                 "retrieve active agent_ids. Just returning this agent as an active ID."
             )
             return set([self._instance.instance_uuid])
-        if "errors" in result:
-            raise GraphQLStorageError(result["errors"])
-        else:
-            self._logger.info(f"Active agent ids response: {result}")
-            return set(agent_data["id"] for agent_data in result["data"]["agents"])
+        self._logger.info(f"Active agent ids response: {result}")
+        return set(agent_data["id"] for agent_data in result["data"]["agents"])
 
     @property
     def code_server_metrics_enabled(self) -> bool:
@@ -554,14 +554,10 @@ class DagsterCloudUserCodeLauncher(
 
             with open(dst, "rb") as f:
                 self._logger.info(
-                    "Uploading workspace entry for {deployment_name}:{location_name} ({size} bytes)".format(
-                        deployment_name=deployment_name,
-                        location_name=workspace_entry.location_name,
-                        size=os.path.getsize(dst),
-                    )
+                    f"Uploading workspace entry for {deployment_name}:{workspace_entry.location_name} ({os.path.getsize(dst)} bytes)"
                 )
 
-                resp = self._instance.rest_requests_session.put(
+                resp = self._instance.requests_managed_retries_session.put(
                     self._instance.dagster_cloud_upload_workspace_entry_url,
                     headers=self._instance.headers_for_deployment(deployment_name),
                     data={},
@@ -602,7 +598,7 @@ class DagsterCloudUserCodeLauncher(
                 _ = [f.result() for f in futures]
 
             with open(dst, "rb") as f:
-                resp = self._instance.rest_requests_session.put(
+                resp = self._instance.requests_managed_retries_session.put(
                     self._instance.dagster_cloud_upload_workspace_entry_url,
                     headers=self._instance.headers_for_deployment(deployment_name),
                     data={},
@@ -645,7 +641,7 @@ class DagsterCloudUserCodeLauncher(
         ) in list_repositories_response.repository_code_pointer_dict.items():
             external_repository_chunks = list(
                 client.streaming_external_repository(
-                    external_repository_origin=ExternalRepositoryOrigin(
+                    external_repository_origin=RemoteRepositoryOrigin(
                         location_origin,
                         repository_name,
                     ),
@@ -686,12 +682,8 @@ class DagsterCloudUserCodeLauncher(
         metadata: CodeDeploymentMetadata,
     ):
         self._logger.error(
-            "Unable to update {deployment_name}:{location_name}. Updating location with error data:"
-            " {error_info}.".format(
-                deployment_name=deployment_name,
-                location_name=location_name,
-                error_info=str(error_info),
-            )
+            f"Unable to update {deployment_name}:{location_name}. Updating location with error data:"
+            f" {error_info!s}."
         )
 
         # Update serialized error
@@ -1086,9 +1078,7 @@ class DagsterCloudUserCodeLauncher(
                 self.reconcile()
             except Exception:
                 self._logger.error(
-                    "Failure updating user code servers: {exc_info}".format(
-                        exc_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                    )
+                    f"Failure updating user code servers: {serializable_error_info_from_exc_info(sys.exc_info())}"
                 )
 
     def reconcile(self) -> None:
@@ -1103,15 +1093,14 @@ class DagsterCloudUserCodeLauncher(
             # Wait for the first time the desired metadata is set before reconciling
             return
 
-        if (
-            time.time() - self._last_refreshed_actual_entries
-            > MULTIPEX_ACTUAL_ENTRIES_REFRESH_INTERVAL
-        ):
+        now = pendulum.now("UTC").timestamp()
+
+        if now - self._last_refreshed_actual_entries > ACTUAL_ENTRIES_REFRESH_INTERVAL:
             try:
                 self._refresh_actual_entries()
             except:
                 self._logger.exception("Failed to refresh actual entries.")
-            self._last_refreshed_actual_entries = time.time()
+            self._last_refreshed_actual_entries = now
 
         self._reconcile(
             desired_entries,
@@ -1145,15 +1134,17 @@ class DagsterCloudUserCodeLauncher(
                 )
             except Exception:
                 self._logger.error(
-                    "Failure updating user code server metrics: {exc_info}".format(
-                        exc_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                    )
+                    f"Failure updating user code server metrics: {serializable_error_info_from_exc_info(sys.exc_info())}"
                 )
 
     @property
     def ready_to_serve_requests(self) -> bool:
         # thread-safe since reconcile_count is an integer
         return self._reconcile_count > 0
+
+    def _make_check_on_running_server_endpoint(self, server_endpoint: ServerEndpoint):
+        # Ensure that server_endpoint is bound correctly
+        return lambda: server_endpoint.create_client().ping("")
 
     def _refresh_actual_entries(self) -> None:
         for deployment_location, server in self._multipex_servers.items():
@@ -1168,7 +1159,7 @@ class DagsterCloudUserCodeLauncher(
                     # If it isn't, this is expected if ECS is currently spinning up this service
                     # after it crashed. In this case, we want to wait for it to fully come up
                     # before we remove actual entries. This ensures the recon loop uses the ECS
-                    # replacement multiplex server and not try to spin up a new multipex server.
+                    # replacement multipex server and not try to spin up a new multipex server.
                     self._logger.info(
                         "Multipex server entry exists but server is not running. "
                         "Will wait for server to come up."
@@ -1177,12 +1168,89 @@ class DagsterCloudUserCodeLauncher(
                 deployment_name, location_name = deployment_location
                 if not self._get_existing_pex_servers(deployment_name, location_name):
                     self._logger.warning(
-                        "Pex servers disappeared for %s, %s. Removing actual entries to"
+                        "Pex servers disappeared for %s:%s. Removing actual entries to"
                         " activate reconciliation logic.",
                         deployment_name,
                         location_name,
                     )
                     del self._actual_entries[deployment_location]
+
+        # Check to see if any servers have become unresponsive
+        unavailable_server_timeout = int(
+            os.getenv(
+                "DAGSTER_CLOUD_CODE_SERVER_HEALTH_CHECK_REDEPLOY_TIMEOUT",
+                str(self._server_process_startup_timeout),
+            )
+        )
+
+        if unavailable_server_timeout < 0:
+            return
+
+        running_locations = {
+            deployment_location: endpoint_or_error
+            for deployment_location, endpoint_or_error in self.get_grpc_endpoints().items()
+            if (
+                isinstance(endpoint_or_error, ServerEndpoint)
+                and deployment_location in self._actual_entries
+            )
+        }
+
+        if not running_locations:
+            return
+
+        with ThreadPoolExecutor(
+            max_workers=max(
+                len(running_locations),
+                int(os.getenv("DAGSTER_CLOUD_CODE_SERVER_HEALTH_CHECK_MAX_WORKERS", "8")),
+            ),
+            thread_name_prefix="dagster_cloud_agent_server_health_check",
+        ) as executor:
+            futures = {}
+            for deployment_location, endpoint_or_error in running_locations.items():
+                deployment_name, location_name = deployment_location
+
+                futures[
+                    executor.submit(self._make_check_on_running_server_endpoint(endpoint_or_error))
+                ] = deployment_location
+
+            for future in as_completed(futures):
+                deployment_location = futures[future]
+
+                deployment_name, location_name = deployment_location
+                try:
+                    future.result()
+
+                    # Successful ping resets the tracked last unavailable time for this code server, if set
+                    self._first_unavailable_times.pop(deployment_location, None)
+                except Exception as e:
+                    if (
+                        isinstance(e, DagsterUserCodeUnreachableError)
+                        and isinstance(e.__cause__, grpc.RpcError)
+                        and cast(grpc.RpcError, e.__cause__).code() == grpc.StatusCode.UNAVAILABLE
+                    ):
+                        first_unavailable_time = self._first_unavailable_times.get(
+                            deployment_location
+                        )
+
+                        now = pendulum.now("UTC").timestamp()
+
+                        if not first_unavailable_time:
+                            self._logger.warning(
+                                f"Code server for {deployment_name}:{location_name} failed a health check. If it continues failing for more than {unavailable_server_timeout} seconds, a replacement code server will be deployed."
+                            )
+                            # Initialize the first unavailable time if set
+                            self._first_unavailable_times[deployment_location] = now
+                        elif now > first_unavailable_time + unavailable_server_timeout:
+                            self._logger.warning(
+                                f"Code server for {deployment_name}:{location_name} has been unresponsive for more than {unavailable_server_timeout} seconds. Deploying a new code server."
+                            )
+                            del self._actual_entries[deployment_location]
+                            del self._first_unavailable_times[deployment_location]
+                    else:
+                        self._logger.exception(
+                            f"Code server for {deployment_name}:{location_name} health check failed, but the error did not indicate that the server was unavailable."
+                        )
+                        self._first_unavailable_times.pop(deployment_location, None)
 
     def _write_liveness_sentinel(self) -> None:
         """Write a sentinel file to indicate that the agent is alive and grpc servers have been spun up."""
@@ -1376,12 +1444,8 @@ class DagsterCloudUserCodeLauncher(
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
 
                 self._logger.error(
-                    "Error while waiting for multipex server for {deployment_name}:{location_name}:"
-                    " {error_info}".format(
-                        deployment_name=deployment_name,
-                        location_name=location_name,
-                        error_info=error_info,
-                    )
+                    f"Error while waiting for multipex server for {deployment_name}:{location_name}:"
+                    f" {error_info}"
                 )
                 new_dagster_servers[to_update_key] = error_info
                 # Clear out this multipex server so we don't try to use it again
@@ -1454,13 +1518,8 @@ class DagsterCloudUserCodeLauncher(
                 except Exception:
                     error_info = serializable_error_info_from_exc_info(sys.exc_info())
                     self._logger.error(
-                        "Error while waiting for server for {deployment_name}:{location_name} for {deployment_info} to be"
-                        " ready: {error_info}".format(
-                            deployment_name=deployment_name,
-                            location_name=location_name,
-                            error_info=error_info,
-                            deployment_info=deployment_info,
-                        )
+                        f"Error while waiting for server for {deployment_name}:{location_name} for {deployment_info} to be"
+                        f" ready: {error_info}"
                     )
                     server_or_error = error_info
 
@@ -1487,6 +1546,7 @@ class DagsterCloudUserCodeLauncher(
             # the server to start serving new requests
             with self._grpc_servers_lock:
                 self._grpc_servers[to_update_key] = server_or_error
+                self._first_unavailable_times.pop(to_update_key, None)
 
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
@@ -1498,11 +1558,7 @@ class DagsterCloudUserCodeLauncher(
             if server_handles:
                 removed_any_servers = True
                 self._logger.info(
-                    "Removing {num_servers} existing servers for {deployment_name}:{location_name}".format(
-                        num_servers=len(server_handles),
-                        location_name=location_name,
-                        deployment_name=deployment_name,
-                    )
+                    f"Removing {len(server_handles)} existing servers for {deployment_name}:{location_name}"
                 )
 
             for server_handle in server_handles:
@@ -1511,11 +1567,7 @@ class DagsterCloudUserCodeLauncher(
                 except Exception:
                     self._logger.error(
                         "Error while cleaning up after updating server for"
-                        " {deployment_name}:{location_name}: {error_info}".format(
-                            deployment_name=deployment_name,
-                            location_name=location_name,
-                            error_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                        )
+                        f" {deployment_name}:{location_name}: {serializable_error_info_from_exc_info(sys.exc_info())}"
                     )
 
             # Remove any existing multipex servers other than the current one for each location
@@ -1545,11 +1597,7 @@ class DagsterCloudUserCodeLauncher(
                     except Exception:
                         self._logger.error(
                             "Error while cleaning up old multipex server for"
-                            " {deployment_name}:{location_name}: {error_info}".format(
-                                deployment_name=deployment_name,
-                                location_name=location_name,
-                                error_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                            )
+                            f" {deployment_name}:{location_name}: {serializable_error_info_from_exc_info(sys.exc_info())}"
                         )
 
             # On the current multipex server, shut down any old pex servers
@@ -1572,11 +1620,7 @@ class DagsterCloudUserCodeLauncher(
                     except Exception:
                         self._logger.error(
                             "Error while cleaning up after updating server for"
-                            " {deployment_name}:{location_name}: {error_info}".format(
-                                deployment_name=deployment_name,
-                                location_name=location_name,
-                                error_info=serializable_error_info_from_exc_info(sys.exc_info()),
-                            )
+                            f" {deployment_name}:{location_name}: {serializable_error_info_from_exc_info(sys.exc_info())}"
                         )
 
             if removed_any_servers:
@@ -1835,7 +1879,7 @@ class DagsterCloudUserCodeLauncher(
         client: DagsterGrpcClient,
         timeout,
         additional_check: Optional[Callable[[], None]] = None,
-        get_timeout_debug_info: Optional[Callable[[], None]] = None,
+        get_timeout_debug_info: Optional[Callable[[], Any]] = None,
     ) -> None:
         self._wait_for_server_process(
             client, timeout, additional_check, get_timeout_debug_info=get_timeout_debug_info
@@ -1898,7 +1942,7 @@ class DagsterCloudUserCodeLauncher(
             client = server.server_endpoint.create_client()
             location_origin = self._get_code_location_origin(job_selector.location_name)
             response = client.external_job(
-                ExternalRepositoryOrigin(location_origin, job_selector.repository_name),
+                RemoteRepositoryOrigin(location_origin, job_selector.repository_name),
                 job_selector.job_name,
             )
             if not response.serialized_job_data:
@@ -1914,7 +1958,7 @@ class DagsterCloudUserCodeLauncher(
                 f.write(zlib.compress(response.serialized_job_data.encode("utf-8")))
 
             with open(dst, "rb") as f:
-                resp = self._instance.rest_requests_session.put(
+                resp = self._instance.requests_managed_retries_session.put(
                     self._instance.dagster_cloud_upload_job_snap_url,
                     headers=self._instance.headers_for_deployment(deployment_name),
                     data={},

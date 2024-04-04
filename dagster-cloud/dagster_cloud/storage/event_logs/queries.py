@@ -353,7 +353,17 @@ STORE_EVENT_MUTATION = """
             }
         }
     }
-    """
+"""
+
+STORE_EVENT_BATCH_MUTATION = """
+    mutation StoreEventBatch($eventRecords: [EventLogEntryInput!]!) {
+        eventLogs {
+            StoreEventBatch(eventRecords: $eventRecords) {
+                ok
+            }
+        }
+    }
+"""
 
 DELETE_EVENTS_MUTATION = """
     mutation DeleteEvents($runId: String!) {

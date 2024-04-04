@@ -2,7 +2,7 @@ import hashlib
 import re
 from typing import Optional
 
-from dagster._core.remote_representation.origin import ExternalJobOrigin
+from dagster._core.remote_representation.origin import RemoteJobOrigin
 from dagster_aws.ecs.utils import sanitize_family
 
 from ..user_code_launcher.utils import get_human_readable_label, unique_resource_name
@@ -55,14 +55,14 @@ def get_server_task_definition_family(
 def get_run_task_definition_family(
     organization_name: Optional[str],
     deployment_name: str,
-    job_origin: ExternalJobOrigin,
+    job_origin: RemoteJobOrigin,
 ) -> str:
     # Truncate the location name if it's too long (but add a unique suffix at the end so that no matter what it's unique)
     # Relies on the fact that org name and deployment name are always <= 64 characters long to
     # stay well underneath the 255 character limit imposed by ECS
     job_name = job_origin.job_name
-    repo_name = job_origin.external_repository_origin.repository_name
-    location_name = job_origin.external_repository_origin.code_location_origin.location_name
+    repo_name = job_origin.repository_origin.repository_name
+    location_name = job_origin.repository_origin.code_location_origin.location_name
 
     assert len(str(organization_name)) <= 64
     assert len(deployment_name) <= 64

@@ -21,7 +21,6 @@ from dagster._serdes import (
     deserialize_value,
     serialize_value,
 )
-from dagster_cloud_cli.core.errors import GraphQLStorageError
 from typing_extensions import Self
 
 from .queries import (
@@ -67,10 +66,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         )
 
     def _execute_query(self, query, variables=None):
-        res = self._graphql_client.execute(query, variable_values=variables)
-        if "errors" in res:
-            raise GraphQLStorageError(res)
-        return res
+        return self._graphql_client.execute(query, variable_values=variables)
 
     def wipe(self):
         raise Exception("Not allowed to wipe from user cloud")

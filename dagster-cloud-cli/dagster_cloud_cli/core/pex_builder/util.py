@@ -45,10 +45,13 @@ def get_pex_flags(python_version: version.Version, build_sdists: bool = True) ->
     # available for a dependency, then the build will fail.
     # see also https://linear.app/elementl/issue/CLOUD-2023/pex-builds-fail-for-dbt-core-dependency
     resolve_local = ["--resolve-local-platforms"] if build_sdists else []
+    # This is mainly useful in local mac test environments
+    include_current = ["--platform=current"] if os.getenv("PEX_INCLUDE_CURRENT_PLATFORM") else []
     return [
         # this platform matches what can run on our serverless base images
         # the version tag is a major/minor string like "38"
         f"--platform=manylinux2014_x86_64-cp-{version_tag}-cp{version_tag}",
+        *include_current,
         # this ensures PEX_PATH is not cleared and any subprocess invoked can also use this.
         # this is important for running console scripts that use the pex environment (eg dbt)
         "--no-strip-pex-env",
@@ -80,7 +83,7 @@ def build_pex(
     https://peps.python.org/pep-0425/
     https://peps.python.org/pep-0427/
 
-    Packages for the current platform are always included. (--platform=current)
+    Packages for the current platform are only included if requested with PEX_INCLUDE_CURRENT_PLATFORM
     The manylinux platform ensures pexes built on local machines (macos, windows) are compatible
     with linux on cloud.
 

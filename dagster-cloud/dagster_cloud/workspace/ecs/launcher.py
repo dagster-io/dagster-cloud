@@ -82,6 +82,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         run_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
         server_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
         run_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
+        server_health_check: Optional[Mapping[str, Any]] = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -141,6 +142,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         self.server_ecs_tags = check.opt_sequence_param(server_ecs_tags, "server_ecs_tags")
         self.run_ecs_tags = check.opt_sequence_param(run_ecs_tags, "run_ecs_tags")
+
+        self.server_health_check = check.opt_mapping_param(
+            server_health_check, "server_health_check"
+        )
 
         self.client = Client(
             cluster_name=self.cluster,
@@ -387,6 +392,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             run_sidecar_containers=self.run_sidecar_containers,
             server_ecs_tags=self.server_ecs_tags,
             run_ecs_tags=self.run_ecs_tags,
+            server_health_check=self.server_health_check,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         # disallow multiple replicas for code locations acting as pex servers
@@ -457,11 +463,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             runtime_platform=container_context.runtime_platform,
             mount_points=container_context.mount_points,
             volumes=container_context.volumes,
+            health_check=container_context.server_health_check,
         )
         self._logger.info(
-            "Created a new service at hostname {} for {}:{}, waiting for server to be ready...".format(
-                service.hostname, deployment_name, location_name
-            )
+            f"Created a new service at hostname {service.hostname} for {deployment_name}:{location_name}, waiting for server to be ready..."
         )
 
         endpoint = ServerEndpoint(

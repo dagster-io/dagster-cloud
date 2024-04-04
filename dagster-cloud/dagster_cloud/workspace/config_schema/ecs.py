@@ -120,6 +120,11 @@ SHARED_ECS_CONFIG = {
         is_required=False,
         description="Additional tags to apply to the launched ECS task for a code server.",
     ),
+    "server_health_check": Field(
+        Permissive(),
+        is_required=False,
+        description="Health check to include in code server task definitions.",
+    ),
 }
 
 

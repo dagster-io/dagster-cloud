@@ -15,8 +15,6 @@ query Secrets($locationName: String) {
 }
 """
 
-from dagster_cloud_cli.core.errors import GraphQLStorageError
-
 
 class DagsterCloudSecretsLoader(SecretsLoader, ConfigurableClass):
     def __init__(
@@ -26,10 +24,7 @@ class DagsterCloudSecretsLoader(SecretsLoader, ConfigurableClass):
         self._inst_data = inst_data
 
     def _execute_query(self, query, variables=None):
-        res = self._instance.graphql_client.execute(query, variable_values=variables)
-        if "errors" in res:
-            raise GraphQLStorageError(res)
-        return res
+        return self._instance.graphql_client.execute(query, variable_values=variables)
 
     def get_secrets_for_environment(self, location_name: Optional[str]) -> Dict[str, str]:
         res = self._execute_query(

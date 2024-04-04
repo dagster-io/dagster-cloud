@@ -7,6 +7,7 @@ import dagster._check as check
 import pendulum
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
+from dagster._core.events.log import EventLogEntry
 from dagster._core.remote_representation import (
     CodeLocationOrigin,
     ExternalRepositoryData,
@@ -400,6 +401,14 @@ DagsterCloudApiResponseTypesTuple = (
     DagsterCloudApiErrorResponse,
     DagsterCloudApiUnknownCommandResponse,
 )
+
+
+@whitelist_for_serdes
+class StoreEventBatchRequest(
+    NamedTuple("_StoreEventBatchRequest", [("event_log_entries", Sequence[EventLogEntry])])
+):
+    def __new__(cls, event_log_entries: Sequence[EventLogEntry]):
+        return super().__new__(cls, event_log_entries=event_log_entries)
 
 
 @whitelist_for_serdes

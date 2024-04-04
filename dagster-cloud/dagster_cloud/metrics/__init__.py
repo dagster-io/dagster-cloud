@@ -64,7 +64,7 @@ def put_context_metrics(
                     "stepKey": context.get_step_execution_context().step.key,
                     "codeLocationName": context.dagster_run.external_job_origin.location_name,
                     "repositoryName": (
-                        context.dagster_run.external_job_origin.external_repository_origin.repository_name
+                        context.dagster_run.external_job_origin.repository_origin.repository_name
                     ),
                     "assetMetricDefinitions": [
                         {
@@ -94,7 +94,7 @@ def put_context_metrics(
                 "stepKey": context.get_step_execution_context().step.key,
                 "codeLocationName": context.dagster_run.external_job_origin.location_name,
                 "repositoryName": (
-                    context.dagster_run.external_job_origin.external_repository_origin.repository_name
+                    context.dagster_run.external_job_origin.repository_origin.repository_name
                 ),
                 "jobMetricDefinitions": [
                     {
@@ -219,7 +219,7 @@ def store_dbt_adapter_metrics(
                 "stepKey": context.get_step_execution_context().step.key,
                 "codeLocationName": context.dagster_run.external_job_origin.location_name,
                 "repositoryName": (
-                    context.dagster_run.external_job_origin.external_repository_origin.repository_name
+                    context.dagster_run.external_job_origin.repository_origin.repository_name
                 ),
                 "assetMetricDefinitions": assetMetricDefinitions,
             }

@@ -1,9 +1,9 @@
 import logging
 import re
 import time
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from email.utils import mktime_tz, parsedate_tz
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional
 
 import dagster._check as check
 import requests
@@ -13,7 +13,11 @@ from requests.exceptions import (
     ReadTimeout as RequestsReadTimeout,
 )
 
-from .errors import DagsterCloudHTTPError, DagsterCloudMaintenanceException, GraphQLStorageError
+from .errors import (
+    DagsterCloudAgentServerError,
+    DagsterCloudHTTPError,
+    DagsterCloudMaintenanceException,
+)
 from .headers.auth import DagsterCloudInstanceScope
 from .headers.impl import get_dagster_cloud_api_headers
 
@@ -25,8 +29,6 @@ logger = logging.getLogger("dagster_cloud")
 
 
 RETRY_STATUS_CODES = [
-    # retry on server errors to recover on transient issue
-    500,
     502,
     503,
     504,
@@ -34,9 +36,177 @@ RETRY_STATUS_CODES = [
 ]
 
 
-class GqlShimClient:
-    """Adapter for gql.Client that wraps errors in human-readable format."""
+class DagsterCloudAgentHttpClient:
+    def __init__(
+        self,
+        session: requests.Session,
+        headers: Optional[Dict[str, Any]] = None,
+        verify: bool = True,
+        timeout: int = DEFAULT_TIMEOUT,
+        cookies: Optional[Dict[str, Any]] = None,
+        proxies: Optional[Dict[str, Any]] = None,
+        max_retries: int = 0,
+        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
+    ):
+        self.headers = headers or {}
+        self.verify = verify
+        self.timeout = timeout
+        self.cookies = cookies
+        self._session = session
+        self._proxies = proxies
+        self._max_retries = max_retries
+        self._backoff_factor = backoff_factor
 
+    @property
+    def session(self) -> requests.Session:
+        return self._session
+
+    def post(self, *args, **kwargs):
+        return self.execute("POST", *args, **kwargs)
+
+    def get(self, *args, **kwargs):
+        return self.execute("GET", *args, **kwargs)
+
+    def put(self, *args, **kwargs):
+        return self.execute("PUT", *args, **kwargs)
+
+    def execute(
+        self,
+        method: str,
+        url: str,
+        headers: Optional[Mapping[str, str]] = None,
+        idempotent: bool = False,
+        **kwargs,
+    ):
+        retry_on_read_timeout = idempotent or bool(
+            headers.get("Idempotency-Key") if headers else False
+        )
+
+        return _retry_loop(
+            lambda: self._execute_retry(method, url, headers, **kwargs),
+            max_retries=self._max_retries,
+            backoff_factor=self._backoff_factor,
+            retry_on_read_timeout=retry_on_read_timeout,
+        )
+
+    def _execute_retry(
+        self,
+        method: str,
+        url: str,
+        headers: Optional[Mapping[str, Any]],
+        **kwargs,
+    ):
+        response = self._session.request(
+            method,
+            url,
+            headers={
+                **(self.headers if self.headers is not None else {}),
+                **(headers if headers is not None else {}),
+            },
+            cookies=self.cookies,
+            timeout=self.timeout,
+            verify=self.verify,
+            proxies=self._proxies,
+            **kwargs,
+        )
+        try:
+            result = response.json()
+            if not isinstance(result, dict):
+                result = {}
+        except ValueError:
+            result = {}
+
+        if "maintenance" in result:
+            maintenance_info = result["maintenance"]
+            raise DagsterCloudMaintenanceException(
+                message=maintenance_info.get("message"),
+                timeout=maintenance_info.get("timeout"),
+                retry_interval=maintenance_info.get("retry_interval"),
+            )
+
+        if "errors" in result:
+            raise DagsterCloudAgentServerError(f"Error in GraphQL response: {result['errors']}")
+
+        response.raise_for_status()
+
+        return result
+
+
+def _retry_loop(
+    execute_retry: Callable,
+    max_retries: int,
+    backoff_factor: float,
+    retry_on_read_timeout: bool,
+):
+    start_time = time.time()
+    retry_number = 0
+    error_msg_set = set()
+    requested_sleep_time = None
+    while True:
+        try:
+            return execute_retry()
+        except (HTTPError, RequestsConnectionError, RequestsReadTimeout) as e:
+            retryable_error = False
+            if isinstance(e, HTTPError):
+                retryable_error = e.response.status_code in RETRY_STATUS_CODES
+                error_msg = e.response.status_code
+                requested_sleep_time = _get_retry_after_sleep_time(e.response.headers)
+            elif isinstance(e, RequestsReadTimeout):
+                retryable_error = retry_on_read_timeout
+                error_msg = str(e)
+            else:
+                retryable_error = True
+                error_msg = str(e)
+
+            error_msg_set.add(error_msg)
+            if retryable_error and retry_number < max_retries:
+                retry_number += 1
+                sleep_time = 0
+                if requested_sleep_time:
+                    sleep_time = requested_sleep_time
+                elif retry_number > 1:
+                    sleep_time = backoff_factor * (2 ** (retry_number - 1))
+
+                if sleep_time > 0:
+                    logger.warning(
+                        f"Error in Dagster Cloud request ({error_msg}). Retrying in"
+                        f" {sleep_time} seconds..."
+                    )
+                    time.sleep(sleep_time)
+                else:
+                    logger.warning(f"Error in Dagster Cloud request ({error_msg}). Retrying now.")
+            else:
+                # Throw the error straight if no retries were involved
+                if max_retries == 0 or not retryable_error:
+                    if isinstance(e, HTTPError):
+                        raise DagsterCloudHTTPError(e) from e
+                    else:
+                        raise
+                else:
+                    if len(error_msg_set) == 1:
+                        status_code_msg = str(next(iter(error_msg_set)))
+                    else:
+                        status_code_msg = str(error_msg_set)
+                    raise DagsterCloudAgentServerError(
+                        f"Max retries ({max_retries}) exceeded, too many"
+                        f" {status_code_msg} error responses."
+                    ) from e
+        except DagsterCloudMaintenanceException as e:
+            if time.time() - start_time > e.timeout:
+                raise
+
+            logger.warning(
+                "Dagster Cloud is currently unavailable due to scheduled maintenance. Retrying"
+                f" in {e.retry_interval} seconds..."
+            )
+            time.sleep(e.retry_interval)
+        except DagsterCloudAgentServerError:
+            raise
+        except Exception as e:
+            raise DagsterCloudAgentServerError(str(e)) from e
+
+
+class DagsterCloudGraphQLClient:
     def __init__(
         self,
         url: str,
@@ -49,8 +219,6 @@ class GqlShimClient:
         max_retries: int = 0,
         backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
     ):
-        self._exit_stack = ExitStack()
-
         self.url = url
         self.headers = headers
         self.verify = verify
@@ -72,81 +240,20 @@ class GqlShimClient:
         headers: Optional[Mapping[str, str]] = None,
         idempotent_mutation: bool = False,
     ):
-        start_time = time.time()
-        retry_number = 0
-        error_msg_set = set()
-        requested_sleep_time = None
-        while True:
-            try:
-                return self._execute_retry(query, variable_values, headers)
-            except (HTTPError, RequestsConnectionError, RequestsReadTimeout) as e:
-                retryable_error = False
-                if isinstance(e, HTTPError):
-                    retryable_error = e.response.status_code in RETRY_STATUS_CODES
-                    error_msg = e.response.status_code
-                    requested_sleep_time = _get_retry_after_sleep_time(e.response.headers)
-                elif isinstance(e, RequestsReadTimeout):
-                    # "mutation " must appear in the document if its a mutation
-                    if "mutation " in query and not idempotent_mutation:
-                        # mutations can be made idempotent if they use Idempotency-Key header
-                        retryable_error = (
-                            bool(headers.get("Idempotency-Key")) if headers is not None else False
-                        )
-                    # otherwise assume its a query that is naturally idempotent
-                    else:
-                        retryable_error = True
+        if "mutation " in query and not idempotent_mutation:
+            # mutations can be made idempotent if they use Idempotency-Key header
+            retry_on_read_timeout = (
+                bool(headers.get("Idempotency-Key")) if headers is not None else False
+            )
+        else:
+            retry_on_read_timeout = True
 
-                    error_msg = str(e)
-                else:
-                    retryable_error = True
-                    error_msg = str(e)
-
-                error_msg_set.add(error_msg)
-                if retryable_error and retry_number < self._max_retries:
-                    retry_number += 1
-                    sleep_time = 0
-                    if requested_sleep_time:
-                        sleep_time = requested_sleep_time
-                    elif retry_number > 1:
-                        sleep_time = self._backoff_factor * (2 ** (retry_number - 1))
-
-                    if sleep_time > 0:
-                        logger.warning(
-                            f"Error in Dagster Cloud request ({error_msg}). Retrying in"
-                            f" {sleep_time} seconds..."
-                        )
-                        time.sleep(sleep_time)
-                    else:
-                        logger.warning(
-                            f"Error in Dagster Cloud request ({error_msg}). Retrying now."
-                        )
-                else:
-                    # Throw the error straight if no retries were involved
-                    if self._max_retries == 0 or not retryable_error:
-                        if isinstance(e, HTTPError):
-                            raise DagsterCloudHTTPError(e) from e
-                        else:
-                            raise GraphQLStorageError(str(e)) from e
-                    else:
-                        if len(error_msg_set) == 1:
-                            status_code_msg = str(next(iter(error_msg_set)))
-                        else:
-                            status_code_msg = str(error_msg_set)
-                        raise GraphQLStorageError(
-                            f"Max retries ({self._max_retries}) exceeded, too many"
-                            f" {status_code_msg} error responses."
-                        ) from e
-            except DagsterCloudMaintenanceException as e:
-                if time.time() - start_time > e.timeout:
-                    raise
-
-                logger.warning(
-                    "Dagster Cloud is currently unavailable due to scheduled maintenance. Retrying"
-                    f" in {e.retry_interval} seconds..."
-                )
-                time.sleep(e.retry_interval)
-            except Exception as e:
-                raise GraphQLStorageError(str(e)) from e
+        return _retry_loop(
+            lambda: self._execute_retry(query, variable_values, headers),
+            max_retries=self._max_retries,
+            backoff_factor=self._backoff_factor,
+            retry_on_read_timeout=retry_on_read_timeout,
+        )
 
     def _execute_retry(
         self,
@@ -190,9 +297,9 @@ class GqlShimClient:
             )
 
         if "errors" in result:
-            raise GraphQLStorageError(f"Error in GraphQL response: {result['errors']}")
-        else:
-            return result
+            raise DagsterCloudAgentServerError(f"Error in GraphQL response: {result['errors']}")
+
+        return result
 
 
 def get_agent_headers(config_value: Dict[str, Any], scope: DagsterCloudInstanceScope):
@@ -210,13 +317,33 @@ def create_graphql_requests_session():
         yield session
 
 
-def create_proxy_client(
+def create_agent_http_client(
+    session: requests.Session,
+    config_value: Dict[str, Any],
+    scope: DagsterCloudInstanceScope = DagsterCloudInstanceScope.DEPLOYMENT,
+):
+    return DagsterCloudAgentHttpClient(
+        headers=get_agent_headers(config_value, scope=scope),
+        verify=config_value.get("verify", True),
+        timeout=config_value.get("timeout", DEFAULT_TIMEOUT),
+        cookies=config_value.get("cookies", {}),
+        # Requests library modifies proxies dictionary so create a copy
+        proxies=(
+            check.is_dict(config_value.get("proxies")).copy() if config_value.get("proxies") else {}
+        ),
+        session=session,
+        max_retries=config_value.get("retries", DEFAULT_RETRIES),
+        backoff_factor=config_value.get("backoff_factor", DEFAULT_BACKOFF_FACTOR),
+    )
+
+
+def create_agent_graphql_client(
     session: requests.Session,
     url: str,
     config_value: Dict[str, Any],
     scope: DagsterCloudInstanceScope = DagsterCloudInstanceScope.DEPLOYMENT,
 ):
-    return GqlShimClient(
+    return DagsterCloudGraphQLClient(
         url=url,
         headers=get_agent_headers(config_value, scope=scope),
         verify=config_value.get("verify", True),
@@ -254,7 +381,7 @@ def _get_retry_after_sleep_time(headers):
 @contextmanager
 def create_cloud_webserver_client(url: str, api_token: str, retries=3):
     with create_graphql_requests_session() as session:
-        yield GqlShimClient(
+        yield DagsterCloudGraphQLClient(
             session=session,
             url=f"{url}/graphql",
             headers=get_dagster_cloud_api_headers(

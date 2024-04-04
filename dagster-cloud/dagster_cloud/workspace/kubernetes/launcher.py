@@ -430,10 +430,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     ),
                 )
             self._logger.info(
-                "Created deployment {} in namespace {}".format(
-                    deployment_reponse.metadata.name,
-                    container_context.namespace,
-                )
+                f"Created deployment {deployment_reponse.metadata.name} in namespace {container_context.namespace}"
             )
         except ApiException as e:
             self._logger.error(
@@ -635,9 +632,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     raise
 
         self._logger.info(
-            "Removed deployment and service {} in namespace {}".format(
-                server_handle.name, server_handle.namespace
-            )
+            f"Removed deployment and service {server_handle.name} in namespace {server_handle.namespace}"
         )
 
     def __exit__(self, exception_type, exception_value, traceback):

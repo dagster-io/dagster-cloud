@@ -1,6 +1,6 @@
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import dagster._check as check
 import yaml
@@ -15,7 +15,7 @@ from dagster_cloud_cli.config_utils import (
     dagster_cloud_options,
     get_location_document,
 )
-from dagster_cloud_cli.core.graphql_client import GqlShimClient
+from dagster_cloud_cli.core.graphql_client import DagsterCloudGraphQLClient
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 from dagster_cloud_cli.utils import add_options
 
@@ -44,7 +44,7 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
 
 
 def _add_or_update_location(
-    client: GqlShimClient,
+    client: DagsterCloudGraphQLClient,
     location_document: Dict[str, Any],
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
@@ -120,6 +120,24 @@ def update_command(
         )
 
 
+def _format_error(load_error: Mapping[str, Any]):
+    result = [
+        load_error["message"],
+        "".join(load_error["stack"]),
+    ]
+
+    for chain_link in load_error["errorChain"]:
+        result.append(
+            "The above exception was caused by the following exception:"
+            if chain_link["isExplicitLink"]
+            else "The above exception occurred during handling of the following exception:"
+        )
+
+        result.extend([chain_link["error"]["message"], "".join(chain_link["error"]["stack"])])
+
+    return "\n".join(result)
+
+
 def wait_for_load(
     client,
     locations,
@@ -179,8 +197,8 @@ def wait_for_load(
                     "Some locations failed to load after being synced by the agent:\n"
                     + "\n".join(
                         [
-                            f"Error loading {error_location}:"
-                            f" {nodes_by_location[error_location]['locationOrLoadError']}"
+                            f"Error loading {error_location}:\n"
+                            f"{_format_error(nodes_by_location[error_location]['locationOrLoadError'])}"
                             for error_location in error_locations
                         ]
                     )

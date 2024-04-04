@@ -2,9 +2,12 @@ from pathlib import Path
 
 import yaml
 from typer import Argument, Typer
+from typing_extensions import Annotated
 
 from ... import gql, ui
 from ...config_utils import dagster_cloud_options
+from ...core.artifacts import download_artifact, upload_artifact
+from ...core.headers.auth import DagsterCloudInstanceScope
 from .saml import commands as saml_cli
 
 app = Typer(help="Customize your Dagster Cloud organization.")
@@ -61,3 +64,71 @@ def get_command(
     with gql.graphql_client_from_url(url, api_token) as client:
         settings = gql.get_organization_settings(client)
         ui.print_yaml(settings)
+
+
+@app.command(name="upload-artifact")
+@dagster_cloud_options(allow_empty=True, requires_url=True)
+def upload_artifact_command(
+    key: Annotated[
+        str,
+        Argument(
+            help="The key for the artifact being uploaded.",
+        ),
+    ],
+    path: Annotated[
+        str,
+        Argument(
+            help="The path to the file to upload.",
+        ),
+    ],
+    organization: str,
+    api_token: str,
+    url: str,
+):
+    """Upload a organization scoped artifact."""
+    if not url and not organization:
+        raise ui.error("Must provide either organization name or URL.")
+    if not url:
+        url = gql.url_from_config(organization=organization)
+
+    upload_artifact(
+        url=url,
+        scope=DagsterCloudInstanceScope.ORGANIZATION,
+        api_token=api_token,
+        key=key,
+        path=path,
+    )
+
+
+@app.command(name="download-artifact")
+@dagster_cloud_options(allow_empty=True, requires_url=True)
+def download_artifact_command(
+    key: Annotated[
+        str,
+        Argument(
+            help="The key for the artifact to download.",
+        ),
+    ],
+    path: Annotated[
+        str,
+        Argument(
+            help="Path to the file that the contents should be written to.",
+        ),
+    ],
+    organization: str,
+    api_token: str,
+    url: str,
+):
+    """Download a organization scoped artifact."""
+    if not url and not organization:
+        raise ui.error("Must provide either organization name or URL.")
+    if not url:
+        url = gql.url_from_config(organization=organization)
+
+    download_artifact(
+        url=url,
+        scope=DagsterCloudInstanceScope.ORGANIZATION,
+        api_token=api_token,
+        key=key,
+        path=path,
+    )

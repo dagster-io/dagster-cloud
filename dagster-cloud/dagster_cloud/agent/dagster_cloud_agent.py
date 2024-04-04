@@ -1,9 +1,7 @@
 import logging
 import os
 import sys
-import tempfile
 import time
-import zlib
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
@@ -31,7 +29,7 @@ from dagster._utils.error import SerializableErrorInfo, serializable_error_info_
 from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
-from dagster_cloud_cli.core.errors import GraphQLStorageError, raise_http_error
+from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
 
 from dagster_cloud.api.dagster_cloud_api import (
@@ -54,7 +52,7 @@ from dagster_cloud.workspace.user_code_launcher import (
     UserCodeLauncherEntry,
 )
 
-from ..util import SERVER_HANDLE_TAG, is_isolated_run
+from ..util import SERVER_HANDLE_TAG, compressed_namedtuple_upload_file, is_isolated_run
 from ..version import __version__
 from .queries import (
     ADD_AGENT_HEARTBEATS_MUTATION,
@@ -268,9 +266,7 @@ class DagsterCloudAgent:
                     self._check_add_heartbeat(instance, agent_uuid, heartbeat_interval_seconds)
                 except Exception:
                     self._logger.error(
-                        "Failed to add heartbeat: \n{}".format(
-                            serializable_error_info_from_exc_info(sys.exc_info())
-                        )
+                        f"Failed to add heartbeat: \n{serializable_error_info_from_exc_info(sys.exc_info())}"
                     )
 
             # Check for any received interrupts
@@ -282,9 +278,7 @@ class DagsterCloudAgent:
 
             except Exception:
                 self._logger.error(
-                    "Failed to check for workspace updates: \n{}".format(
-                        serializable_error_info_from_exc_info(sys.exc_info())
-                    )
+                    f"Failed to check for workspace updates: \n{serializable_error_info_from_exc_info(sys.exc_info())}"
                 )
 
             # Check for any received interrupts
@@ -374,16 +368,13 @@ class DagsterCloudAgent:
 
         self._last_heartbeat_time = curr_time
 
-        res = instance.organization_scoped_graphql_client().execute(
+        instance.organization_scoped_graphql_client().execute(
             ADD_AGENT_HEARTBEATS_MUTATION,
             variable_values={
                 "serializedAgentHeartbeats": serialized_agent_heartbeats,
             },
             idempotent_mutation=True,
         )
-
-        if "errors" in res:
-            raise GraphQLStorageError(res)
 
     @property
     def executor(self) -> ThreadPoolExecutor:
@@ -620,7 +611,7 @@ class DagsterCloudAgent:
             DagsterCloudApi.GET_SUBSET_EXTERNAL_PIPELINE_RESULT,
         }:
             external_pipeline_origin = request.request_args.job_origin
-            return external_pipeline_origin.external_repository_origin.code_location_origin
+            return external_pipeline_origin.repository_origin.code_location_origin
         elif api_name in {
             DagsterCloudApi.GET_EXTERNAL_PARTITION_CONFIG,
             DagsterCloudApi.GET_EXTERNAL_PARTITION_TAGS,
@@ -787,7 +778,7 @@ class DagsterCloudAgent:
 
                     run_location_name = cast(
                         str,
-                        run.external_job_origin.external_repository_origin.code_location_origin.location_name,
+                        run.external_job_origin.repository_origin.code_location_origin.location_name,
                     )
 
                     server = user_code_launcher.get_grpc_server(deployment_name, run_location_name)
@@ -831,7 +822,7 @@ class DagsterCloudAgent:
                     else:
                         run_location_name = cast(
                             str,
-                            run.external_job_origin.external_repository_origin.code_location_origin.location_name,
+                            run.external_job_origin.repository_origin.code_location_origin.location_name,
                         )
 
                         server = user_code_launcher.get_grpc_server(
@@ -872,8 +863,8 @@ class DagsterCloudAgent:
         if request_api not in DagsterCloudApi.__members__:
             api_result = DagsterCloudApiUnknownCommandResponse(request_api)
             self._logger.warning(
-                "Ignoring request {request}: Unknown command. This is likely due to running an "
-                "older version of the agent.".format(request=json_request)
+                f"Ignoring request {json_request}: Unknown command. This is likely due to running an "
+                "older version of the agent."
             )
         else:
             try:
@@ -956,11 +947,8 @@ class DagsterCloudAgent:
 
         else:
             self._logger.warning(
-                "Iteration #{iteration}: Waiting to pull requests from the queue since there are"
-                " already {num_pending_requests} in the queue".format(
-                    iteration=self._iteration,
-                    num_pending_requests=len(self._pending_requests),
-                )
+                f"Iteration #{self._iteration}: Waiting to pull requests from the queue since there are"
+                f" already {len(self._pending_requests)} in the queue"
             )
 
         invalid_requests = []
@@ -1045,17 +1033,12 @@ def upload_api_response(
     deployment_name: str,
     upload_response: DagsterCloudUploadApiResponse,
 ):
-    with tempfile.TemporaryDirectory() as temp_dir:
-        dst = os.path.join(temp_dir, "api_response.tmp")
-        with open(dst, "wb") as f:
-            f.write(zlib.compress(serialize_value(upload_response).encode("utf-8")))
-
-        with open(dst, "rb") as f:
-            resp = instance.rest_requests_session.put(
-                instance.dagster_cloud_upload_api_response_url,
-                headers=instance.headers_for_deployment(deployment_name),
-                files={"api_response.tmp": f},
-                timeout=instance.dagster_cloud_api_timeout,
-                proxies=instance.dagster_cloud_api_proxies,
-            )
-            raise_http_error(resp)
+    with compressed_namedtuple_upload_file(upload_response) as f:
+        resp = instance.requests_managed_retries_session.put(
+            instance.dagster_cloud_upload_api_response_url,
+            headers=instance.headers_for_deployment(deployment_name),
+            files={"api_response.tmp": f},
+            timeout=instance.dagster_cloud_api_timeout,
+            proxies=instance.dagster_cloud_api_proxies,
+        )
+        raise_http_error(resp)
