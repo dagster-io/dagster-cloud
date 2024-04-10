@@ -47,6 +47,7 @@ class LocationState(BaseModel, extra=Extra.forbid):
     deployment_name: str
     location_file: str
     location_name: str
+    is_branch_deployment: bool
     selected: bool = True
     build: BuildMetadata
     build_output: Optional[Union[DockerBuildOutput, PexBuildOutput]] = Field(

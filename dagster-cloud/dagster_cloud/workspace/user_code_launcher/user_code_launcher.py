@@ -84,7 +84,9 @@ from dagster_cloud.util import diff_serializable_namedtuple_map
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25
-ACTIVE_AGENT_HEARTBEAT_INTERVAL = 600
+ACTIVE_AGENT_HEARTBEAT_INTERVAL = int(
+    os.getenv("DAGSTER_CLOUD_ACTIVE_AGENT_HEARTBEAT_INVERAL", "600")
+)
 
 
 USER_CODE_LAUNCHER_RECONCILE_SLEEP_SECONDS = 1
@@ -340,6 +342,7 @@ class DagsterCloudUserCodeLauncher(
         self._desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
         self._actual_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
         self._last_refreshed_actual_entries = 0
+        self._last_cleaned_up_dangling_code_servers = 0
         self._metadata_lock = threading.Lock()
 
         self._upload_locations: Set[DeploymentAndLocation] = set()
@@ -457,7 +460,9 @@ class DagsterCloudUserCodeLauncher(
                 "Not starting run worker monitoring, because it's not supported on this agent."
             )
 
-        self._graceful_cleanup_servers()
+        self._graceful_cleanup_servers(
+            include_own_servers=True  # shouldn't be any of our own servers at this part, but won't hurt either
+        )
 
         if run_reconcile_thread:
             self._reconcile_grpc_metadata_thread = threading.Thread(
@@ -893,13 +898,15 @@ class DagsterCloudUserCodeLauncher(
             with self._grpc_servers_lock:
                 self._pending_delete_grpc_server_handles.discard(server_handle)
 
-    def _cleanup_servers(self, active_agent_ids: Set[str]) -> None:
+    def _cleanup_servers(self, active_agent_ids: Set[str], include_own_servers: bool) -> None:
         """Remove all servers, across all deployments and locations."""
         with ThreadPoolExecutor() as executor:
             futures = []
             for handle in self._list_server_handles():
                 self._logger.info(f"Attempting to cleanup server {handle}")
-                if self._can_cleanup_server(handle, active_agent_ids):
+                if self._can_cleanup_server(
+                    handle, active_agent_ids, include_own_servers=include_own_servers
+                ):
                     self._logger.info(f"Can remove server {handle}. Cleaning up.")
                     futures.append(executor.submit(self._remove_server_handle, handle))
                 else:
@@ -924,7 +931,9 @@ class DagsterCloudUserCodeLauncher(
     def get_server_create_timestamp(self, handle: ServerHandle) -> Optional[float]:
         """Returns the update_timestamp value from the given code server."""
 
-    def _can_cleanup_server(self, handle: ServerHandle, active_agent_ids: Set[str]) -> bool:
+    def _can_cleanup_server(
+        self, handle: ServerHandle, active_agent_ids: Set[str], include_own_servers: bool
+    ) -> bool:
         """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active)."""
         agent_id_for_server = self.get_agent_id_for_server(handle)
         self._logger.info(
@@ -933,10 +942,12 @@ class DagsterCloudUserCodeLauncher(
         )
         self._logger.info(f"All active agent ids: {active_agent_ids}")
 
-        # If this server was created by the current agent, it can always be cleaned up
-        # (or if its a legacy server that never set an agent ID)
-        if not agent_id_for_server or self._instance.instance_uuid == agent_id_for_server:
+        # if it's a legacy server that never set an agent ID:
+        if not agent_id_for_server:
             return True
+
+        if self._instance.instance_uuid == agent_id_for_server:
+            return include_own_servers
 
         try:
             update_timestamp_for_server = self.get_server_create_timestamp(handle)
@@ -958,16 +969,18 @@ class DagsterCloudUserCodeLauncher(
 
         return agent_id_for_server not in cast(Set[str], active_agent_ids)
 
-    def _graceful_cleanup_servers(self):  # ServerHandles
+    def _graceful_cleanup_servers(self, include_own_servers: bool):  # ServerHandles
         active_agent_ids = self.get_active_agent_ids()
         if not self.supports_get_current_runs_for_server_handle:
-            return self._cleanup_servers(active_agent_ids)
+            return self._cleanup_servers(active_agent_ids, include_own_servers=include_own_servers)
 
         handles = self._list_server_handles()
         servers_to_remove: List[ServerHandle] = []
         with self._grpc_servers_lock:
             for handle in handles:
-                if self._can_cleanup_server(handle, active_agent_ids):
+                if self._can_cleanup_server(
+                    handle, active_agent_ids, include_own_servers=include_own_servers
+                ):
                     servers_to_remove.append(handle)
             self._pending_delete_grpc_server_handles.update(servers_to_remove)
         for server_handle in servers_to_remove:
@@ -994,7 +1007,7 @@ class DagsterCloudUserCodeLauncher(
             self._reconcile_location_utilization_metrics_thread.join()
 
         if self._started:
-            self._graceful_cleanup_servers()
+            self._graceful_cleanup_servers(include_own_servers=True)
 
         super().__exit__(exception_value, exception_value, traceback)
 
@@ -1081,6 +1094,9 @@ class DagsterCloudUserCodeLauncher(
                     f"Failure updating user code servers: {serializable_error_info_from_exc_info(sys.exc_info())}"
                 )
 
+    def _cleanup_server_check_interval(self):
+        return int(os.getenv("DAGSTER_CLOUD_CLEANUP_SERVER_CHECK_INTERVAL", "1800"))
+
     def reconcile(self) -> None:
         with self._metadata_lock:
             desired_entries = (
@@ -1094,6 +1110,24 @@ class DagsterCloudUserCodeLauncher(
             return
 
         now = pendulum.now("UTC").timestamp()
+
+        if not self._last_refreshed_actual_entries:
+            self._last_refreshed_actual_entries = now
+
+        if not self._last_cleaned_up_dangling_code_servers:
+            self._last_cleaned_up_dangling_code_servers = now
+
+        cleanup_server_check_interval = self._cleanup_server_check_interval()
+
+        if (
+            cleanup_server_check_interval
+            and now - self._last_cleaned_up_dangling_code_servers > cleanup_server_check_interval
+        ):
+            try:
+                self._graceful_cleanup_servers(include_own_servers=False)
+            except:
+                self._logger.exception("Failed to clean up dangling code serverrs.")
+            self._last_cleaned_up_dangling_code_servers = now
 
         if now - self._last_refreshed_actual_entries > ACTUAL_ENTRIES_REFRESH_INTERVAL:
             try:
