@@ -6,7 +6,9 @@ from setuptools import find_packages, setup
 
 def get_version() -> str:
     version: Dict[str, str] = {}
-    with open(Path(__file__).parent / "dagster_cloud_cli/version.py", encoding="utf8") as fp:
+    with open(
+        Path(__file__).parent / "dagster_cloud_cli/version.py", encoding="utf8"
+    ) as fp:
         exec(fp.read(), version)
 
     return version["__version__"]
@@ -14,7 +16,7 @@ def get_version() -> str:
 
 setup(
     name="dagster-cloud-cli",
-    version=get_version(),
+    version="1.7.0",  # get_version(),
     author_email="hello@elementl.com",
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),
     include_package_data=True,
