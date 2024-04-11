@@ -174,7 +174,7 @@ def dbt_with_bigquery_insights(
                 )
                 if row.bytes_billed or row.slots_ms:
                     cost_info = BigQueryCostInfo(
-                        asset_key, partition, row.job_id, row.bytes_billed, row.slots_ms
+                        asset_key, partition, row.job_id, row.slots_ms, row.bytes_billed
                     )
                     cost_by_asset[cost_info.asset_partition_key].append(cost_info)
     except:

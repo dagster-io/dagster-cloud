@@ -47,7 +47,7 @@ def _build_check_for_assets(
     @multi_asset_check(
         specs=[
             AssetCheckSpec(
-                name="freshness_anomaly_detection_check",
+                name="anomaly_detection_freshness_check",
                 description=f"Detects anomalies in the freshness of the asset using model {params.model_version.value.lower()}.",
                 asset=asset_key,
             )
@@ -65,7 +65,9 @@ def _build_check_for_assets(
             )
         instance = cast(DagsterCloudAgentInstance, context.instance)
         with create_cloud_webserver_client(
-            instance.dagit_url,
+            instance.dagit_url[:-1]
+            if instance.dagit_url.endswith("/")
+            else instance.dagit_url,  # Remove trailing slash
             check.str_param(instance.dagster_cloud_agent_token, "dagster_cloud_agent_token"),
         ) as client:
             for check_key in context.selected_asset_check_keys:
@@ -82,16 +84,17 @@ def _build_check_for_assets(
                         },
                     },
                 )
+                data = result["data"]["anomalyDetectionInference"]
                 metadata = {
                     "model_params": {**params.as_metadata},
                     "model_version": params.model_version.value,
                 }
-                if result["anomalyDetectionInference"]["__typename"] != "AnomalyDetectionSuccess":
+                if data["__typename"] != "AnomalyDetectionSuccess":
                     yield handle_anomaly_detection_inference_failure(
-                        result, metadata, params, asset_key
+                        data, metadata, params, asset_key
                     )
                     continue
-                response = result["anomalyDetectionInference"]["response"]
+                response = result["data"]["anomalyDetectionInference"]["response"]
                 overdue_seconds = check.float_param(response["overdue_seconds"], "overdue_seconds")
                 overdue_deadline_timestamp = response["overdue_deadline_timestamp"]
                 metadata["overdue_deadline_timestamp"] = MetadataValue.timestamp(
@@ -148,12 +151,11 @@ def _build_check_for_assets(
 
 
 def handle_anomaly_detection_inference_failure(
-    result: dict, metadata: dict, params: AnomalyDetectionModelParams, asset_key: AssetKey
+    data: dict, metadata: dict, params: AnomalyDetectionModelParams, asset_key: AssetKey
 ) -> AssetCheckResult:
     if (
-        result["anomalyDetectionInference"]["__typename"] == "AnomalyDetectionFailure"
-        and result["anomalyDetectionInference"]["message"]
-        == params.model_version.minimum_required_records_msg
+        data["__typename"] == "AnomalyDetectionFailure"
+        and data["message"] == params.model_version.minimum_required_records_msg
     ):
         # Intercept failure in the case of not enough records, and return a pass to avoid
         # being too noisy with failures.
@@ -161,12 +163,10 @@ def handle_anomaly_detection_inference_failure(
             passed=True,
             severity=AssetCheckSeverity.WARN,
             metadata=metadata,
-            description=result["anomalyDetectionInference"]["message"],
+            description=data["message"],
             asset_key=asset_key,
         )
-    raise DagsterCloudAnomalyDetectionFailed(
-        f"Anomaly detection failed: {result['anomalyDetectionInference']['message']}"
-    )
+    raise DagsterCloudAnomalyDetectionFailed(f"Anomaly detection failed: {data['message']}")
 
 
 def build_anomaly_detection_freshness_checks(

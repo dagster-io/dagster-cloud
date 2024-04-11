@@ -8,7 +8,7 @@ import shutil
 import sys
 from collections import Counter
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import typer
 from typer import Typer
@@ -28,11 +28,10 @@ from dagster_cloud_cli.config_utils import (
     get_org_url,
 )
 from dagster_cloud_cli.core import pex_builder, pydantic_yaml
-
-from .. import metrics
-from . import checks, report, state
-
-app = Typer(hidden=True, help="CI/CD agnostic commands")
+from dagster_cloud_cli.core.artifacts import (
+    download_organization_artifact,
+    upload_organization_artifact,
+)
 from dagster_cloud_cli.core.pex_builder import (
     code_location,
     deps,
@@ -41,6 +40,11 @@ from dagster_cloud_cli.core.pex_builder import (
     parse_workspace,
 )
 from dagster_cloud_cli.types import CliEventTags, CliEventType
+
+from .. import metrics
+from . import checks, report, state
+
+app = Typer(hidden=True, help="CI/CD agnostic commands")
 
 
 @app.command(help="Print json information about current CI/CD environment")
@@ -204,6 +208,10 @@ def init(
     status_url: Optional[str] = None,
 ):
     yaml_path = pathlib.Path(project_dir) / dagster_cloud_yaml_path
+    if not yaml_path.exists():
+        raise ui.error(
+            f"Dagster Cloud yaml file not found at specified path {yaml_path.resolve()}."
+        )
     locations_def = pydantic_yaml.load_dagster_cloud_yaml(yaml_path.read_text())
     locations = locations_def.locations
     if location_name:
@@ -217,6 +225,7 @@ def init(
     url = get_org_url(organization, dagster_env)
     # Deploy to the branch deployment for the current context. If there is no branch deployment
     # available (eg. if not in a PR) then we fallback to the --deployment flag.
+
     try:
         branch_deployment = get_deployment_from_context(url, project_dir)
         if deployment:
@@ -225,9 +234,11 @@ def init(
                 f" --deployment={deployment}"
             )
         deployment = branch_deployment
+        is_branch_deployment = True
     except ValueError as err:
         if deployment:
             ui.print(f"Deploying to {deployment}. No branch deployment ({err}).")
+            is_branch_deployment = False
         else:
             raise ui.error(
                 f"Cannot determine deployment name in current context ({err}). Please specify"
@@ -245,6 +256,7 @@ def init(
             deployment_name=deployment,
             location_file=str(yaml_path.absolute()),
             location_name=location.location_name,
+            is_branch_deployment=is_branch_deployment,
             build=state.BuildMetadata(
                 git_url=git_url, commit_hash=commit_hash, build_config=location.build
             ),
@@ -703,3 +715,77 @@ def _deploy(
             agent_heartbeat_timeout=agent_heartbeat_timeout,
             url=deployment_url,
         )
+
+
+dagster_dbt_app = typer.Typer(
+    hidden=True,
+    help="Dagster Cloud commands for managing the `dagster-dbt` integration.",
+    add_completion=False,
+)
+app.add_typer(dagster_dbt_app, name="dagster-dbt", no_args_is_help=True)
+
+project_app = typer.Typer(
+    name="project",
+    no_args_is_help=True,
+    help="Commands for using a dbt project in Dagster.",
+    add_completion=False,
+)
+dagster_dbt_app.add_typer(project_app, name="project", no_args_is_help=True)
+
+
+@project_app.command(
+    name="manage-state",
+    help="""
+    This CLI command will handle uploading and downloading dbt state, in the form of manifest.json,
+    if `state_path` is specified on `DbtProject`.
+    """,
+)
+def manage_state_command(
+    statedir: str = STATEDIR_OPTION,
+    file: str = typer.Option(),
+    source_deployment: str = typer.Option(
+        default="prod",
+        help="Which deployment should upload its manifest.json.",
+    ),
+    key_prefix: str = typer.Option(
+        default="",
+        help="A key prefix for the key the manifest.json is saved with.",
+    ),
+):
+    try:
+        from dagster_dbt import DbtProject
+    except:
+        ui.print(
+            "Unable to import dagster_dbt. To use `manage-state`, dagster_dbt must be installed."
+        )
+        return
+    from dagster._core.code_pointer import load_python_file
+    from dagster._core.definitions.load_assets_from_modules import find_objects_in_module_of_types
+
+    state_store = state.FileStore(statedir=statedir)
+    locations = state_store.list_locations()
+    if not locations:
+        raise ui.error("Unable to determine deployment state.")
+
+    location = locations[0]
+    deployment_name = location.deployment_name
+    is_branch = location.is_branch_deployment
+
+    contents = load_python_file(file, None)
+    for project in find_objects_in_module_of_types(contents, DbtProject):
+        project = cast(DbtProject, project)
+        if project.state_path:
+            download_path = project.state_path.joinpath("manifest.json")
+            key = f"{key_prefix}{os.fspath(download_path)}"
+            if is_branch:
+                ui.print(f"Downloading {source_deployment} manifest for branch deployment.")
+                os.makedirs(project.state_path, exist_ok=True)
+                download_organization_artifact(key, download_path)
+                ui.print("Download complete.")
+
+            elif deployment_name == source_deployment:
+                ui.print(f"Uploading {source_deployment} manifest.")
+                upload_organization_artifact(key, project.manifest_path)
+                ui.print("Upload complete")
+
+        ui.print("Project ready")
