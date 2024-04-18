@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Sequence, Tuple
 
 import click
 import pkg_resources
@@ -188,6 +188,36 @@ class DepsBuildFailure(Exception):
         return "".join(lines)
 
 
+def get_and_check_dependency_versions_from_distributions(
+    distribution_names: Sequence[str],
+) -> Mapping[str, str]:
+    dep_names = ["dagster", "dagster_cloud", "dagster_plus"]
+    dep_versions = {}
+
+    # the distributions are named something like 'dagster-1.0.14-py3-none-any.whl'
+    # and 'dagster_cloud-1.1.7-py3-none-any.whl'
+    for name in distribution_names:
+        for dep_name in dep_names:
+            pattern = re.compile(f"{dep_name}-(.+?)-py")
+            match = pattern.match(name)
+            if match:
+                dep_versions[dep_name] = match.group(1)
+                break
+
+    if "dagster" not in dep_versions:
+        raise ValueError("The dagster package dependency was expected but not found.")
+    print(f"Found package dagster version {dep_versions['dagster']}.")
+
+    if "dagster_cloud" not in dep_versions and "dagster_plus" not in dep_versions:
+        raise ValueError(
+            "Either the dagster_cloud or dagster_plus package dependency was expected but not found."
+        )
+    for dep_name in ["dagster_cloud", "dagster_plus"]:
+        if dep_name in dep_versions:
+            print(f"Found package {dep_name} version {dep_versions[dep_name]}.")
+    return dep_versions
+
+
 def build_deps_from_requirements(
     requirements: DepsRequirements,
     output_directory: str,
@@ -255,22 +285,7 @@ def build_deps_from_requirements(
     logging.info("Wrote deps pex: %r", final_pex_path)
 
     distribution_names = pex_info["distributions"].keys()
-    # the distributions are named something like 'dagster-1.0.14-py3-none-any.whl'
-    # and 'dagster_cloud-1.1.7-py3-none-any.whl'
-    dep_names = ["dagster", "dagster_cloud"]
-    dep_versions = {}
-    for name in distribution_names:
-        for dep_name in dep_names:
-            pattern = re.compile(f"{dep_name}-(.+?)-py")
-            match = pattern.match(name)
-            if match:
-                dep_versions[dep_name] = match.group(1)
-                break
-
-    for dep_name in dep_names:
-        if dep_name not in dep_versions:
-            raise ValueError(f"The {dep_name} package dependency was expected but not found.")
-        print(f"Found package {dep_name} version {dep_versions[dep_name]}.")
+    dep_versions = get_and_check_dependency_versions_from_distributions(distribution_names)
 
     return final_pex_path, dep_versions["dagster"]
 

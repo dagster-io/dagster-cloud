@@ -308,7 +308,7 @@ def notify(
         event.update_pr_comment(
             msg + "\n\n" + report.markdown_report(location_states),
             orig_author="github-actions[bot]",
-            orig_text=msg,
+            orig_text="Dagster Cloud",  # used to identify original comment
         )
     else:
         raise ui.error("'dagster-cloud ci notify' is only available within Github actions.")

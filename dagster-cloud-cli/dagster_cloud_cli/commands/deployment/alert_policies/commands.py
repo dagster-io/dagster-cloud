@@ -18,7 +18,7 @@ def list_command(
     api_token: str,
     url: str,
 ):
-    """List your alert policies."""
+    """List your alert policies, output in YAML format."""
     with gql.graphql_client_from_url(url, api_token) as client:
         alert_policies_response = gql.get_alert_policies(client)
 

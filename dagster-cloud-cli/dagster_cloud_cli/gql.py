@@ -344,31 +344,9 @@ def get_deployment_settings(client: DagsterCloudGraphQLClient) -> Dict[str, Any]
 
 
 ALERT_POLICIES_QUERY = """
-    query CliAlertPolicies {
-        alertPolicies {
-            name
-            description
-            tags {
-                key
-                value
-            }
-            eventTypes
-            notificationService {
-                ... on EmailAlertPolicyNotification {
-                    emailAddresses
-                }
-                ... on SlackAlertPolicyNotification {
-                    slackWorkspaceName
-                    slackChannelName
-                }
-                ... on MicrosoftTeamsAlertPolicyNotification {
-                    webhookUrl
-                }
-                ... on PagerdutyAlertPolicyNotification {
-                    integrationKey
-                }
-            }
-            enabled
+    query CliAlertPoliciesDocument {
+        alertPoliciesAsDocument {
+            document
         }
     }
 """
@@ -377,10 +355,10 @@ ALERT_POLICIES_QUERY = """
 def get_alert_policies(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
     result = client.execute(ALERT_POLICIES_QUERY)
 
-    if result.get("data", {}).get("alertPolicies", {}) is None:
-        raise Exception(f"Unable to get deployment settings: {result}")
+    if result.get("data", {}).get("alertPoliciesAsDocument", {}) is None:
+        raise Exception(f"Unable to get alert policies: {result}")
 
-    return result["data"]["alertPolicies"]
+    return result["data"]["alertPoliciesAsDocument"]["document"]
 
 
 RECONCILE_ALERT_POLICIES_FROM_DOCUMENT_MUTATION = """

@@ -266,6 +266,8 @@ def _get_asset_records_filter_input(
         "assetPartitions": records_filter.asset_partitions,
         "afterTimestamp": records_filter.after_timestamp,
         "beforeTimestamp": records_filter.before_timestamp,
+        "afterStorageId": records_filter.after_storage_id,
+        "beforeStorageId": records_filter.before_storage_id,
         "tags": (
             [
                 merge_dicts(
