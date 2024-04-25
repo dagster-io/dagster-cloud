@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 import yaml
-from dagster._config.pythonic_config.pydantic_compat_layer import compat_model_validator
+from dagster._model.pydantic_compat_layer import compat_model_validator
 from pydantic import BaseModel, Extra, Field, validator
 
 

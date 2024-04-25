@@ -788,4 +788,8 @@ def manage_state_command(
                 upload_organization_artifact(key, project.manifest_path)
                 ui.print("Upload complete")
 
-        ui.print("Project ready")
+            else:
+                ui.warn(
+                    f"Deployment named {deployment_name} does not match source deployment {source_deployment}, taking no action. "
+                    f"If this is the desired dbt state artifacts to upload, set the cli flags `--source-deployment {deployment_name}`."
+                )

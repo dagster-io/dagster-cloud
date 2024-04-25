@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, Mapping, Optional
 
 import dagster._check as check
 import requests
+from requests.adapters import HTTPAdapter
 from requests.exceptions import (
     ConnectionError as RequestsConnectionError,
     HTTPError,
@@ -311,9 +312,23 @@ def get_agent_headers(config_value: Dict[str, Any], scope: DagsterCloudInstanceS
     )
 
 
+class HTTPAdapterWithSocketOptions(HTTPAdapter):
+    def __init__(self, *args, **kwargs):
+        self.socket_options = kwargs.pop("socket_options", None)
+        super(HTTPAdapterWithSocketOptions, self).__init__(*args, **kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        if self.socket_options is not None:
+            kwargs["socket_options"] = self.socket_options
+        super(HTTPAdapterWithSocketOptions, self).init_poolmanager(*args, **kwargs)
+
+
 @contextmanager
-def create_graphql_requests_session():
+def create_graphql_requests_session(adapter_kwargs: Optional[Mapping[str, Any]] = None):
     with requests.Session() as session:
+        adapter = HTTPAdapterWithSocketOptions(**(adapter_kwargs or {}))
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
         yield session
 
 
@@ -380,7 +395,7 @@ def _get_retry_after_sleep_time(headers):
 
 @contextmanager
 def create_cloud_webserver_client(url: str, api_token: str, retries=3):
-    with create_graphql_requests_session() as session:
+    with create_graphql_requests_session(adapter_kwargs={}) as session:
         yield DagsterCloudGraphQLClient(
             session=session,
             url=f"{url}/graphql",

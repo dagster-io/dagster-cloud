@@ -347,6 +347,11 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
             if graphene_asset_entry["cachedStatus"]
             else None
         ),
+        last_observation_record=(
+            _event_record_from_graphql(graphene_asset_entry["lastObservationRecord"])
+            if graphene_asset_entry["lastObservationRecord"]
+            else None
+        ),
     )
 
 
@@ -647,6 +652,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             for result in res["data"]["eventLogs"]["getEventRecords"]
         ]
 
+    @property
+    def asset_records_have_last_observation(self) -> bool:
+        return True
+
     def get_asset_records(
         self, asset_keys: Optional[Sequence[AssetKey]] = None
     ) -> Iterable[AssetRecord]:
@@ -936,6 +945,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         res = self._execute_query(
             INITIALIZE_CONCURRENCY_LIMIT_MUTATION,
             variables={"concurrencyKey": concurrency_key},
+            idempotent_mutation=True,
         )
         result = res["data"]["eventLogs"]["InitializeConcurrencyLimit"]
         error = result.get("error")

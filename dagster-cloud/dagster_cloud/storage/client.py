@@ -1,4 +1,5 @@
 from dagster import (
+    Any,
     Array,
     BoolSource,
     Field,
@@ -28,6 +29,7 @@ def dagster_cloud_api_config():
         "method": Field(StringSource, default_value="POST"),
         "backoff_factor": Field(float, default_value=DEFAULT_BACKOFF_FACTOR),
         "proxies": Field(Map(str, str), is_required=False),
+        "socket_options": Field(Noneable(Array(Array(Any)))),
         "agent_label": Field(StringSource, is_required=False),
         # Handle requests for a single non-branch deployment
         "deployment": Field(

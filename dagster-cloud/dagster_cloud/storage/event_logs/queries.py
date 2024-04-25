@@ -102,6 +102,9 @@ ASSET_ENTRY_FRAGMENT = (
         cachedStatus {
             ...CachedStatusDataFragment
         }
+        lastObservationRecord {
+            ...EventLogRecordFragment
+        }
     }
     """
 )

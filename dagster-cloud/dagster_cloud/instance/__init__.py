@@ -1,8 +1,9 @@
 import copy
+import socket
 import uuid
 from contextlib import ExitStack
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 import yaml
 from dagster import (
@@ -26,8 +27,6 @@ from dagster_cloud_cli.core.graphql_client import (
     get_agent_headers,
 )
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
-from requests import Session
-from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
 from dagster_cloud.agent import AgentQueuesConfig
@@ -37,6 +36,8 @@ from ..storage.client import dagster_cloud_api_config
 from ..util import get_env_names_from_config, is_isolated_run
 
 if TYPE_CHECKING:
+    from requests import Session
+
     from dagster_cloud.workspace.user_code_launcher.user_code_launcher import (
         DagsterCloudUserCodeLauncher,
     )
@@ -190,6 +191,36 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             scope=scope,
         )
 
+    def _translate_socket_param(self, socket_option: Union[str, int]):
+        if isinstance(socket_option, str):
+            check.invariant(
+                hasattr(socket, socket_option),
+                f"socket module does not have an {socket_option} attribute",
+            )
+            return getattr(socket, socket_option)
+        else:
+            return socket_option
+
+    def _socket_options(self):
+        if self._dagster_cloud_api_config.get("socket_options") is None:
+            return None
+
+        translated_socket_options = []
+        for socket_option in self._dagster_cloud_api_config["socket_options"]:
+            check.invariant(
+                len(socket_option) == 3, "Each socket option must be a list of three values"
+            )
+            socket_param_1, socket_param_2, socket_val = socket_option
+            translated_socket_options.append(
+                (
+                    self._translate_socket_param(socket_param_1),
+                    self._translate_socket_param(socket_param_2),
+                    socket_val,
+                )
+            )
+
+        return translated_socket_options
+
     @property
     def client_managed_retries_requests_session(self):
         """A shared requests Session to use between GraphQL clients.
@@ -198,7 +229,9 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         """
         if self._graphql_requests_session is None:
             self._graphql_requests_session = self._exit_stack.enter_context(
-                create_graphql_requests_session()
+                create_graphql_requests_session(
+                    adapter_kwargs=dict(socket_options=self._socket_options())
+                )
             )
 
         return self._graphql_requests_session
@@ -210,15 +243,17 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         Retries handled by requests.
         """
         if self._rest_requests_session is None:
-            self._rest_requests_session = self._exit_stack.enter_context(Session())
-            adapter = HTTPAdapter(
-                max_retries=Retry(
-                    total=self.dagster_cloud_api_retries,
-                    backoff_factor=self._dagster_cloud_api_config["backoff_factor"],
+            self._rest_requests_session = self._exit_stack.enter_context(
+                create_graphql_requests_session(
+                    adapter_kwargs=dict(
+                        max_retries=Retry(
+                            total=self.dagster_cloud_api_retries,
+                            backoff_factor=self._dagster_cloud_api_config["backoff_factor"],
+                        ),
+                        socket_options=self._socket_options(),
+                    )
                 )
             )
-            self._rest_requests_session.mount("https://", adapter)
-            self._rest_requests_session.mount("http://", adapter)
         return self._rest_requests_session
 
     @property
