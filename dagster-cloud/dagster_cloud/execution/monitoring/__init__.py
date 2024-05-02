@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import threading
 from enum import Enum
@@ -109,6 +110,11 @@ class CloudCodeServerHeartbeat(
         return self.metadata.get("utilization_metrics")
 
 
+RUN_WORKER_STATUS_MESSAGE_LIMIT = int(
+    os.getenv("DAGSTER_CLOUD_RUN_WORKER_STATUS_MESSAGE_SIZE_LIMIT", "1000")
+)
+
+
 @whitelist_for_serdes
 class CloudRunWorkerStatus(
     NamedTuple(
@@ -150,10 +156,11 @@ class CloudRunWorkerStatus(
         run_worker_debug_info: Optional[str] = None,
     ) -> "CloudRunWorkerStatus":
         check.inst_param(result, "result", CheckRunHealthResult)
+        msg = (result.msg or "") + (f"\n{run_worker_debug_info}" if run_worker_debug_info else "")
         return CloudRunWorkerStatus(
             run_id,
             result.status,
-            (result.msg or "") + (f"\n{run_worker_debug_info}" if run_worker_debug_info else ""),
+            msg[:RUN_WORKER_STATUS_MESSAGE_LIMIT],
             transient=result.transient,
             run_worker_id=result.run_worker_id,
         )
@@ -277,8 +284,7 @@ def get_cloud_run_worker_statuses(
                         CloudRunWorkerStatus.from_check_run_health_result(
                             run.run_id,
                             run_worker_health,
-                            # Truncate to ensure that the debug info doesn't hit a size upload limit
-                            run_worker_debug_info[:1000] if run_worker_debug_info else None,
+                            run_worker_debug_info,
                         )
                     )
                 else:

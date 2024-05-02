@@ -82,6 +82,10 @@ def create_or_update(
         is_flag=True,
         help="Whether to commit data (timestamp, hash, author info) from Git state.",
     ),
+    base_deployment_name: str = typer.Option(
+        None,
+        help="The name of the deployment to use as the base deployment for the branch deployment.",
+    ),
 ) -> None:
     """Sets up or updates the branch deployment for the given git branch."""
     if not url and not organization:
@@ -121,6 +125,7 @@ def create_or_update(
                 author_name=author_name,
                 author_email=author_email,
                 author_avatar_url=author_avatar_url,
+                base_deployment_name=base_deployment_name,
             )
         )
 

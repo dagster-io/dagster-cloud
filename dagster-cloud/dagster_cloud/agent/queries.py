@@ -38,9 +38,9 @@ WORKSPACE_ENTRIES_QUERY = """
 
 
 ADD_AGENT_HEARTBEATS_MUTATION = """
-    mutation AddAgentHeartbeats($serializedAgentHeartbeats: [AgentHeartbeatInput!]) {
+    mutation AddAgentHeartbeats($serializedAgentHeartbeats: [AgentHeartbeatInput!], $serializedErrors: [String!]) {
         userCloudAgent {
-            addAgentHeartbeats (serializedAgentHeartbeats: $serializedAgentHeartbeats) {
+            addAgentHeartbeats (serializedAgentHeartbeats: $serializedAgentHeartbeats, serializedErrors: $serializedErrors) {
                 ok
             }
         }

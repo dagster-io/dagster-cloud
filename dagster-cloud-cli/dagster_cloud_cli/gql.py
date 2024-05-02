@@ -458,15 +458,20 @@ CREATE_OR_UPDATE_BRANCH_DEPLOYMENT = """
 mutation CliCreateOrUpdateBranchDeployment(
     $branchData: CreateOrUpdateBranchDeploymentInput!
     $commit: DeploymentCommitInput!
+    $baseDeploymentName: String
 ) {
     createOrUpdateBranchDeployment(
         branchData: $branchData,
-        commit: $commit
+        commit: $commit,
+        baseDeploymentName: $baseDeploymentName,
     ) {
         __typename
         ... on DagsterCloudDeployment {
             deploymentId
             deploymentName
+        }
+        ... on PythonError {
+            message
         }
     }
 }
@@ -488,6 +493,7 @@ def create_or_update_branch_deployment(
     author_name: Optional[str] = None,
     author_email: Optional[str] = None,
     author_avatar_url: Optional[str] = None,
+    base_deployment_name: Optional[str] = None,
 ) -> str:
     result = client.execute(
         CREATE_OR_UPDATE_BRANCH_DEPLOYMENT,
@@ -509,6 +515,7 @@ def create_or_update_branch_deployment(
                 "authorEmail": author_email,
                 "authorAvatarUrl": author_avatar_url,
             },
+            "baseDeploymentName": base_deployment_name,
         },
     )
 

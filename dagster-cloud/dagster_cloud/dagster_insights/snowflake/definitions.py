@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pprint import pprint
@@ -51,7 +52,7 @@ def create_snowflake_insights_asset_and_schedule(
     snowflake_usage_latency: int = SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS,
     partition_end_offset_hrs: int = 1,
     schedule_batch_size_hrs: int = 1,
-    submit_to_s3_only: bool = False,
+    submit_to_s3_only: bool = True,  # DEPRECATED
 ) -> SnowflakeInsightsDefinitions:
     """Generates a pre-defined Dagster asset and schedule that can be used to import Snowflake cost
     data into Dagster Insights.
@@ -81,6 +82,11 @@ def create_snowflake_insights_asset_and_schedule(
     # for backcompat, this used to take `date`
     if isinstance(start_date, date):
         start_date = start_date.strftime("%Y-%m-%d-%H:%M")
+
+    if submit_to_s3_only is False:
+        warnings.warn(
+            "The `submit_to_s3_only` parameter is now deprecated. Insights cost data will now always be uploaded to Dagster Insights via S3."
+        )
 
     partition_end_offset_hrs = -abs(partition_end_offset_hrs)
 
@@ -142,7 +148,6 @@ def create_snowflake_insights_asset_and_schedule(
                 cost_information=costs,
                 start=start_hour.timestamp(),
                 end=end_hour.timestamp(),
-                submit_gql=not submit_to_s3_only,
             )
 
     insights_job = define_asset_job(

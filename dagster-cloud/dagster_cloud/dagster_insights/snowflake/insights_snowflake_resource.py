@@ -1,3 +1,4 @@
+import warnings
 from contextlib import contextmanager
 from io import StringIO
 from typing import (
@@ -8,6 +9,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    Tuple,
     Type,
     Union,
     cast,
@@ -15,10 +17,15 @@ from typing import (
 
 import snowflake.connector
 from dagster import (
+    AssetExecutionContext,
     AssetKey,
+    DagsterInvariantViolationError,
+    OpExecutionContext,
     get_dagster_logger,
 )
 from dagster._annotations import experimental, public
+from dagster._check import CheckError
+from dagster._core.errors import DagsterInvalidPropertyError
 from dagster._core.storage.event_log.sql_event_log import SqlDbConnection
 from dagster_snowflake import SnowflakeConnection, SnowflakeResource
 from snowflake.connector.cursor import SnowflakeCursor
@@ -30,6 +37,19 @@ from dagster_cloud.dagster_insights.insights_utils import (
 from .snowflake_utils import meter_snowflake_query
 
 
+def get_current_context_and_asset_key_or_warn() -> (
+    Tuple[Union[OpExecutionContext, AssetExecutionContext, None], Optional[AssetKey]]
+):
+    try:
+        return get_current_context_and_asset_key()
+    except (DagsterInvalidPropertyError, DagsterInvariantViolationError, CheckError):
+        warnings.warn(
+            "Accessed InsightsSnowflakeResource outside of an Op or Asset context."
+            " This query may not be properly attributed."
+        )
+        return None, None
+
+
 class InsightsSnowflakeCursor(SnowflakeCursor):
     def __init__(self, *args, **kwargs) -> None:
         self._asset_key = None
@@ -39,7 +59,9 @@ class InsightsSnowflakeCursor(SnowflakeCursor):
         self._asset_key = asset_key
 
     def execute(self, command: str, *args, **kwargs):
-        context, inferred_asset_key = get_current_context_and_asset_key()
+        context, inferred_asset_key = get_current_context_and_asset_key_or_warn()
+        if not context:
+            return super().execute(command, *args, **kwargs)
 
         associated_asset_key = self._asset_key or inferred_asset_key
 
@@ -162,7 +184,10 @@ class InsightsSnowflakeResource(SnowflakeResource):
             # when later attributing cost.
             @event.listens_for(engine, "before_cursor_execute", retval=True)
             def comment_sql(conn, cursor, statement, parameters, context, executemany):
-                context, asset_key = get_current_context_and_asset_key()
+                context, asset_key = get_current_context_and_asset_key_or_warn()
+                if not context:
+                    return statement, parameters
+
                 statement = meter_snowflake_query(
                     context, statement, associated_asset_key=asset_key
                 )
@@ -200,7 +225,10 @@ class InsightsSnowflakeResource(SnowflakeResource):
             # when later attributing cost.
             @event.listens_for(engine, "before_cursor_execute", retval=True)
             def comment_sql(conn, cursor, statement, parameters, context, executemany):
-                context, _ = get_current_context_and_asset_key()
+                context, _ = get_current_context_and_asset_key_or_warn()
+                if not context:
+                    return statement, parameters
+
                 statement = meter_snowflake_query(
                     context, statement, associated_asset_key=asset_key
                 )
@@ -228,7 +256,9 @@ class InsightsSnowflakeConnection(SnowflakeConnection):
         fetch_results: bool = False,
         use_pandas_result: bool = False,
     ):
-        context, asset_key = get_current_context_and_asset_key()
+        context, asset_key = get_current_context_and_asset_key_or_warn()
+        if not context:
+            return super().execute_query(sql, parameters, fetch_results, use_pandas_result)
 
         return super().execute_query(
             meter_snowflake_query(context, sql, associated_asset_key=asset_key),
@@ -244,7 +274,12 @@ class InsightsSnowflakeConnection(SnowflakeConnection):
         fetch_results: bool = False,
         use_pandas_result: bool = False,
     ) -> Union[Sequence[Any], None]:
-        context, asset_key = get_current_context_and_asset_key()
+        context, asset_key = get_current_context_and_asset_key_or_warn()
+
+        if not context:
+            return super().execute_queries(
+                sql_queries, parameters, fetch_results, use_pandas_result
+            )
 
         return super().execute_queries(
             [

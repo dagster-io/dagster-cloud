@@ -313,8 +313,9 @@ class DagsterCloudAgent:
             return
 
         errors = [
-            TimestampedError(timestamp.float_timestamp, error)
+            TimestampedError(timestamp.timestamp(), error)
             for (error, timestamp) in self._errors
+            if timestamp.timestamp() > curr_time.timestamp() - 60 * 60 * 24
         ]
 
         run_worker_statuses_dict = instance.user_code_launcher.get_cloud_run_worker_statuses(
@@ -337,7 +338,6 @@ class DagsterCloudAgent:
                             if instance.user_code_launcher
                             else None
                         ),
-                        errors=errors,
                         metadata=merge_dicts(
                             {AGENT_VERSION_LABEL: __version__},
                             {"image_tag": agent_image_tag} if agent_image_tag else {},
@@ -372,6 +372,7 @@ class DagsterCloudAgent:
             ADD_AGENT_HEARTBEATS_MUTATION,
             variable_values={
                 "serializedAgentHeartbeats": serialized_agent_heartbeats,
+                "serializedErrors": [serialize_value(error) for error in errors],
             },
             idempotent_mutation=True,
         )

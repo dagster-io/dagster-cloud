@@ -363,7 +363,7 @@ class MultiPexManager(AbstractContextManager):
                     continue
 
                 if isinstance(pex_server, PexErrorEntry):
-                    logging.info("Server %s was in an error state, no shutdown needed", handle_id)
+                    logging.debug("Server %s was in an error state, no shutdown needed", handle_id)
                     continue
 
                 if pex_server.heartbeat_shutdown_event.is_set():
