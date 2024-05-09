@@ -3,7 +3,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from dagster import _seven as seven
 from typer import Argument, Option, Typer
@@ -217,7 +217,7 @@ def deploy_command(
     env_vars = kwargs.get("env", [])
     base_image = kwargs.get("base_image")
 
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         ecr_info = gql.get_ecr_info(client)
         registry = ecr_info["registry_url"]
 
@@ -416,6 +416,7 @@ def build_python_dependencies(
 def deploy_python_executable_command(
     api_token: str,
     url: str,
+    deployment: Optional[str],
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
     build_method: pex_builder.deps.BuildMethod,
@@ -505,7 +506,7 @@ def deploy_python_executable_command(
         )
         location_documents.append(get_location_document(location.name, location_kwargs))
 
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         for location_document in location_documents:
             gql.add_or_update_code_location(client, location_document)
 

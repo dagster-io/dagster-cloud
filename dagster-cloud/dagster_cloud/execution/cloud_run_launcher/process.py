@@ -7,6 +7,9 @@ from dagster._core.launcher.base import LaunchRunContext
 from dagster._core.utils import parse_env_var
 from dagster._grpc.types import ExecuteRunArgs
 from dagster._serdes.ipc import open_ipc_subprocess
+from dagster_cloud_cli.core.workspace import (
+    get_instance_ref_for_user_code,
+)
 
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process
@@ -26,7 +29,7 @@ class CloudProcessRunLauncher(RunLauncher):
         run_args = ExecuteRunArgs(
             job_origin=pipeline_code_origin,
             run_id=run.run_id,
-            instance_ref=self._instance.get_ref(),
+            instance_ref=get_instance_ref_for_user_code(self._instance.get_ref()),
         )
         args = run_args.get_command_args()
 

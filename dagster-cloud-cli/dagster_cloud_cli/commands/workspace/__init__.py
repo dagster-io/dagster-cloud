@@ -71,13 +71,14 @@ def _add_or_update_location(
 def add_command(
     api_token: str,
     url: str,
+    deployment: Optional[str],
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
     location: str = Argument(None, help="Code location name."),
     **kwargs,
 ):
     """Add or update the image for a code location in the deployment."""
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         location_document = get_location_document(location, kwargs)
         _add_or_update_location(
             client,
@@ -103,13 +104,14 @@ def list_locations(location_names: List[str]) -> str:
 def update_command(
     api_token: str,
     url: str,
+    deployment: Optional[str],
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
     location: str = Argument(None, help="Code location name."),
     **kwargs,
 ):
     """Update the image for a code location in a deployment."""
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         location_document = get_location_document(location, kwargs)
         _add_or_update_location(
             client,
@@ -147,7 +149,7 @@ def wait_for_load(
 ):
     start_time = time.time()
     if url:
-        ui.print(f"View the status of your locations at {url}/workspace.\n")
+        ui.print(f"View the status of your locations at {url}/locations.\n")
     ui.print(f"Waiting for agent to sync changes to {list_locations(locations)}...")
 
     if not location_load_timeout and not agent_heartbeat_timeout:
@@ -228,10 +230,11 @@ def wait_for_load(
 def delete_command(
     api_token: str,
     url: str,
+    deployment: Optional[str],
     location: str = Argument(..., help="Code location name."),
 ):
     """Delete a code location from the deployment."""
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         try:
             gql.delete_code_location(client, location)
             ui.print(f"Deleted location {location}.")
@@ -245,10 +248,11 @@ def delete_command(
 @dagster_cloud_options(allow_empty=True, requires_url=True)
 def list_command(
     url: str,
+    deployment: Optional[str],
     api_token: str,
 ):
     """List code locations in the deployment."""
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         execute_list_command(client)
 
 
@@ -278,9 +282,10 @@ def execute_list_command(client):
 def pull_command(
     url: str,
     api_token: str,
+    deployment: Optional[str],
 ):
     """Retrieve code location definitions as a workspace.yaml file."""
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         document = gql.fetch_locations_as_document(client)
         ui.print_yaml(document or {})
 
@@ -293,6 +298,7 @@ def pull_command(
 def sync_command(
     url: str,
     api_token: str,
+    deployment: Optional[str],
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
     workspace: Path = Option(
@@ -304,7 +310,7 @@ def sync_command(
     ),
 ):
     """Sync the workspace with the contents of a workspace.yaml file."""
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         execute_sync_command(
             client,
             workspace,

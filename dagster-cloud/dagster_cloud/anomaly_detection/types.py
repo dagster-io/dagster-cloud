@@ -1,9 +1,22 @@
 from abc import abstractproperty
 from enum import Enum
-from typing import Dict
+from typing import Any, Dict
 
-from dagster._core.definitions.metadata import FloatMetadataValue, MetadataValue
+from dagster import DagsterError
 from pydantic import BaseModel
+
+
+class AnomalyDetectionError(DagsterError):
+    pass
+
+
+class FreshnessAnomalyDetectionResult(BaseModel):
+    last_updated_timestamp: float
+    evaluation_timestamp: float
+    last_update_time_lower_bound: float
+    maximum_acceptable_delta: float
+    model_training_range_start_timestamp: float
+    model_training_range_end_timestamp: float
 
 
 class AnomalyDetectionModelVersion(Enum):
@@ -47,7 +60,7 @@ class AnomalyDetectionModelParams(BaseModel):
         raise NotImplementedError("Subclasses must implement this method")
 
     @abstractproperty
-    def as_metadata(self) -> Dict[str, MetadataValue]:
+    def as_metadata(self) -> Dict[str, Any]:
         raise NotImplementedError("Subclasses must implement this method")
 
 
@@ -59,7 +72,7 @@ class BetaFreshnessAnomalyDetectionParams(AnomalyDetectionModelParams):
         return AnomalyDetectionModelVersion.FRESHNESS_BETA
 
     @property
-    def as_metadata(self) -> Dict[str, MetadataValue]:
+    def as_metadata(self) -> Dict[str, Any]:
         return {
-            "sensitivity": FloatMetadataValue(self.sensitivity),
+            "sensitivity": self.sensitivity,
         }

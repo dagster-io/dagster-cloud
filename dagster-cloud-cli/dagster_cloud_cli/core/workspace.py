@@ -2,10 +2,12 @@ import os
 from typing import Any, Dict, List, NamedTuple, Optional
 
 import dagster._check as check
+import yaml
 from dagster._core.instance.ref import InstanceRef
 from dagster._serdes import serialize_value, whitelist_for_serdes
 from dagster._utils.merger import merge_dicts
-from dagster_cloud.agent import AgentQueue
+
+from .agent_queue import AgentQueue
 
 
 @whitelist_for_serdes
@@ -55,6 +57,24 @@ class PexMetadata(
             return f"657821118200.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{agent_image_tag}"
         else:
             return f"878483074102.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{agent_image_tag}"
+
+
+def get_instance_ref_for_user_code(instance_ref: InstanceRef) -> InstanceRef:
+    # Remove fields from InstanceRef that may not be compatible with earlier
+    # versions of dagster and aren't actually needed by user code
+
+    custom_instance_class_data = instance_ref.custom_instance_class_data
+    if custom_instance_class_data:
+        config_dict = custom_instance_class_data.config_dict
+        new_config_dict = {
+            key: val for key, val in config_dict.items() if key not in {"agent_queues"}
+        }
+
+        custom_instance_class_data = custom_instance_class_data._replace(
+            config_yaml=yaml.dump(new_config_dict)
+        )
+
+    return instance_ref._replace(custom_instance_class_data=custom_instance_class_data)
 
 
 # History of CodeDeploymentMetadata
@@ -159,7 +179,15 @@ class CodeDeploymentMetadata(
                 "DAGSTER_CLI_API_GRPC_LAZY_LOAD_USER_CODE": "1",
                 "DAGSTER_CLI_API_GRPC_HOST": "0.0.0.0",
             },
-            ({"DAGSTER_INSTANCE_REF": serialize_value(instance_ref)} if instance_ref else {}),
+            (
+                {
+                    "DAGSTER_INSTANCE_REF": serialize_value(
+                        get_instance_ref_for_user_code(instance_ref)
+                    )
+                }
+                if instance_ref
+                else {}
+            ),
             ({"DAGSTER_CLI_API_GRPC_PORT": str(port)} if port else {}),
             ({"DAGSTER_CLI_API_GRPC_SOCKET": str(socket)} if socket else {}),
             ({"DAGSTER_CURRENT_IMAGE": self.image} if self.image else {}),

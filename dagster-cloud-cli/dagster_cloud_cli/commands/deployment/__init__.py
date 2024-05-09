@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import yaml
 from typer import Argument, Typer
@@ -27,12 +28,13 @@ app.add_typer(alert_policies_app, name="alert-policies", no_args_is_help=True)
 def set_from_filecommand(
     api_token: str,
     url: str,
+    deployment: Optional[str],
     file_path: Path = Argument(..., readable=True, metavar="SETTINGS_FILE_PATH"),
 ):
     """Set the Dagster Cloud deployment settings from a YAML file."""
     with open(file_path, "r", encoding="utf8") as f:
         settings = {"settings": yaml.safe_load(f) or {}}
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         gql.set_deployment_settings(client, settings)
 
 
@@ -41,9 +43,10 @@ def set_from_filecommand(
 def get_command(
     api_token: str,
     url: str,
+    deployment: Optional[str],
 ):
     """Get the Dagster Cloud deployment settings."""
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         settings = gql.get_deployment_settings(client)
     ui.print_yaml(settings)
 

@@ -12,6 +12,10 @@ def get_version() -> str:
     return version["__version__"]
 
 
+ver = get_version()
+# dont pin dev installs to avoid pip dep resolver issues
+pin = "" if ver == "1!0+dev" else f"=={ver}"
+
 setup(
     name="dagster-cloud-cli",
     version=get_version(),
@@ -19,6 +23,7 @@ setup(
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),
     include_package_data=True,
     install_requires=[
+        "dagster==1.7.5",
         "packaging>=20.9",
         "questionary",
         "requests",

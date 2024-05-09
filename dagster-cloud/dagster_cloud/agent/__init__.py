@@ -3,8 +3,7 @@ from typing import List, NamedTuple, Optional
 from dagster._serdes import (
     whitelist_for_serdes,
 )
-
-AgentQueue = Optional[str]
+from dagster_cloud_cli.core.agent_queue import AgentQueue
 
 
 @whitelist_for_serdes

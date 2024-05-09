@@ -244,6 +244,7 @@ INSIGHTS_TARGET_TYPES_SCHEMA = {
             }
         )
     ),
+    "credit_limit_target": Field(config={}),
 }
 
 ALERT_EVENT_TYPES = [

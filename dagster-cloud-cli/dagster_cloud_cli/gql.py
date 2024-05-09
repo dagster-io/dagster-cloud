@@ -10,9 +10,14 @@ from .core.graphql_client import DagsterCloudGraphQLClient, create_cloud_webserv
 
 @contextmanager
 def graphql_client_from_url(
-    url: str, token: str, retries: int = 3
+    url: str,
+    token: str,
+    retries: int = 3,
+    deployment_name: Optional[str] = None,
 ) -> Generator[DagsterCloudGraphQLClient, None, None]:
-    with create_cloud_webserver_client(url.rstrip("/"), token, retries) as client:
+    with create_cloud_webserver_client(
+        url.rstrip("/"), token, retries, deployment_name=deployment_name
+    ) as client:
         yield client
 
 

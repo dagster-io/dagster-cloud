@@ -394,13 +394,20 @@ def _get_retry_after_sleep_time(headers):
 
 
 @contextmanager
-def create_cloud_webserver_client(url: str, api_token: str, retries=3):
+def create_cloud_webserver_client(
+    url: str,
+    api_token: str,
+    retries=3,
+    deployment_name: Optional[str] = None,
+):
     with create_graphql_requests_session(adapter_kwargs={}) as session:
         yield DagsterCloudGraphQLClient(
             session=session,
             url=f"{url}/graphql",
             headers=get_dagster_cloud_api_headers(
-                api_token, scope=DagsterCloudInstanceScope.DEPLOYMENT
+                api_token,
+                scope=DagsterCloudInstanceScope.DEPLOYMENT,
+                deployment_name=deployment_name,
             ),
             max_retries=retries,
         )

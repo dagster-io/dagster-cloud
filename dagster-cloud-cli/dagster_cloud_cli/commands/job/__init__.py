@@ -16,6 +16,7 @@ app = Typer(help="Commands for working with Dagster Cloud jobs.")
 def launch(
     api_token: str,
     url: str,
+    deployment: Optional[str],
     location: str = typer.Option(..., "-l", "--location", help="Location name in the deployment."),
     job: str = typer.Option(..., "-j", "--job", help="Job name to run."),
     repository: str = typer.Option(
@@ -45,7 +46,7 @@ def launch(
     loaded_config: Dict[str, Any] = json.loads(config) if config else {}
 
     repository = repository or SINGLETON_REPOSITORY_NAME
-    with gql.graphql_client_from_url(url, api_token) as client:
+    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
         ui.print(
             gql.launch_run(
                 client,

@@ -30,7 +30,10 @@ from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import raise_http_error
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import (
+    CodeDeploymentMetadata,
+    get_instance_ref_for_user_code,
+)
 
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
@@ -629,6 +632,11 @@ class DagsterCloudAgent:
         else:
             return None
 
+    def _get_user_code_instance_ref(
+        self, instance: DagsterCloudAgentInstance, deployment_name: str
+    ):
+        return get_instance_ref_for_user_code(instance.ref_for_deployment(deployment_name))
+
     def _handle_api_request(
         self,
         request: DagsterCloudApiRequest,
@@ -658,7 +666,7 @@ class DagsterCloudAgent:
             )
             serialized_snapshot_or_error = client.execution_plan_snapshot(
                 execution_plan_snapshot_args=request.request_args._replace(
-                    instance_ref=instance.ref_for_deployment(deployment_name)
+                    instance_ref=self._get_user_code_instance_ref(instance, deployment_name)
                 )
             )
             return DagsterCloudApiGrpcResponse(serialized_snapshot_or_error)
@@ -713,7 +721,7 @@ class DagsterCloudAgent:
             )
 
             args = request.request_args._replace(
-                instance_ref=instance.ref_for_deployment(deployment_name)
+                instance_ref=self._get_user_code_instance_ref(instance, deployment_name)
             )
 
             serialized_schedule_data_or_error = client.external_schedule_execution(
@@ -728,7 +736,7 @@ class DagsterCloudAgent:
             )
 
             args = request.request_args._replace(
-                instance_ref=instance.ref_for_deployment(deployment_name)
+                instance_ref=self._get_user_code_instance_ref(instance, deployment_name)
             )
 
             serialized_sensor_data_or_error = client.external_sensor_execution(
@@ -746,7 +754,7 @@ class DagsterCloudAgent:
             run = request.request_args.dagster_run
 
             with DagsterInstance.from_ref(
-                instance.ref_for_deployment(deployment_name)
+                self._get_user_code_instance_ref(instance, deployment_name)
             ) as scoped_instance:
                 scoped_instance.report_engine_event(
                     f"{instance.agent_display_name} is launching run {run.run_id}",

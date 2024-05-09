@@ -5,25 +5,37 @@ from dagster import (
     MetadataValue,
     _check as check,
 )
+from dagster._core.definitions.asset_check_factories.freshness_checks.last_update import (
+    construct_description,
+)
+from dagster._core.definitions.asset_check_factories.utils import (
+    FRESH_UNTIL_METADATA_KEY,
+    LAST_UPDATED_TIMESTAMP_METADATA_KEY,
+    LOWER_BOUND_TIMESTAMP_METADATA_KEY,
+    assets_to_keys,
+    unique_id_from_asset_keys,
+)
 from dagster._core.definitions.asset_check_result import AssetCheckResult
-from dagster._core.definitions.asset_check_spec import AssetCheckSeverity, AssetCheckSpec
+from dagster._core.definitions.asset_check_spec import (
+    AssetCheckKey,
+    AssetCheckSeverity,
+    AssetCheckSpec,
+)
 from dagster._core.definitions.asset_checks import AssetChecksDefinition
 from dagster._core.definitions.asset_key import AssetKey
 from dagster._core.definitions.assets import AssetsDefinition
 from dagster._core.definitions.decorators.asset_check_decorator import multi_asset_check
 from dagster._core.definitions.events import CoercibleToAssetKey
-from dagster._core.definitions.freshness_checks.utils import (
-    asset_to_keys_iterable,
-    seconds_in_words,
-    unique_id_from_asset_keys,
-)
 from dagster._core.definitions.source_asset import SourceAsset
 from dagster._core.errors import (
     DagsterError,
     DagsterInvariantViolationError,
 )
 from dagster._core.instance import DagsterInstance
-from dagster_cloud_cli.core.graphql_client import create_cloud_webserver_client
+from dagster_cloud_cli.core.graphql_client import (
+    DagsterCloudGraphQLClient,
+    create_cloud_webserver_client,
+)
 
 from dagster_cloud import DagsterCloudAgentInstance
 
@@ -31,9 +43,19 @@ from .mutation import ANOMALY_DETECTION_INFERENCE_MUTATION
 from .types import (
     AnomalyDetectionModelParams,
     BetaFreshnessAnomalyDetectionParams,
+    FreshnessAnomalyDetectionResult,
 )
 
 DEFAULT_MODEL_PARAMS = BetaFreshnessAnomalyDetectionParams(sensitivity=0.1)
+MODEL_PARAMS_METADATA_KEY = "dagster/anomaly_detection_model_params"
+MODEL_VERSION_METADATA_KEY = "dagster/anomaly_detection_model_version"
+MODEL_TRAINING_RANGE_START_TIMESTAMP_METADATA_KEY = (
+    "dagster/anomaly_detection_model_training_range_start_timestamp"
+)
+MODEL_TRAINING_RANGE_END_TIMESTAMP_METADATA_KEY = (
+    "dagster/anomaly_detection_model_training_range_end_timestamp"
+)
+MAXIMUM_ACCEPTABLE_DELTA_METADATA_KEY = "dagster/anomaly_detection_maximum_acceptable_delta"
 
 
 class DagsterCloudAnomalyDetectionFailed(DagsterError):
@@ -43,6 +65,7 @@ class DagsterCloudAnomalyDetectionFailed(DagsterError):
 def _build_check_for_assets(
     asset_keys: Sequence[AssetKey],
     params: AnomalyDetectionModelParams,
+    severity: AssetCheckSeverity,
 ) -> AssetChecksDefinition:
     @multi_asset_check(
         specs=[
@@ -50,6 +73,10 @@ def _build_check_for_assets(
                 name="anomaly_detection_freshness_check",
                 description=f"Detects anomalies in the freshness of the asset using model {params.model_version.value.lower()}.",
                 asset=asset_key,
+                metadata={
+                    MODEL_PARAMS_METADATA_KEY: params.as_metadata,
+                    MODEL_VERSION_METADATA_KEY: params.model_version.value,
+                },
             )
             for asset_key in asset_keys
         ],
@@ -71,87 +98,17 @@ def _build_check_for_assets(
             check.str_param(instance.dagster_cloud_agent_token, "dagster_cloud_agent_token"),
         ) as client:
             for check_key in context.selected_asset_check_keys:
-                asset_key = check_key.asset_key
-                if not context.job_def.asset_layer.has(asset_key):
-                    raise Exception(f"Could not find targeted asset {asset_key.to_string()}.")
-                result = client.execute(
-                    ANOMALY_DETECTION_INFERENCE_MUTATION,
-                    {
-                        "modelVersion": params.model_version.value,
-                        "params": {
-                            **dict(params),
-                            "asset_key_user_string": asset_key.to_user_string(),
-                        },
-                    },
-                )
-                data = result["data"]["anomalyDetectionInference"]
-                metadata = {
-                    "model_params": {**params.as_metadata},
-                    "model_version": params.model_version.value,
-                }
-                if data["__typename"] != "AnomalyDetectionSuccess":
-                    yield handle_anomaly_detection_inference_failure(
-                        data, metadata, params, asset_key
-                    )
-                    continue
-                response = result["data"]["anomalyDetectionInference"]["response"]
-                overdue_seconds = check.float_param(response["overdue_seconds"], "overdue_seconds")
-                overdue_deadline_timestamp = response["overdue_deadline_timestamp"]
-                metadata["overdue_deadline_timestamp"] = MetadataValue.timestamp(
-                    overdue_deadline_timestamp
-                )
-                metadata["model_training_range_start_timestamp"] = MetadataValue.timestamp(
-                    response["model_training_range_start_timestamp"]
-                )
-                metadata["model_training_range_end_timestamp"] = MetadataValue.timestamp(
-                    response["model_training_range_end_timestamp"]
-                )
-
-                last_updated_timestamp = response["last_updated_timestamp"]
-                if last_updated_timestamp is None:
-                    yield AssetCheckResult(
-                        passed=True,
-                        description="The asset has never been materialized or otherwise observed to have been updated",
-                    )
-                    continue
-
-                evaluation_timestamp = response["evaluation_timestamp"]
-                last_update_lag_str = seconds_in_words(
-                    evaluation_timestamp - last_updated_timestamp
-                )
-                expected_lag_str = seconds_in_words(
-                    overdue_deadline_timestamp - last_updated_timestamp
-                )
-                gt_or_lte_str = "greater than" if overdue_seconds > 0 else "less than or equal to"
-                lag_comparison_str = (
-                    f"At the time of this check's evaluation, {last_update_lag_str} had passed since its "
-                    f"last update. This is {gt_or_lte_str} the allowed {expected_lag_str} threshold, which "
-                    "is based on its prior history of updates."
-                )
-
-                if overdue_seconds > 0:
-                    metadata["overdue_minutes"] = round(overdue_seconds / 60, 2)
-
-                    yield AssetCheckResult(
-                        passed=False,
-                        severity=AssetCheckSeverity.WARN,
-                        metadata=metadata,
-                        description=f"The asset is overdue for an update. {lag_comparison_str}",
-                        asset_key=asset_key,
-                    )
-                else:
-                    yield AssetCheckResult(
-                        passed=True,
-                        metadata=metadata,
-                        description=f"The asset is fresh. {lag_comparison_str}",
-                        asset_key=asset_key,
-                    )
+                yield _anomaly_detection_inner(check_key, context, client, params, severity)
 
     return the_check
 
 
 def handle_anomaly_detection_inference_failure(
-    data: dict, metadata: dict, params: AnomalyDetectionModelParams, asset_key: AssetKey
+    data: dict,
+    metadata: dict,
+    params: AnomalyDetectionModelParams,
+    asset_key: AssetKey,
+    severity: AssetCheckSeverity,
 ) -> AssetCheckResult:
     if (
         data["__typename"] == "AnomalyDetectionFailure"
@@ -161,7 +118,7 @@ def handle_anomaly_detection_inference_failure(
         # being too noisy with failures.
         return AssetCheckResult(
             passed=True,
-            severity=AssetCheckSeverity.WARN,
+            severity=severity,
             metadata=metadata,
             description=data["message"],
             asset_key=asset_key,
@@ -169,11 +126,75 @@ def handle_anomaly_detection_inference_failure(
     raise DagsterCloudAnomalyDetectionFailed(f"Anomaly detection failed: {data['message']}")
 
 
+def _anomaly_detection_inner(
+    check_key: AssetCheckKey,
+    context: AssetCheckExecutionContext,
+    client: DagsterCloudGraphQLClient,
+    params: AnomalyDetectionModelParams,
+    severity: AssetCheckSeverity,
+) -> AssetCheckResult:
+    asset_key = check_key.asset_key
+    if not context.job_def.asset_layer.has(asset_key):
+        raise Exception(f"Could not find targeted asset {asset_key.to_string()}.")
+    result = client.execute(
+        ANOMALY_DETECTION_INFERENCE_MUTATION,
+        {
+            "modelVersion": params.model_version.value,
+            "params": {
+                **dict(params),
+                "asset_key_user_string": asset_key.to_user_string(),
+            },
+        },
+    )
+    data = result["data"]["anomalyDetectionInference"]
+    metadata = {
+        MODEL_PARAMS_METADATA_KEY: {**params.as_metadata},
+        MODEL_VERSION_METADATA_KEY: params.model_version.value,
+    }
+    if data["__typename"] != "AnomalyDetectionSuccess":
+        return handle_anomaly_detection_inference_failure(
+            data, metadata, params, asset_key, severity
+        )
+    response = result["data"]["anomalyDetectionInference"]["response"]
+    result_obj = FreshnessAnomalyDetectionResult(**response)
+    metadata[MODEL_TRAINING_RANGE_START_TIMESTAMP_METADATA_KEY] = MetadataValue.timestamp(
+        result_obj.model_training_range_start_timestamp
+    )
+    metadata[MODEL_TRAINING_RANGE_END_TIMESTAMP_METADATA_KEY] = MetadataValue.timestamp(
+        result_obj.model_training_range_end_timestamp
+    )
+    metadata[LAST_UPDATED_TIMESTAMP_METADATA_KEY] = MetadataValue.timestamp(
+        result_obj.last_updated_timestamp
+    )
+    metadata[LOWER_BOUND_TIMESTAMP_METADATA_KEY] = MetadataValue.timestamp(
+        result_obj.last_update_time_lower_bound
+    )
+    passed = result_obj.last_update_time_lower_bound <= result_obj.last_updated_timestamp
+
+    if passed:
+        fresh_until = result_obj.last_updated_timestamp + result_obj.maximum_acceptable_delta
+        metadata[FRESH_UNTIL_METADATA_KEY] = MetadataValue.timestamp(fresh_until)
+
+    return AssetCheckResult(
+        passed=passed,
+        description=construct_description(
+            passed=passed,
+            last_update_time_lower_bound=result_obj.last_update_time_lower_bound,
+            current_timestamp=result_obj.evaluation_timestamp,
+            update_timestamp=result_obj.last_updated_timestamp,
+        ),
+        severity=AssetCheckSeverity.WARN,
+        metadata=metadata,
+        asset_key=asset_key,
+    )
+
+
 def build_anomaly_detection_freshness_checks(
     *,
     assets: Sequence[Union[CoercibleToAssetKey, AssetsDefinition, SourceAsset]],
     params: Optional[AnomalyDetectionModelParams],
-) -> AssetChecksDefinition:
+    severity: AssetCheckSeverity = AssetCheckSeverity.WARN,
+) -> Sequence[AssetChecksDefinition]:
     """Builds a list of asset checks which utilize anomaly detection algorithms to
     determine the freshness of data.
 
@@ -181,9 +202,11 @@ def build_anomaly_detection_freshness_checks(
         assets (Sequence[Union[CoercibleToAssetKey, AssetsDefinition, SourceAsset]]): The assets to construct checks for. For each passed in
             asset, there will be a corresponding constructed `AssetChecksDefinition`.
         params (AnomalyDetectionModelParams): The parameters to use for the model. The parameterization corresponds to the model used.
+        severity (AssetCheckSeverity): The severity of the check. Defaults to `AssetCheckSeverity.WARN`.
 
     Returns:
-        AssetChecksDefinition: A list of `AssetChecksDefinition` objects, each corresponding to an asset in the `assets` parameter.
+        Sequence[AssetChecksDefinition]: `AssetChecksDefinition` objects which execute freshness checks
+            for the provided assets.
 
     Examples:
         .. code-block:: python
@@ -198,9 +221,14 @@ def build_anomaly_detection_freshness_checks(
     params = check.opt_inst_param(
         params, "params", AnomalyDetectionModelParams, DEFAULT_MODEL_PARAMS
     )
-    return _build_check_for_assets(
-        [asset_key for asset in assets for asset_key in asset_to_keys_iterable(asset)], params
-    )
+    severity = check.inst_param(severity, "severity", AssetCheckSeverity)
+    return [
+        _build_check_for_assets(
+            [asset_key for asset in assets for asset_key in assets_to_keys([asset])],
+            params,
+            severity,
+        )
+    ]
 
 
 def _is_agent_instance(instance: DagsterInstance) -> bool:
