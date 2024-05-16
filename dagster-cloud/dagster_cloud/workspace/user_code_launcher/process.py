@@ -317,7 +317,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         return DagsterCloudGrpcServer(pid, endpoint, metadata)
 
-    def _wait_for_new_server_ready(
+    async def _wait_for_new_server_ready(
         self,
         deployment_name: str,
         location_name: str,
@@ -325,7 +325,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         server_handle: int,
         server_endpoint: ServerEndpoint,
     ) -> None:
-        self._wait_for_dagster_server_process(
+        await self._wait_for_dagster_server_process(
             client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
         )

@@ -1,5 +1,7 @@
 # The following allows logging calls with extra arguments
 # ruff: noqa: PLE1205
+import asyncio
+import functools
 import json
 import logging
 import os
@@ -121,6 +123,18 @@ INIT_UPLOAD_LOCATIONS_QUERY = """
 """
 
 DEFAULT_SERVER_TTL_SECONDS = 60 * 60 * 24
+
+
+def async_serialize_exceptions(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception:
+            # Capture and return exception details and stack trace
+            return serializable_error_info_from_exc_info(sys.exc_info())
+
+    return wrapper
 
 
 @whitelist_for_serdes
@@ -821,20 +835,81 @@ class DagsterCloudUserCodeLauncher(
         to happen should happen in _wait_for_new_server_ready.
         """
 
-    def _wait_for_new_multipex_server(
+    @async_serialize_exceptions
+    async def _wait_for_new_multipex_server(
         self,
         _deployment_name: str,
         _location_name: str,
         _server_handle: ServerHandle,
         multipex_endpoint: ServerEndpoint,
     ):
-        self._wait_for_server_process(
+        await self._wait_for_server_process(
             multipex_endpoint.create_multipex_client(),
             timeout=self._server_process_startup_timeout,
         )
 
+    @async_serialize_exceptions
+    async def _wait_for_new_server_ready_and_possibly_upload(
+        self,
+        to_update_key: DeploymentAndLocation,
+        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
+        desired_entry: UserCodeLauncherEntry,
+        should_upload: bool,
+    ):
+        deployment_name, location_name = to_update_key
+
+        code_deployment_metadata = desired_entry.code_deployment_metadata
+        pex_metadata = code_deployment_metadata.pex_metadata
+        deployment_info = (
+            f"(pex_tag={pex_metadata.pex_tag}, python_version={pex_metadata.python_version})"
+            if pex_metadata
+            else f"(image={code_deployment_metadata})"
+        )
+        if not isinstance(server_or_error, SerializableErrorInfo):
+            try:
+                self._logger.info(
+                    f"Waiting for new grpc server for {deployment_name}:{location_name} for {deployment_info} to be ready..."
+                )
+                await self._wait_for_new_server_ready(
+                    deployment_name,
+                    location_name,
+                    desired_entry,
+                    server_or_error.server_handle,
+                    server_or_error.server_endpoint,
+                )
+            except Exception:
+                error_info = serializable_error_info_from_exc_info(sys.exc_info())
+                self._logger.error(
+                    f"Error while waiting for server for {deployment_name}:{location_name} for {deployment_info} to be"
+                    f" ready: {error_info}"
+                )
+                server_or_error = error_info
+
+        if should_upload:
+            try:
+                self._update_location_data(
+                    deployment_name,
+                    location_name,
+                    server_or_error,
+                    desired_entry.code_deployment_metadata,
+                )
+            except Exception:
+                # If there was a failure uploading snapshots, log it but don't block other code locations
+                # from updating (and still use the new server to serve new requests)
+                error_info = serializable_error_info_from_exc_info(sys.exc_info())
+                self._logger.error(
+                    f"Error while writing location data for {deployment_name}:{location_name}:"
+                    f" {error_info}"
+                )
+
+        # Once we've verified that the new server has uploaded its data successfully, swap in
+        # the server to start serving new requests
+        with self._grpc_servers_lock:
+            self._grpc_servers[to_update_key] = server_or_error
+            self._first_unavailable_times.pop(to_update_key, None)
+
     @abstractmethod
-    def _wait_for_new_server_ready(
+    async def _wait_for_new_server_ready(
         self,
         deployment_name: str,
         location_name: str,
@@ -1327,6 +1402,10 @@ class DagsterCloudUserCodeLauncher(
     def _check_running_multipex_server(self, multipex_server: DagsterCloudGrpcServer):
         multipex_server.server_endpoint.create_multipex_client().ping("")
 
+    async def _gather_tasks(self, tasks):
+        # Single async function that can be passed into asyncio.run
+        return await asyncio.gather(*tasks)
+
     def _reconcile(
         self,
         desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
@@ -1460,22 +1539,33 @@ class DagsterCloudUserCodeLauncher(
 
         # For each new multi-pex server, wait for it to be ready. If it fails, put
         # the location that was planned to use it into an error state
+
+        tasks = {}
+
         for to_update_key, multipex_server in new_multipex_servers.items():
             deployment_name, location_name = to_update_key
 
-            try:
-                self._logger.info(
-                    f"Waiting for new multipex server for {deployment_name}:{location_name} to be"
-                    " ready"
-                )
-                self._wait_for_new_multipex_server(
-                    deployment_name,
-                    location_name,
-                    multipex_server.server_handle,
-                    multipex_server.server_endpoint,
-                )
-            except Exception:
-                error_info = serializable_error_info_from_exc_info(sys.exc_info())
+            self._logger.info(
+                f"Waiting for new multipex server for {deployment_name}:{location_name} to be"
+                " ready"
+            )
+            tasks[to_update_key] = self._wait_for_new_multipex_server(
+                deployment_name,
+                location_name,
+                multipex_server.server_handle,
+                multipex_server.server_endpoint,
+            )
+
+        # Wait for each new multipex server concurrently
+        results = asyncio.run(self._gather_tasks(tasks.values()))
+
+        results_with_keys = dict(zip(tasks.keys(), results))
+
+        for to_update_key, result in results_with_keys.items():
+            deployment_name, location_name = to_update_key
+
+            if isinstance(result, SerializableErrorInfo):
+                error_info = result
 
                 self._logger.error(
                     f"Error while waiting for multipex server for {deployment_name}:{location_name}:"
@@ -1525,62 +1615,33 @@ class DagsterCloudUserCodeLauncher(
                 )
                 new_dagster_servers[to_update_key] = error_info
 
+        tasks = {}
+
         # Wait for all new dagster servers (standalone or within a multipex server) to be ready
+        # concurrently, possibly uploading the results to Dagster servers if requested
         for to_update_key in to_update_keys:
-            deployment_name, location_name = to_update_key
-            code_deployment_metadata = desired_entries[to_update_key].code_deployment_metadata
             server_or_error = new_dagster_servers[to_update_key]
-
-            pex_metadata = code_deployment_metadata.pex_metadata
-            deployment_info = (
-                f"(pex_tag={pex_metadata.pex_tag}, python_version={pex_metadata.python_version})"
-                if pex_metadata
-                else f"(image={code_deployment_metadata})"
+            tasks[to_update_key] = self._wait_for_new_server_ready_and_possibly_upload(
+                to_update_key,
+                server_or_error,
+                desired_entries[to_update_key],
+                should_upload=to_update_key in upload_locations,
             )
-            if not isinstance(server_or_error, SerializableErrorInfo):
-                try:
-                    self._logger.info(
-                        f"Waiting for new grpc server for {to_update_key} for {deployment_info} to be ready..."
-                    )
-                    self._wait_for_new_server_ready(
-                        deployment_name,
-                        location_name,
-                        desired_entries[to_update_key],
-                        server_or_error.server_handle,
-                        server_or_error.server_endpoint,
-                    )
-                except Exception:
-                    error_info = serializable_error_info_from_exc_info(sys.exc_info())
-                    self._logger.error(
-                        f"Error while waiting for server for {deployment_name}:{location_name} for {deployment_info} to be"
-                        f" ready: {error_info}"
-                    )
-                    server_or_error = error_info
 
-            # If needed, upload snapshot information to Dagster Cloud
-            if to_update_key in upload_locations:
-                upload_locations.remove(to_update_key)
-                try:
-                    self._update_location_data(
-                        deployment_name,
-                        location_name,
-                        server_or_error,
-                        desired_entries[to_update_key].code_deployment_metadata,
-                    )
-                except Exception:
-                    # If there was a failure uploading snapshots, log it but don't block other code locations
-                    # from updating (and still use the new server to serve new requests)
-                    error_info = serializable_error_info_from_exc_info(sys.exc_info())
-                    self._logger.error(
-                        f"Error while writing location data for {deployment_name}:{location_name}:"
-                        f" {error_info}"
-                    )
+        results = asyncio.run(self._gather_tasks(tasks.values()))
+        results_with_keys = dict(zip(tasks.keys(), results))
+        for to_update_key, result in results_with_keys.items():
+            deployment_name, location_name = to_update_key
 
-            # Once we've verified that the new server has uploaded its data successfully, swap in
-            # the server to start serving new requests
-            with self._grpc_servers_lock:
-                self._grpc_servers[to_update_key] = server_or_error
-                self._first_unavailable_times.pop(to_update_key, None)
+            # Don't expect any uncaught exceptions here, but can't hurt
+            if isinstance(result, SerializableErrorInfo):
+                error_info = serializable_error_info_from_exc_info(sys.exc_info())
+                self._logger.error(
+                    f"Error while waiting for new server for {deployment_name}:{location_name}:"
+                    f" {error_info}"
+                )
+
+        upload_locations.difference_update(to_update_keys)
 
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
@@ -1908,20 +1969,20 @@ class DagsterCloudUserCodeLauncher(
         for server_handle in existing_multipex_server_handles:
             self._graceful_remove_server_handle(server_handle)
 
-    def _wait_for_dagster_server_process(
+    async def _wait_for_dagster_server_process(
         self,
         client: DagsterGrpcClient,
         timeout,
         additional_check: Optional[Callable[[], None]] = None,
         get_timeout_debug_info: Optional[Callable[[], Any]] = None,
     ) -> None:
-        self._wait_for_server_process(
+        await self._wait_for_server_process(
             client, timeout, additional_check, get_timeout_debug_info=get_timeout_debug_info
         )
         # Call a method that raises an exception if there was an error importing the code
         sync_list_repositories_grpc(client)
 
-    def _wait_for_server_process(
+    async def _wait_for_server_process(
         self,
         client: Union[DagsterGrpcClient, MultiPexGrpcClient],
         timeout,
@@ -1957,7 +2018,7 @@ class DagsterCloudUserCodeLauncher(
                     + f"\n\nMost recent connection error: {last_error}"
                 )
 
-            time.sleep(1)
+            await asyncio.sleep(1)
 
             if additional_check and (
                 not last_additional_check_time

@@ -215,6 +215,16 @@ GET_DAEMON_HEARTBEATS_QUERY = """
     }
 """
 
+ADD_RUN_TELEMETRY_MUTATION = """
+    mutation addRunTelemetry($serializedTelemetry: String!, $serializedTags: String!) {
+        runs {
+            addRunTelemetry(serializedTelemetry: $serializedTelemetry, serializedTags: $serializedTags) {
+                ok
+            }
+        }
+    }
+"""
+
 GET_BACKFILLS_QUERY = """
     query getBackfillsQuery($status: String, $cursor: String, $limit: Int) {
         runs {

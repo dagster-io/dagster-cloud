@@ -70,6 +70,14 @@ def get_instance_ref_for_user_code(instance_ref: InstanceRef) -> InstanceRef:
             key: val for key, val in config_dict.items() if key not in {"agent_queues"}
         }
 
+        user_code_launcher_config = config_dict.get("user_code_launcher", {}).get("config")
+        if user_code_launcher_config:
+            new_config_dict["user_code_launcher"]["config"] = {
+                key: val
+                for key, val in user_code_launcher_config.items()
+                if key not in {"agent_metrics"}
+            }
+
         custom_instance_class_data = custom_instance_class_data._replace(
             config_yaml=yaml.dump(new_config_dict)
         )

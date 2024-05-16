@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, cast
@@ -43,7 +44,10 @@ from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
 )
-from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
+from dagster_cloud.workspace.user_code_launcher.user_code_launcher import (
+    UserCodeLauncherEntry,
+    async_serialize_exceptions,
+)
 from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
 
 from .client import get_debug_ecs_prompt
@@ -482,12 +486,17 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             f"Checking whether service {multipex_server.server_handle.name} is ready for existing"
             " multipex server..."
         )
-        self.client.check_service_has_running_tasks(
-            multipex_server.server_handle.name, container_name=CONTAINER_NAME, logger=self._logger
+        asyncio.run(
+            self.client.check_service_has_running_tasks(
+                multipex_server.server_handle.name,
+                container_name=CONTAINER_NAME,
+                logger=self._logger,
+            )
         )
         super()._check_running_multipex_server(multipex_server)
 
-    def _wait_for_new_multipex_server(
+    @async_serialize_exceptions
+    async def _wait_for_new_multipex_server(
         self,
         _deployment_name: str,
         _location_name: str,
@@ -497,10 +506,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self._logger.info(
             f"Waiting for service {server_handle.name} to be ready for multipex server..."
         )
-        task_arn = self.client.wait_for_new_service(
+        task_arn = await self.client.wait_for_new_service(
             server_handle, container_name=CONTAINER_NAME, logger=self._logger
         )
-        self._wait_for_server_process(
+        await self._wait_for_server_process(
             multipex_endpoint.create_multipex_client(),
             timeout=self._server_process_startup_timeout,
             additional_check=lambda: self.client.assert_task_not_stopped(
@@ -526,7 +535,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         return "\n\n".join(sections)
 
-    def _wait_for_new_server_ready(
+    async def _wait_for_new_server_ready(
         self,
         deployment_name: str,
         location_name: str,
@@ -538,7 +547,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self._logger.info(
             f"Waiting for service {server_handle.name} to be ready for gRPC server..."
         )
-        task_arn = self.client.wait_for_new_service(
+        task_arn = await self.client.wait_for_new_service(
             server_handle, container_name=CONTAINER_NAME, logger=self._logger
         )
 
@@ -595,7 +604,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 task_arn, CONTAINER_NAME, self._logger
             )
 
-        self._wait_for_dagster_server_process(
+        await self._wait_for_dagster_server_process(
             client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
             additional_check=additional_check,

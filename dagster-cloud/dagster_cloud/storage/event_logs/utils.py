@@ -14,7 +14,7 @@ def truncate_event(
         return event._replace(
             user_message=(
                 f"[TRUNCATED from {len(event.user_message)} characters to"
-                f" {MAXIMUM_EVENT_MESSAGE_CHARACTERS}]"
+                f" {maximum_length}]"
                 f" {event.user_message[:maximum_length]} [TRUNCATED]"
             ),
         )

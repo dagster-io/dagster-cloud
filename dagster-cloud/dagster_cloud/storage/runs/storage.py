@@ -22,6 +22,7 @@ from dagster._core.errors import (
 )
 from dagster._core.events import DagsterEvent
 from dagster._core.execution.backfill import BulkActionStatus, PartitionBackfill
+from dagster._core.execution.types import RunTelemetryData
 from dagster._core.remote_representation.origin import RemoteJobOrigin
 from dagster._core.snap import (
     ExecutionPlanSnapshot,
@@ -57,6 +58,7 @@ from .queries import (
     ADD_PIPELINE_SNAPSHOT_MUTATION,
     ADD_RUN_MUTATION,
     ADD_RUN_TAGS_MUTATION,
+    ADD_RUN_TELEMETRY_MUTATION,
     GET_BACKFILL_QUERY,
     GET_BACKFILLS_QUERY,
     GET_DAEMON_HEARTBEATS_QUERY,
@@ -436,6 +438,26 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "serializedDaemonHeartbeat": serialize_value(
                     check.inst_param(daemon_heartbeat, "daemon_heartbeat", DaemonHeartbeat)
                 )
+            },
+        )
+
+    def add_run_telemetry(
+        self,
+        run_telemetry: RunTelemetryData,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> None:
+        if tags is None:
+            tags = {}
+
+        self._execute_query(
+            ADD_RUN_TELEMETRY_MUTATION,
+            variables={
+                "serializedTelemetry": serialize_value(
+                    check.inst_param(run_telemetry, "run_telemetry", RunTelemetryData)
+                ),
+                "serializedTags": serialize_value(
+                    check.dict_param(tags, "tags", key_type=str, value_type=str)
+                ),
             },
         )
 

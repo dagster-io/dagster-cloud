@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import re
 import time
@@ -217,7 +218,7 @@ def get_deployment_failure_debug_info(
     return f"{pod_debug_info}\n\n{kubectl_prompt}" if pod_debug_info else kubectl_prompt
 
 
-def wait_for_deployment_complete(
+async def wait_for_deployment_complete(
     k8s_deployment_name,
     namespace,
     logger,
@@ -237,7 +238,7 @@ def wait_for_deployment_complete(
     pod_list = []
 
     while True:
-        time.sleep(2)
+        await asyncio.sleep(2)
 
         time_elapsed = time.time() - start
 

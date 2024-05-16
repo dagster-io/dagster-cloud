@@ -23,11 +23,11 @@ setup(
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.7.5",
+        "dagster==1.7.6",
         "packaging>=20.9",
         "questionary",
         "requests",
-        "typer[all]>=0.4.1",
+        "typer>=0.4.1",
         "PyYAML>=5.1",
         "github3.py",
     ],

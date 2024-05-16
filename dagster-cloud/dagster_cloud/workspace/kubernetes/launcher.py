@@ -510,7 +510,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             "Wrote liveness sentinel: indicating that agent is ready to serve requests"
         )
 
-    def _wait_for_new_server_ready(
+    async def _wait_for_new_server_ready(
         self,
         deployment_name: str,
         location_name: str,
@@ -520,7 +520,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
     ) -> None:
         metadata = user_code_launcher_entry.code_deployment_metadata
 
-        wait_for_deployment_complete(
+        await wait_for_deployment_complete(
             server_handle.name,
             server_handle.namespace,
             self._logger,
@@ -531,7 +531,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             core_api=self._get_core_api_client(),
         )
 
-        self._wait_for_dagster_server_process(
+        await self._wait_for_dagster_server_process(
             client=server_endpoint.create_client(),
             timeout=self._server_process_startup_timeout,
             get_timeout_debug_info=lambda: self._get_timeout_debug_info(server_handle),

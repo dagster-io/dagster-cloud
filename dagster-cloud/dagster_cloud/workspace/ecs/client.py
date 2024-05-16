@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -519,7 +520,7 @@ class Client:
 
         return Service(client=self, arn=arn)
 
-    def wait_for_new_service(self, service, container_name, logger=None) -> dict:
+    async def wait_for_new_service(self, service, container_name, logger=None) -> str:
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         service_name = service.name
         start_time = time.time()
@@ -529,7 +530,7 @@ class Client:
                 services=[service_name],
             )
             if response.get("services"):
-                running_tasks = self.check_service_has_running_tasks(
+                running_tasks = await self.check_service_has_running_tasks(
                     service_name, container_name, logger=logger
                 )
                 return running_tasks[0]
@@ -552,7 +553,7 @@ class Client:
                     f"ECS DescribeServices API returned failures: {json.dumps(failures)}"
                 )
 
-            time.sleep(10)
+            await asyncio.sleep(10)
 
     def _raise_failed_task(self, task, container_name, logger):
         task_arn = task["taskArn"]
@@ -580,9 +581,9 @@ class Client:
         if task.get("lastStatus") == "STOPPED":
             self._raise_failed_task(task, container_name, logger)
 
-    def check_service_has_running_tasks(
+    async def check_service_has_running_tasks(
         self, service_name, container_name, logger=None
-    ) -> List[dict]:
+    ) -> List[str]:
         # return the ARN of the task if it starts
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         start_time = time.time()
@@ -642,7 +643,7 @@ class Client:
                 if all_tasks_running:
                     return tasks_to_track
 
-            time.sleep(20)
+            await asyncio.sleep(20)
 
         # Fetch the service event logs to try to get some clue about why the service never spun
         # up any tasks
