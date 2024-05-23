@@ -85,6 +85,17 @@ TARGET_TYPES_SCHEMA = {
             }
         )
     ),
+    "long_running_job_threshold_target": Field(
+        config=Shape(
+            fields={
+                "threshold_seconds": Field(
+                    config=float,
+                    is_required=True,
+                    description="The threshold value to alert if exceeded.",
+                ),
+            }
+        )
+    ),
 }
 
 
@@ -250,6 +261,7 @@ INSIGHTS_TARGET_TYPES_SCHEMA = {
 ALERT_EVENT_TYPES = [
     EnumValue("JOB_FAILURE", description="Alert on job failure."),
     EnumValue("JOB_SUCCESS", description="Alert on job success."),
+    EnumValue("JOB_LONG_RUNNING", description="Alert on job running past a specified time limit."),
     EnumValue("TICK_FAILURE", description="Alert on schedule/sensor failure."),
     EnumValue("AGENT_UNAVAILABLE", description="Alert on agent downtime."),
     EnumValue("CODE_LOCATION_ERROR", description="Alert on code location error."),

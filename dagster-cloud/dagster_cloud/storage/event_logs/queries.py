@@ -121,6 +121,30 @@ ASSET_RECORD_FRAGMENT = (
     """
 )
 
+ASSET_CHECK_STATE_FRAGMENT = (
+    EVENT_LOG_ENTRY_FRAGMENT
+    + """
+    fragment AssetCheckSummaryRecordFragment on AssetCheckSummaryRecord {
+        assetCheckKey {
+            assetKey {
+                path
+            }
+            name
+        }
+        lastCheckExecutionRecord {
+            id
+            runId
+            status
+            event {
+                ...EventLogEntryFragment
+            }
+            createTimestamp
+        }
+        lastRunId 
+    } 
+"""
+)
+
 GET_RECORDS_FOR_RUN_QUERY = (
     EVENT_RECORD_FRAGMENT
     + """
@@ -239,6 +263,19 @@ GET_ASSET_RECORDS_QUERY = (
         }
     }
     """
+)
+
+GET_ASSET_CHECK_STATE_QUERY = (
+    ASSET_CHECK_STATE_FRAGMENT
+    + """
+    query getAssetCheckSummaryRecord($assetCheckKeys: [String!]) {
+        eventLogs {
+            getAssetCheckSummaryRecord(assetCheckKeys: $assetCheckKeys) {
+                ...AssetCheckSummaryRecordFragment
+            }
+        }
+    }
+"""
 )
 
 GET_ALL_ASSET_KEYS_QUERY = """

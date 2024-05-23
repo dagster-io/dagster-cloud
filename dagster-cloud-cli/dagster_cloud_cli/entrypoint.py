@@ -83,6 +83,7 @@ app = typer.Typer(
     context_settings={
         "help_option_names": ["-h", "--help"],
     },
+    pretty_exceptions_enable=False,  # don't display overly verbose stack traces
 )
 
 

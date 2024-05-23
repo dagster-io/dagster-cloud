@@ -23,7 +23,7 @@ setup(
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.7.6",
+        "dagster==1.7.7",
         "packaging>=20.9",
         "questionary",
         "requests",

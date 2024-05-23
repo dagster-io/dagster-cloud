@@ -33,9 +33,13 @@ from dagster._core.event_api import (
 from dagster._core.events import DagsterEvent, DagsterEventType
 from dagster._core.events.log import EventLogEntry
 from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
-from dagster._core.storage.asset_check_execution_record import AssetCheckExecutionRecord
+from dagster._core.storage.asset_check_execution_record import (
+    AssetCheckExecutionRecord,
+    AssetCheckExecutionRecordStatus,
+)
 from dagster._core.storage.dagster_run import DagsterRunStatsSnapshot
 from dagster._core.storage.event_log.base import (
+    AssetCheckSummaryRecord,
     AssetEntry,
     AssetRecord,
     EventLogConnection,
@@ -84,6 +88,7 @@ from .queries import (
     FREE_CONCURRENCY_SLOT_FOR_STEP_MUTATION,
     FREE_CONCURRENCY_SLOTS_FOR_RUN_MUTATION,
     GET_ALL_ASSET_KEYS_QUERY,
+    GET_ASSET_CHECK_STATE_QUERY,
     GET_ASSET_RECORDS_QUERY,
     GET_CONCURRENCY_INFO_QUERY,
     GET_CONCURRENCY_KEYS_QUERY,
@@ -363,6 +368,35 @@ def _asset_record_from_graphql(graphene_asset_record: Dict) -> AssetRecord:
     )
 
 
+def _asset_check_execution_record_from_graphql(data: Dict):
+    return AssetCheckExecutionRecord(
+        id=data["id"],
+        run_id=data["runId"],
+        status=AssetCheckExecutionRecordStatus(data["status"]),
+        event=_event_log_entry_from_graphql(data["event"]),
+        create_timestamp=data["createTimestamp"],
+    )
+
+
+def _asset_check_summary_record_from_graphql(
+    graphene_asset_check_summary_record: Dict,
+) -> AssetCheckSummaryRecord:
+    check.dict_param(graphene_asset_check_summary_record, "graphene_asset_check_summary_record")
+    return AssetCheckSummaryRecord(
+        asset_check_key=AssetCheckKey.from_graphql_input(
+            graphene_asset_check_summary_record["assetCheckKey"]
+        ),
+        last_check_execution_record=(
+            _asset_check_execution_record_from_graphql(
+                graphene_asset_check_summary_record["lastCheckExecutionRecord"]
+            )
+            if graphene_asset_check_summary_record["lastCheckExecutionRecord"]
+            else None
+        ),
+        last_run_id=graphene_asset_check_summary_record["lastRunId"],
+    )
+
+
 def _event_records_result_from_graphql(graphene_event_records_result: Dict) -> EventRecordsResult:
     return EventRecordsResult(
         records=[
@@ -638,7 +672,6 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         check.opt_int_param(limit, "limit")
         check.bool_param(ascending, "ascending")
 
-        print(_get_event_records_filter_input(event_records_filter))
         res = self._execute_query(
             GET_EVENT_RECORDS_QUERY,
             variables={
@@ -655,6 +688,20 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     @property
     def asset_records_have_last_observation(self) -> bool:
         return True
+
+    def get_asset_check_summary_records(
+        self, asset_check_keys: Sequence[AssetCheckKey]
+    ) -> Mapping[AssetCheckKey, AssetCheckSummaryRecord]:
+        res = self._execute_query(
+            GET_ASSET_CHECK_STATE_QUERY,
+            variables={"assetCheckKeys": [key.to_user_string() for key in asset_check_keys]},
+        )
+        records = {}
+        for result in res["data"]["eventLogs"]["getAssetCheckSummaryRecord"]:
+            record = _asset_check_summary_record_from_graphql(result)
+            check_key = AssetCheckKey.from_graphql_input(result["assetCheckKey"])
+            records[check_key] = record
+        return records
 
     def get_asset_records(
         self, asset_keys: Optional[Sequence[AssetKey]] = None
