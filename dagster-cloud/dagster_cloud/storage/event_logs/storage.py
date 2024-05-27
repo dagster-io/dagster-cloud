@@ -736,9 +736,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         ]
 
     def get_latest_materialization_events(
-        self, asset_keys: Sequence[AssetKey]
+        self, asset_keys: Iterable[AssetKey]
     ) -> Mapping[AssetKey, Optional[EventLogEntry]]:
-        check.list_param(asset_keys, "asset_keys", of_type=AssetKey)
+        check.iterable_param(asset_keys, "asset_keys", of_type=AssetKey)
 
         res = self._execute_query(
             GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
