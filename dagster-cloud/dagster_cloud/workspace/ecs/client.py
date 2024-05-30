@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import time
 from typing import List, Optional
 
@@ -9,6 +10,7 @@ import botocore
 import dagster._check as check
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from dagster._utils.backoff import backoff
 from dagster._utils.cached_method import cached_method
 from dagster_aws.ecs.tasks import DagsterEcsTaskDefinitionConfig
 from dagster_aws.ecs.utils import task_definitions_match
@@ -129,6 +131,42 @@ class Client:
 
         return network_configuration
 
+    def _reuse_or_register_task_definition(
+        self,
+        desired_task_definition_config: DagsterEcsTaskDefinitionConfig,
+        container_name: str,
+        logger: logging.Logger,
+    ):
+        family = desired_task_definition_config.family
+
+        try:
+            existing_task_definition = self.ecs.describe_task_definition(taskDefinition=family)[
+                "taskDefinition"
+            ]
+        except ClientError:
+            logger.info("No existing task definition")
+            # task definition does not exist, do not reuse
+            existing_task_definition = None
+
+        if not existing_task_definition or not task_definitions_match(
+            desired_task_definition_config,
+            existing_task_definition,
+            container_name=container_name,
+        ):
+            task_definition_arn = (
+                self.ecs.register_task_definition(
+                    **desired_task_definition_config.task_definition_dict()
+                )
+                .get("taskDefinition")
+                .get("taskDefinitionArn")
+            )
+            logger.info(f"Created new task definition {task_definition_arn}")
+        else:
+            task_definition_arn = existing_task_definition["taskDefinitionArn"]
+            logger.info(f"Re-using existing task definition {task_definition_arn}")
+
+        return task_definition_arn
+
     def register_task_definition(
         self,
         family,
@@ -192,29 +230,16 @@ class Client:
             health_check=health_check,
         )
 
-        try:
-            existing_task_definition = self.ecs.describe_task_definition(taskDefinition=family)[
-                "taskDefinition"
-            ]
-        except ClientError:
-            logger.info("No existing task definition")
-            # task definition does not exist, do not reuse
-            existing_task_definition = None
-
-        if not existing_task_definition or not task_definitions_match(
-            task_definition_config,
-            existing_task_definition,
-            container_name=container_name,
-        ):
-            task_definition_arn = (
-                self.ecs.register_task_definition(**task_definition_config.task_definition_dict())
-                .get("taskDefinition")
-                .get("taskDefinitionArn")
-            )
-            logger.info(f"Created new task definition {task_definition_arn}")
-        else:
-            task_definition_arn = existing_task_definition["taskDefinitionArn"]
-            logger.info(f"Re-using existing task definition {task_definition_arn}")
+        task_definition_arn = backoff(
+            self._reuse_or_register_task_definition,
+            retry_on=(Exception,),
+            kwargs={
+                "desired_task_definition_config": task_definition_config,
+                "container_name": container_name,
+                "logger": logger,
+            },
+            max_retries=int(os.getenv("DAGSTER_CLOUD_REGISTER_TASK_DEFINITION_RETRIES", "5")),
+        )
 
         return task_definition_arn
 

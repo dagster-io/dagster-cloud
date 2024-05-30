@@ -81,7 +81,7 @@ class DockerUserCodeLauncher(
     def requires_images(self):
         return True
 
-    def user_code_deployment_type(self) -> UserCodeDeploymentType:
+    def user_code_deployment_type(self) -> UserCodeDeploymentType:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         return UserCodeDeploymentType.DOCKER
 
     @property
@@ -331,7 +331,7 @@ class DockerUserCodeLauncher(
             DagsterDockerContainer(container=container), server_endpoint, metadata
         )
 
-    async def _wait_for_new_server_ready(
+    async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,
         deployment_name: str,
         location_name: str,

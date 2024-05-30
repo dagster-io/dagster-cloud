@@ -529,7 +529,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             end_time=check.opt_float_elem(stats, "endTime"),
         )
 
-    def get_step_stats_for_run(
+    def get_step_stats_for_run(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self, run_id: str, step_keys: Optional[List[str]] = None
     ) -> List[RunStepKeyStatsSnapshot]:
         res = self._execute_query(
@@ -637,7 +637,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def wipe(self):
         return self._execute_query(WIPE_EVENT_LOG_STORAGE_MUTATION)
 
-    def watch(self, run_id: str, cursor: str, callback: Callable):
+    def watch(self, run_id: str, cursor: str, callback: Callable):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         raise NotImplementedError("Not callable from user cloud")
 
     def end_watch(self, run_id: str, handler: Callable):
@@ -705,7 +705,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_asset_records(
         self, asset_keys: Optional[Sequence[AssetKey]] = None
-    ) -> Iterable[AssetRecord]:
+    ) -> Sequence[AssetRecord]:
         res = self._execute_query(
             GET_ASSET_RECORDS_QUERY,
             variables={
@@ -728,7 +728,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
         return res["data"]["eventLogs"]["hasAssetKey"]
 
-    def all_asset_keys(self) -> Iterable[AssetKey]:
+    def all_asset_keys(self) -> Iterable[AssetKey]:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         res = self._execute_query(GET_ALL_ASSET_KEYS_QUERY)
         return [
             check.not_none(AssetKey.from_db_string(asset_key_string))
@@ -736,9 +736,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         ]
 
     def get_latest_materialization_events(
-        self, asset_keys: Sequence[AssetKey]
+        self, asset_keys: Iterable[AssetKey]
     ) -> Mapping[AssetKey, Optional[EventLogEntry]]:
-        check.list_param(asset_keys, "asset_keys", of_type=AssetKey)
+        check.iterable_param(asset_keys, "asset_keys", AssetKey)
 
         res = self._execute_query(
             GET_LATEST_MATERIALIZATION_EVENTS_QUERY,
@@ -1149,7 +1149,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         raise NotImplementedError("Not callable from user cloud")
 
     def get_latest_asset_check_execution_by_key(
-        self, asset_check_keys: Sequence[AssetCheckKey]
+        self, check_keys: Sequence[AssetCheckKey]
     ) -> Mapping[AssetCheckKey, AssetCheckExecutionRecord]:
         raise NotImplementedError("Not callable from user cloud")
 

@@ -271,7 +271,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
     @classmethod
-    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Dict[str, Any]):
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Dict[str, Any]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property
@@ -535,7 +535,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         return "\n\n".join(sections)
 
-    async def _wait_for_new_server_ready(
+    async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,
         deployment_name: str,
         location_name: str,
@@ -694,7 +694,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             run_resources=self.run_resources,
         )
 
-    def run_launcher(self) -> CloudEcsRunLauncher:
+    def run_launcher(self) -> CloudEcsRunLauncher:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         launcher = CloudEcsRunLauncher(**self._run_launcher_kwargs())
         launcher.register_instance(self._instance)
 

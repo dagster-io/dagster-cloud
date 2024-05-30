@@ -510,7 +510,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             "Wrote liveness sentinel: indicating that agent is ready to serve requests"
         )
 
-    async def _wait_for_new_server_ready(
+    async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,
         deployment_name: str,
         location_name: str,

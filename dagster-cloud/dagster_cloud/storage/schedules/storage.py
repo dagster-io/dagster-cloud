@@ -71,7 +71,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
     def wipe(self):
         raise Exception("Not allowed to wipe from user cloud")
 
-    def all_instigator_state(
+    def all_instigator_state(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,
         repository_origin_id: Optional[str] = None,
         repository_selector_id: Optional[str] = None,
@@ -112,7 +112,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
 
         return deserialize_value(state, InstigatorState)
 
-    def add_instigator_state(self, state: InstigatorState):
+    def add_instigator_state(self, state: InstigatorState):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self._execute_query(
             ADD_JOB_STATE_MUTATION,
             variables={
@@ -122,7 +122,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
             },
         )
 
-    def update_instigator_state(self, state: InstigatorState):
+    def update_instigator_state(self, state: InstigatorState):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self._execute_query(
             UPDATE_JOB_STATE_MUTATION,
             variables={
@@ -138,7 +138,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
     def get_tick(self, tick_id: int) -> InstigatorTick:
         raise NotImplementedError("Not callable from user cloud")
 
-    def get_ticks(
+    def get_ticks(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,
         origin_id: str,
         selector_id: str,
