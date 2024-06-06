@@ -13,7 +13,6 @@ from dagster._core.definitions.asset_check_factories.utils import (
     LAST_UPDATED_TIMESTAMP_METADATA_KEY,
     LOWER_BOUND_TIMESTAMP_METADATA_KEY,
     assets_to_keys,
-    unique_id_from_asset_keys,
 )
 from dagster._core.definitions.asset_check_result import AssetCheckResult
 from dagster._core.definitions.asset_check_spec import (
@@ -23,14 +22,11 @@ from dagster._core.definitions.asset_check_spec import (
 )
 from dagster._core.definitions.asset_checks import AssetChecksDefinition
 from dagster._core.definitions.asset_key import AssetKey
-from dagster._core.definitions.assets import AssetsDefinition
+from dagster._core.definitions.assets import AssetsDefinition, unique_id_from_asset_and_check_keys
 from dagster._core.definitions.decorators.asset_check_decorator import multi_asset_check
 from dagster._core.definitions.events import CoercibleToAssetKey
 from dagster._core.definitions.source_asset import SourceAsset
-from dagster._core.errors import (
-    DagsterError,
-    DagsterInvariantViolationError,
-)
+from dagster._core.errors import DagsterError, DagsterInvariantViolationError
 from dagster._core.instance import DagsterInstance
 from dagster_cloud_cli.core.graphql_client import (
     DagsterCloudGraphQLClient,
@@ -81,7 +77,7 @@ def _build_check_for_assets(
             for asset_key in asset_keys
         ],
         can_subset=True,
-        name=f"anomaly_detection_freshness_check_{unique_id_from_asset_keys(asset_keys)}",
+        name=f"anomaly_detection_freshness_check_{unique_id_from_asset_and_check_keys(asset_keys, [])}",
     )
     def the_check(context: AssetCheckExecutionContext) -> Iterable[AssetCheckResult]:
         if not _is_agent_instance(context.instance):

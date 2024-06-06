@@ -1,12 +1,4 @@
-from dagster import (
-    Array,
-    BoolSource,
-    Field,
-    Noneable,
-    Permissive,
-    Shape,
-    StringSource,
-)
+from dagster import Array, BoolSource, Field, Noneable, Permissive, Shape, StringSource
 
 SHARED_K8S_CONFIG = {
     "namespace": Field(

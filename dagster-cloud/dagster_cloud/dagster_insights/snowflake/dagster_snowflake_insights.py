@@ -1,14 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import (
-    TYPE_CHECKING,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-)
+from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence, Tuple
 
 import dagster._check as check
 from dagster import (

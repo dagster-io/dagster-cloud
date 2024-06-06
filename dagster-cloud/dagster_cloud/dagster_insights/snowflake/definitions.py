@@ -2,12 +2,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pprint import pprint
-from typing import (
-    TYPE_CHECKING,
-    Optional,
-    Sequence,
-    Union,
-)
+from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 from dagster import (
     AssetExecutionContext,
@@ -25,9 +20,7 @@ from dagster import (
 )
 
 from ..metrics_utils import put_cost_information
-from .dagster_snowflake_insights import (
-    get_cost_data_for_hour,
-)
+from .dagster_snowflake_insights import get_cost_data_for_hour
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection

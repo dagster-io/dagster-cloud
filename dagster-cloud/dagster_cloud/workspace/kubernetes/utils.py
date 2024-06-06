@@ -193,29 +193,70 @@ def get_container_waiting_reason(pod) -> Optional[str]:
 
 
 def get_deployment_failure_debug_info(
-    k8s_deployment_name, namespace, core_api_client, pod_list, logger
+    k8s_deployment_name,
+    namespace,
+    core_api_client,
+    pod_list,
+    logger,
+    apps_api_client,
 ):
+    replicaset_debug_info = ""
+    try:
+        replicaset_list = apps_api_client.list_namespaced_replica_set(
+            namespace, label_selector=f"user-deployment={k8s_deployment_name}"
+        ).items
+        if replicaset_list:
+            replicaset = replicaset_list[0]
+            replicaset_name = replicaset.metadata.name
+            # Get warning events for the ReplicaSet
+            warning_events = core_api_client.list_namespaced_event(
+                namespace, field_selector=f"involvedObject.name={replicaset_name},type=Warning"
+            ).items
+            if not warning_events:
+                replicaset_debug_info = f"No warning events for replicaset {replicaset_name}."
+            else:
+                event_strs = []
+                for event in warning_events:
+                    count_str = f" (x{event.count})" if (event.count and event.count > 1) else ""
+                    event_strs.append(f"{event.reason}: {event.message}{count_str}")
+                replicaset_debug_info = (
+                    f"Warning events for replicaset {replicaset_name}:\n" + "\n".join(event_strs)
+                )
+    except:
+        logger.exception("Failure fetching replicaset debug info")
+
     if not pod_list:
-        return (
+        pod_debug_info = ""
+        kubectl_prompt = (
             "For more information about the failure, run `kubectl describe deployment"
             f" {k8s_deployment_name}` in your cluster."
         )
+    else:
+        pod = pod_list[0]
+        pod_name = pod.metadata.name
 
-    pod = pod_list[0]
-    pod_name = pod.metadata.name
+        kubectl_prompt = (
+            f"For more information about the failure, run `kubectl describe pod {pod_name}`"
+            f" or `kubectl describe deployment {k8s_deployment_name}` in your cluster."
+        )
+        pod_debug_info = ""
+        try:
+            api_client = DagsterKubernetesClient.production_client(
+                core_api_override=core_api_client
+            )
+            pod_debug_info = api_client.get_pod_debug_info(pod_name, namespace)
+        except Exception:
+            logger.exception(f"Error trying to get debug information for failed k8s pod {pod_name}")
 
-    kubectl_prompt = (
-        f"For more information about the failure, run `kubectl describe pod {pod_name}`"
-        f" or `kubectl describe deployment {k8s_deployment_name}` in your cluster."
-    )
-    pod_debug_info = ""
-    try:
-        api_client = DagsterKubernetesClient.production_client(core_api_override=core_api_client)
-        pod_debug_info = api_client.get_pod_debug_info(pod_name, namespace)
-    except Exception:
-        logger.exception(f"Error trying to get debug information for failed k8s pod {pod_name}")
+    results = []
+    if pod_debug_info:
+        results.append(pod_debug_info)
+    if replicaset_debug_info:
+        results.append(replicaset_debug_info)
+    if kubectl_prompt:
+        results.append(kubectl_prompt)
 
-    return f"{pod_debug_info}\n\n{kubectl_prompt}" if pod_debug_info else kubectl_prompt
+    return "\n\n".join(results)
 
 
 async def wait_for_deployment_complete(
@@ -245,7 +286,7 @@ async def wait_for_deployment_complete(
         if time_elapsed >= timeout:
             timeout_message: str = f"Timed out waiting for deployment {k8s_deployment_name}."
             debug_info = get_deployment_failure_debug_info(
-                k8s_deployment_name, namespace, core_api, pod_list, logger
+                k8s_deployment_name, namespace, core_api, pod_list, logger, apps_api_client=api
             )
             if debug_info:
                 timeout_message = timeout_message + "\n\n" + debug_info
@@ -284,7 +325,12 @@ async def wait_for_deployment_complete(
                 ):
                     error_message = f"Error creating deployment for {k8s_deployment_name}."
                     debug_info = get_deployment_failure_debug_info(
-                        k8s_deployment_name, namespace, core_api, pod_list, logger
+                        k8s_deployment_name,
+                        namespace,
+                        core_api,
+                        pod_list,
+                        logger,
+                        apps_api_client=api,
                     )
                     if debug_info:
                         error_message = error_message + "\n" + debug_info

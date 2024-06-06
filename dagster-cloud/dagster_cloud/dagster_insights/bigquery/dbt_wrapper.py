@@ -1,12 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import (
-    TYPE_CHECKING,
-    Iterable,
-    Iterator,
-    Optional,
-    Union,
-)
+from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Union
 
 import yaml
 from dagster import (

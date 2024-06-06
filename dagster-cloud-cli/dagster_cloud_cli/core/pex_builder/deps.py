@@ -22,11 +22,6 @@ from dagster_cloud_cli.core import docker_runner
 
 from . import util
 
-STANDARD_PACKAGES = [
-    # improves debugging as per https://pex.readthedocs.io/en/latest/recipes.html#long-running-pex-applications-and-daemons
-    "setproctitle",
-]
-
 
 class BuildMethod(enum.Enum):
     # try current environment, if build fails, try in a docker builder
@@ -126,7 +121,6 @@ def get_deps_requirements(
 ) -> Tuple[LocalPackages, DepsRequirements]:
     python_interpreter = util.python_interpreter_for(python_version)
     local_package_paths, deps_lines = collect_requirements(code_directory, python_interpreter)
-    deps_lines.extend(STANDARD_PACKAGES)
 
     deps_requirements_text = "\n".join(
         sorted(set(deps_lines)) + [""]
@@ -308,8 +302,26 @@ def get_requirements_txt_deps(code_directory: str) -> List[str]:
     if not os.path.exists(requirements_path):
         return []
 
+    # combine multi-line strings into a single string
+    combined_lines = []
+    current_line = ""
+
+    with open(requirements_path, encoding="utf-8") as file:
+        for line in file:
+            stripped_line = line.rstrip()
+            if stripped_line.endswith("\\"):
+                current_line += stripped_line[:-1]
+            else:
+                current_line += stripped_line
+                combined_lines.append(current_line)
+                current_line = ""
+
+    # Add any remaining content if the last line ends with a backslash
+    if current_line:
+        combined_lines.append(current_line)
+
     lines = []
-    for raw_line in open(requirements_path, encoding="utf-8"):
+    for raw_line in combined_lines:
         # https://pip.pypa.io/en/stable/reference/requirements-file-format/#comments
         line = re.sub(r"(^#|\s#).*", "", raw_line)
         line = line.strip()

@@ -16,10 +16,7 @@ from dagster._grpc.__generated__.api_pb2_grpc import (
 )
 from dagster._grpc.client import DEFAULT_GRPC_TIMEOUT
 from dagster._grpc.server import server_termination_target
-from dagster._grpc.types import (
-    GetCurrentRunsResult,
-    SensorExecutionArgs,
-)
+from dagster._grpc.types import GetCurrentRunsResult, SensorExecutionArgs
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
 from dagster._serdes import deserialize_value, serialize_value
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info

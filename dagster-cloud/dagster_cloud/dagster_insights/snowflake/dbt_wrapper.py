@@ -1,13 +1,4 @@
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, Tuple, Union
 
 import yaml
 from dagster import (
@@ -21,11 +12,7 @@ from dagster import (
 )
 
 from ..insights_utils import extract_asset_info_from_event
-from .snowflake_utils import (
-    OPAQUE_ID_SQL_SIGIL,
-    build_opaque_id_metadata,
-    marker_asset_key_for_job,
-)
+from .snowflake_utils import OPAQUE_ID_SQL_SIGIL, build_opaque_id_metadata, marker_asset_key_for_job
 
 if TYPE_CHECKING:
     from dagster_dbt import DbtCliInvocation

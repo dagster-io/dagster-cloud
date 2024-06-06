@@ -21,13 +21,9 @@ from dagster._utils.merger import merge_dicts
 from dagster_aws.ecs.container_context import EcsContainerContext
 from dagster_aws.secretsmanager import get_secrets_from_arns
 
-from dagster_cloud.api.dagster_cloud_api import (
-    UserCodeDeploymentType,
-)
+from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
-from dagster_cloud.pex.grpc.types import (
-    GetCrashedPexServersArgs,
-)
+from dagster_cloud.pex.grpc.types import GetCrashedPexServersArgs
 from dagster_cloud.workspace.config_schema import SHARED_ECS_CONFIG
 from dagster_cloud.workspace.ecs.client import (
     DEFAULT_ECS_GRACE_PERIOD,

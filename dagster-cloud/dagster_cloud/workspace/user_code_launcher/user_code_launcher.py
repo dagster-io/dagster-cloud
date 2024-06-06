@@ -1366,19 +1366,26 @@ class DagsterCloudUserCodeLauncher(
         pass
 
     def _check_for_image(self, metadata: CodeDeploymentMetadata):
-        if self.requires_images and not self._resolve_image(metadata):
+        image = self._resolve_image(metadata)
+
+        if self.requires_images and not image:
             raise Exception(
                 "Your agent's configuration requires you to specify an image. "
                 "Use the `--image` flag when specifying your location to tell the agent "
                 "which image to use to load your code."
             )
 
-        if (not self.requires_images) and metadata.image:
+        if (not self.requires_images) and image:
             raise Exception(
                 "Your agent's configuration cannot load locations that specify a Docker image."
                 " Either update your location to not include an image, or change the"
                 " `user_code_launcher` field in your agent's `dagster.yaml` file to a launcher that"
                 " can load Docker images. "
+            )
+
+        if image and (image != image.strip()):
+            raise Exception(
+                f"Invalid image '{image}'. Images must not have leading or trailing whitespace."
             )
 
     def _deployments_and_locations_to_string(

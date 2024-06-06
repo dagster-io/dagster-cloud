@@ -1,8 +1,6 @@
 from typing import List, NamedTuple, Optional
 
-from dagster._serdes import (
-    whitelist_for_serdes,
-)
+from dagster._serdes import whitelist_for_serdes
 from dagster_cloud_cli.core.agent_queue import AgentQueue
 
 

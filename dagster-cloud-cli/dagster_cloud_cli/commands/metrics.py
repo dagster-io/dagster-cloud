@@ -6,10 +6,7 @@ from functools import wraps
 from typing import List, Optional
 
 from dagster_cloud_cli import gql
-from dagster_cloud_cli.types import (
-    CliEventTags,
-    CliEventType,
-)
+from dagster_cloud_cli.types import CliEventTags, CliEventType
 from dagster_cloud_cli.ui import ExitWithMessage
 
 

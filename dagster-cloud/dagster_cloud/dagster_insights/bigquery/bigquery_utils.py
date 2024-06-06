@@ -1,9 +1,6 @@
 from typing import Any, List, Mapping, Optional
 
-from dagster import (
-    AssetKey,
-    JobDefinition,
-)
+from dagster import AssetKey, JobDefinition
 
 OUTPUT_NON_ASSET_SIGIL = "__bigquery_query_metadata_"
 BIGQUERY_METADATA_BYTES_BILLED = "__bigquery_bytes_billed"

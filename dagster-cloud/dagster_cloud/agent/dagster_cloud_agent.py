@@ -11,29 +11,19 @@ import dagster._check as check
 import pendulum
 from dagster import DagsterInstance
 from dagster._core.launcher.base import LaunchRunContext
-from dagster._core.remote_representation import (
-    CodeLocationOrigin,
-)
+from dagster._core.remote_representation import CodeLocationOrigin
 from dagster._core.remote_representation.origin import RegisteredCodeLocationOrigin
 from dagster._core.utils import FuturesAwareThreadPoolExecutor
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import CancelExecutionRequest
-from dagster._serdes import (
-    deserialize_value,
-    serialize_value,
-)
-from dagster._utils.container import (
-    retrieve_containerized_utilization_metrics,
-)
+from dagster._serdes import deserialize_value, serialize_value
+from dagster._utils.container import retrieve_containerized_utilization_metrics
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import raise_http_error
-from dagster_cloud_cli.core.workspace import (
-    CodeDeploymentMetadata,
-    get_instance_ref_for_user_code,
-)
+from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata, get_instance_ref_for_user_code
 
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,

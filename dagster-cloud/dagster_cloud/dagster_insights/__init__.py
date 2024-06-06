@@ -5,9 +5,7 @@ from .snowflake.dbt_wrapper import dbt_with_snowflake_insights as dbt_with_snowf
 from .snowflake.definitions import (
     create_snowflake_insights_asset_and_schedule as create_snowflake_insights_asset_and_schedule,
 )
-from .snowflake.snowflake_utils import (
-    meter_snowflake_query as meter_snowflake_query,
-)
+from .snowflake.snowflake_utils import meter_snowflake_query as meter_snowflake_query
 
 dagster_snowflake_req_imports = {"InsightsSnowflakeResource"}
 try:

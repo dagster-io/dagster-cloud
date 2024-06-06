@@ -1,8 +1,5 @@
 from contextlib import contextmanager, nullcontext
-from typing import (
-    Iterator,
-    List,
-)
+from typing import Iterator, List
 
 from dagster import AssetObservation
 from dagster._annotations import experimental
@@ -10,9 +7,7 @@ from dagster_gcp import BigQueryResource
 from dagster_gcp.bigquery.utils import setup_gcp_creds
 from google.cloud import bigquery
 
-from dagster_cloud.dagster_insights.insights_utils import (
-    get_current_context_and_asset_key,
-)
+from dagster_cloud.dagster_insights.insights_utils import get_current_context_and_asset_key
 
 from .bigquery_utils import build_bigquery_cost_metadata, marker_asset_key_for_job
 

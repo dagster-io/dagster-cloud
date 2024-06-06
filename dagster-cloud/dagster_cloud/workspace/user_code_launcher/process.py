@@ -21,9 +21,7 @@ from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.merger import merge_dicts
 from typing_extensions import Self
 
-from dagster_cloud.api.dagster_cloud_api import (
-    UserCodeDeploymentType,
-)
+from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.pex.grpc import MultiPexGrpcClient

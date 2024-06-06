@@ -27,9 +27,7 @@ from dagster_k8s.models import k8s_snake_case_dict
 from kubernetes.client.rest import ApiException
 from typing_extensions import Self
 
-from dagster_cloud.api.dagster_cloud_api import (
-    UserCodeDeploymentType,
-)
+from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.constants import RESERVED_ENV_VAR_NAMES
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
@@ -497,9 +495,15 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             namespace, label_selector=f"user-deployment={k8s_deployment_name}"
         ).items
 
-        return get_deployment_failure_debug_info(
-            k8s_deployment_name, namespace, core_api, pod_list, self._logger
-        )
+        with self._get_apps_api_instance() as apps_api_client:
+            return get_deployment_failure_debug_info(
+                k8s_deployment_name,
+                namespace,
+                core_api,
+                pod_list,
+                self._logger,
+                apps_api_client=apps_api_client,
+            )
 
     def _write_liveness_sentinel(self) -> None:
         # Write to a sentinel file to indicate that we've finished our initial

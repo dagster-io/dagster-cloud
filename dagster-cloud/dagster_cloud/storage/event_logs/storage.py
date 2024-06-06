@@ -47,11 +47,7 @@ from dagster._core.storage.event_log.base import (
     PlannedMaterializationInfo,
 )
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
-from dagster._serdes import (
-    ConfigurableClass,
-    ConfigurableClassData,
-    serialize_value,
-)
+from dagster._serdes import ConfigurableClass, ConfigurableClassData, serialize_value
 from dagster._serdes.serdes import deserialize_value
 from dagster._utils import datetime_as_float, utc_datetime_from_timestamp
 from dagster._utils.concurrency import (

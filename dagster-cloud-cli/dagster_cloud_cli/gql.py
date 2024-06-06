@@ -1,9 +1,9 @@
 from contextlib import contextmanager, suppress
 from typing import Any, Dict, Generator, List, Optional, Sequence, cast
 
-from dagster_cloud_cli.types import (
-    CliEventType,
-)
+from dagster import AssetKey
+
+from dagster_cloud_cli.types import CliEventType
 
 from .core.graphql_client import DagsterCloudGraphQLClient, create_cloud_webserver_client
 
@@ -538,17 +538,12 @@ LAUNCH_RUN_MUTATION = """
             ... on LaunchRunSuccess {
                 run {
                     runId
-                    pipeline {
-                        name
-                    }
                     tags {
                         key
                         value
                     }
                     status
                     runConfigYaml
-                    mode
-                    resolvedOpSelection
                 }
             }
             ... on PythonError {
@@ -576,7 +571,15 @@ def launch_run(
             "repositoryLocationName": location_name,
             "repositoryName": repo_name,
             "jobName": job_name,
-            **({"assetSelection": [{"path": path} for path in asset_keys]} if asset_keys else {}),
+            **(
+                {
+                    "assetSelection": [
+                        AssetKey.from_user_string(path).to_graphql_input() for path in asset_keys
+                    ]
+                }
+                if asset_keys
+                else {}
+            ),
         },
         "runConfigData": config,
         "executionMetadata": {"tags": formatted_tags},
