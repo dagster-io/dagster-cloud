@@ -531,6 +531,33 @@ def create_or_update_branch_deployment(
     return cast(str, name)
 
 
+GET_BRANCH_DEPLOYMENT_NAME = """
+query CliGetBranchDeploymentName($repoName: String!, $branchName: String!) {
+    getBranchDeploymentName(repoName: $repoName, branchName: $branchName)
+}
+"""
+
+
+def get_branch_deployment_name(
+    client: DagsterCloudGraphQLClient,
+    repo_name: str,
+    branch_name: str,
+) -> str:
+    result = client.execute(
+        GET_BRANCH_DEPLOYMENT_NAME,
+        variable_values={
+            "repoName": repo_name,
+            "branchName": branch_name,
+        },
+    )
+
+    name = result.get("data", {}).get("getBranchDeploymentName")
+    if name is None:
+        raise Exception(f"Unable to get branch deployment name: {result}")
+
+    return cast(str, name)
+
+
 LAUNCH_RUN_MUTATION = """
     mutation CliLaunchRun($executionParams: ExecutionParams!) {
         launchRun(executionParams: $executionParams) {

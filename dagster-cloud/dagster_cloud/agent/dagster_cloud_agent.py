@@ -5,7 +5,7 @@ import time
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
 
 import dagster._check as check
 import pendulum
@@ -53,6 +53,9 @@ from .queries import (
     GET_USER_CLOUD_REQUESTS_QUERY,
     WORKSPACE_ENTRIES_QUERY,
 )
+
+if TYPE_CHECKING:
+    import datetime
 
 CHECK_WORKSPACE_INTERVAL_SECONDS = 5
 
@@ -104,7 +107,7 @@ class DagsterCloudAgent:
         self._request_ids_to_futures: Dict[str, Future] = {}
         self._utilization_metrics = init_optional_typeddict(AgentUtilizationMetrics)
 
-        self._last_heartbeat_time: Optional[pendulum.DateTime] = None
+        self._last_heartbeat_time: Optional[datetime.datetime] = None
 
         self._last_workspace_check_time = None
 

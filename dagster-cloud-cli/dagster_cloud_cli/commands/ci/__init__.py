@@ -77,13 +77,19 @@ def branch_deployment(
     organization: Optional[str] = ORGANIZATION_OPTION,
     dagster_env: Optional[str] = DAGSTER_ENV_OPTION,
     mark_closed: bool = False,
+    read_only: bool = False,
 ):
     try:
         if organization:
             url = get_org_url(organization, dagster_env)
         else:
             url = os.environ[URL_ENV_VAR_NAME]
-        print(get_deployment_from_context(url, project_dir, mark_closed))
+
+        if read_only:
+            print(get_branch_deployment_name_from_context(url, project_dir))
+            return
+
+        print(create_or_update_deployment_from_context(url, project_dir, mark_closed))
     except ValueError as err:
         logging.error(
             f"cannot determine branch deployment: {err}",
@@ -91,7 +97,7 @@ def branch_deployment(
         sys.exit(1)
 
 
-def get_deployment_from_context(url, project_dir: str, mark_closed=False) -> str:
+def create_or_update_deployment_from_context(url, project_dir: str, mark_closed=False) -> str:
     source = metrics.get_source()
     if source == CliEventTags.source.github:
         event = github_context.get_github_event(project_dir)
@@ -131,6 +137,31 @@ def get_deployment_from_context(url, project_dir: str, mark_closed=False) -> str
             )
             return deployment_name
 
+    else:
+        raise ValueError(f"unsupported for {source}")
+
+
+def get_branch_deployment_name_from_context(url, project_dir: str) -> Optional[str]:
+    source = metrics.get_source()
+    api_token = os.environ[TOKEN_ENV_VAR_NAME]
+    if source == CliEventTags.source.github:
+        event = github_context.get_github_event(project_dir)
+        if not event.branch_name:
+            return None
+        with gql.graphql_client_from_url(url, api_token) as client:
+            return gql.get_branch_deployment_name(
+                client,
+                repo_name=event.repo_name,
+                branch_name=event.branch_name,
+            )
+    elif source == CliEventTags.source.gitlab:
+        event = gitlab_context.get_gitlab_event(project_dir)
+        with gql.graphql_client_from_url(url, api_token) as client:
+            return gql.get_branch_deployment_name(
+                client,
+                repo_name=event.project_name,
+                branch_name=event.branch_name,
+            )
     else:
         raise ValueError(f"unsupported for {source}")
 
@@ -227,7 +258,7 @@ def init(
     # available (eg. if not in a PR) then we fallback to the --deployment flag.
 
     try:
-        branch_deployment = get_deployment_from_context(url, project_dir)
+        branch_deployment = create_or_update_deployment_from_context(url, project_dir)
         if deployment:
             ui.print(
                 f"Deploying to branch deployment {branch_deployment}, ignoring"

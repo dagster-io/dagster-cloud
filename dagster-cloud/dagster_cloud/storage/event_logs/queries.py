@@ -148,9 +148,9 @@ ASSET_CHECK_STATE_FRAGMENT = (
 GET_RECORDS_FOR_RUN_QUERY = (
     EVENT_RECORD_FRAGMENT
     + """
-    query getRecordsForRun($runId: String!, $cursor: String, $ofType: String, $ofTypes: [String!], $limit: Int) {
+    query getRecordsForRun($runId: String!, $cursor: String, $ofType: String, $ofTypes: [String!], $limit: Int, $ascending: Boolean) {
         eventLogs {
-            getRecordsForRun(runId: $runId, cursor: $cursor, ofType: $ofType, ofTypes: $ofTypes, limit: $limit) {
+            getRecordsForRun(runId: $runId, cursor: $cursor, ofType: $ofType, ofTypes: $ofTypes, limit: $limit, ascending: $ascending) {
                 records {
                     ...EventLogRecordFragment
                 }

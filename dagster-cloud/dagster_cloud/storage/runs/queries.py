@@ -121,9 +121,9 @@ GET_RUN_GROUP_QUERY = """
 GET_RUN_RECORDS_QUERY = (
     RUN_ROW_FRAGMENT
     + """
-    query getRunRecordsQuery($filters: RunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean, $bucketBy: RunBucket) {
+    query getRunRecordsQuery($filters: RunsFilter, $limit: Int, $orderBy: String, $ascending: Boolean, $cursor: String, $bucketBy: RunBucket) {
         runs {
-            getRunRecords(filters: $filters, limit: $limit, orderBy: $orderBy, ascending: $ascending, bucketBy: $bucketBy) {
+            getRunRecords(filters: $filters, limit: $limit, orderBy: $orderBy, ascending: $ascending, cursor: $cursor, bucketBy: $bucketBy) {
                 ...runRecordFragment
             }
         }
