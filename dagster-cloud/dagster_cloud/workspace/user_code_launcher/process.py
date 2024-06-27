@@ -222,7 +222,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         location_name: str,
         desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
-        metadata = desired_entry.code_deployment_metadata
+        metadata = desired_entry.code_location_deploy_data
 
         key = (deployment_name, location_name)
 

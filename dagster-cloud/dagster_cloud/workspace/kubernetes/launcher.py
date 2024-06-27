@@ -20,7 +20,7 @@ from dagster import (
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster._utils.merger import merge_dicts
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData
 from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.job import UserDefinedDagsterK8sConfig
 from dagster_k8s.models import k8s_snake_case_dict
@@ -352,7 +352,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         with client.ApiClient() as api_client:
             yield client.AppsV1Api(api_client)
 
-    def _resolve_container_context(self, metadata: CodeDeploymentMetadata) -> K8sContainerContext:
+    def _resolve_container_context(self, metadata: CodeLocationDeployData) -> K8sContainerContext:
         user_defined_container_context = K8sContainerContext.create_from_config(
             metadata.container_context
         ).validate_user_k8s_config(
@@ -380,7 +380,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
     def get_code_server_resource_limits(
         self, deployment_name: str, location_name: str
     ) -> CloudContainerResourceLimits:
-        metadata = self._actual_entries[(deployment_name, location_name)].code_deployment_metadata
+        metadata = self._actual_entries[(deployment_name, location_name)].code_location_deploy_data
         resources = metadata.container_context.get("k8s", {}).get("resources", {})
         self._logger.info(
             f"Getting resource limits for deployment {deployment_name} in location {location_name}: {resources}"
@@ -400,7 +400,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         location_name: str,
         desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
-        metadata = desired_entry.code_deployment_metadata
+        metadata = desired_entry.code_location_deploy_data
 
         args = metadata.get_grpc_server_command(
             metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
@@ -505,13 +505,13 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 apps_api_client=apps_api_client,
             )
 
-    def _write_liveness_sentinel(self) -> None:
+    def _write_readiness_sentinel(self) -> None:
         # Write to a sentinel file to indicate that we've finished our initial
         # reconciliation - this is used to indicate that we're ready to
         # serve requests
         Path("/tmp/finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
         self._logger.info(
-            "Wrote liveness sentinel: indicating that agent is ready to serve requests"
+            "Wrote readiness sentinel: indicating that agent is ready to serve requests"
         )
 
     async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
@@ -522,7 +522,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         server_handle: K8sHandle,
         server_endpoint: ServerEndpoint,
     ) -> None:
-        metadata = user_code_launcher_entry.code_deployment_metadata
+        metadata = user_code_launcher_entry.code_location_deploy_data
 
         await wait_for_deployment_complete(
             server_handle.name,

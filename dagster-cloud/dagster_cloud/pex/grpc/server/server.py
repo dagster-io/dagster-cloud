@@ -62,7 +62,7 @@ class MultiPexApiServer(MultiPexApiServicer):
         try:
             self._pex_manager.create_pex_server(
                 create_pex_server_args.server_handle,
-                create_pex_server_args.code_deployment_metadata,
+                create_pex_server_args.code_location_deploy_data,
                 create_pex_server_args.instance_ref,
             )
             response = CreatePexServerResponse()

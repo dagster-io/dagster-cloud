@@ -16,7 +16,7 @@ from dagster_cloud_cli.config_utils import (
     get_location_document,
 )
 from dagster_cloud_cli.core.graphql_client import DagsterCloudGraphQLClient
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData
 from dagster_cloud_cli.utils import add_options
 
 DEFAULT_LOCATIONS_YAML_FILENAME = "locations.yaml"
@@ -263,7 +263,7 @@ def execute_list_command(client):
 
     for location in list_res:
         metadata = deserialize_value(
-            location["serializedDeploymentMetadata"], CodeDeploymentMetadata
+            location["serializedDeploymentMetadata"], CodeLocationDeployData
         )
 
         location_desc = [location["locationName"]]

@@ -34,7 +34,7 @@ class PexMetadata(
             # the pex files to execute
             ("pex_tag", str),
             # python_version determines which pex base docker image to use
-            # only one of PexMetadata.python_version or CodeDeploymentMetadata.image should be specified
+            # only one of PexMetadata.python_version or CodeLocationDeployData.image should be specified
             ("python_version", Optional[str]),
         ],
     )
@@ -85,10 +85,11 @@ def get_instance_ref_for_user_code(instance_ref: InstanceRef) -> InstanceRef:
     return instance_ref._replace(custom_instance_class_data=custom_instance_class_data)
 
 
-# History of CodeDeploymentMetadata
+# History of CodeLocationDeployData
 # 1. Removal of `enable_metrics` field
-@whitelist_for_serdes
-class CodeDeploymentMetadata(
+# 2. Renamed from `CodeDeploymentMetadata` to `CodeLocationDeployData``
+@whitelist_for_serdes(storage_name="CodeDeploymentMetadata")
+class CodeLocationDeployData(
     NamedTuple(
         "_CodeDeploymentMetadata",
         [
@@ -127,7 +128,7 @@ class CodeDeploymentMetadata(
             "Must supply exactly one of a file name, a package name, or a module name",
         )
 
-        return super(CodeDeploymentMetadata, cls).__new__(
+        return super(CodeLocationDeployData, cls).__new__(
             cls,
             check.opt_str_param(image, "image"),
             check.opt_str_param(python_file, "python_file"),
@@ -143,7 +144,7 @@ class CodeDeploymentMetadata(
             check.opt_str_param(agent_queue, "agent_queue"),
         )
 
-    def with_cloud_context_env(self, cloud_context_env: Dict[str, Any]) -> "CodeDeploymentMetadata":
+    def with_cloud_context_env(self, cloud_context_env: Dict[str, Any]) -> "CodeLocationDeployData":
         return self._replace(cloud_context_env=cloud_context_env)
 
     def get_multipex_server_command(

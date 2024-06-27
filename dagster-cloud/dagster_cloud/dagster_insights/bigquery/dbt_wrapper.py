@@ -27,6 +27,8 @@ OPAQUE_ID_SQL_SIGIL = "bigquery_dagster_dbt_v1_opaque_id"
 DEFAULT_BQ_REGION = "region-us"
 MIN_DAGSTER_DBT_VERSION = "1.7.0"
 
+BIGQUERY_COST_ERROR_MESSAGE = "Could not query information_schema for BigQuery cost information"
+
 
 @dataclass
 class BigQueryCostInfo:
@@ -147,8 +149,24 @@ def dbt_with_bigquery_insights(
     try:
         with adapter.connection_named("dagster_insights:bigquery_cost"):
             client: "bigquery.Client" = adapter.connections.get_thread_connection().handle
-            dataset = client.get_dataset(adapter.config.credentials.schema)
-            region = f"region-{dataset.location.lower()}" if dataset.location else DEFAULT_BQ_REGION
+            if client.location and client.project:
+                # we should populate the location/project from the client, and use that to determine
+                # the correct INFORMATION_SCHEMA.JOBS table to query for cost information
+                location = client.location
+                project = client.project
+            else:
+                # try fetching the default dataset from the schema, if it exists
+                dataset = client.get_dataset(adapter.config.credentials.schema)
+                location = dataset.location if dataset else None
+                project = client.project or dataset.project
+
+            if not location:
+                context.log.exception(f"{BIGQUERY_COST_ERROR_MESSAGE}: Missing location.")
+                return
+
+            if not project:
+                context.log.exception(f"{BIGQUERY_COST_ERROR_MESSAGE}: Missing project.")
+
             query_result = client.query(
                 rf"""
                     SELECT
@@ -156,7 +174,7 @@ def dbt_with_bigquery_insights(
                     regexp_extract(query, r"{OPAQUE_ID_SQL_SIGIL}\[\[\[(.*?):{invocation_id}\]\]\]") as unique_id,
                     total_bytes_billed AS bytes_billed,
                     total_slot_ms AS slots_ms
-                    FROM `{dataset.project}`.`{region}`.INFORMATION_SCHEMA.JOBS
+                    FROM `{project}`.`region-{location.lower()}`.INFORMATION_SCHEMA.JOBS
                     WHERE query like '%{invocation_id}%'
                 """
             )
@@ -172,7 +190,7 @@ def dbt_with_bigquery_insights(
                     )
                     cost_by_asset[cost_info.asset_partition_key].append(cost_info)
     except:
-        context.log.exception("Could not query information_schema for BigQuery cost information")
+        context.log.exception(BIGQUERY_COST_ERROR_MESSAGE)
         return
 
     for cost_info_list in cost_by_asset.values():

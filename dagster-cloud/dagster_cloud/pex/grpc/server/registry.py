@@ -23,6 +23,7 @@ MULTIPART_DOWNLOAD_THREADS = 20  # Double the boto3 default of 10
 def _download_from_s3(filename: str, local_filepath: str):
     # Lazy import boto3 to avoid a hard dependency during module load
     import boto3
+    from boto3.s3.transfer import TransferConfig
     from botocore.config import Config
 
     config = Config(retries={"max_attempts": 3, "mode": "standard"})
@@ -41,7 +42,7 @@ def _download_from_s3(filename: str, local_filepath: str):
         Bucket=s3_bucket_name,
         Key=s3_key,
         Filename=local_tmp_filepath,
-        Config=boto3.s3.transfer.TransferConfig(max_concurrency=MULTIPART_DOWNLOAD_THREADS),
+        Config=TransferConfig(max_concurrency=MULTIPART_DOWNLOAD_THREADS),
     )
     os.rename(local_tmp_filepath, local_filepath)
 

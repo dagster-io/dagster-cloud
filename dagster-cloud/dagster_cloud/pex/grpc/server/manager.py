@@ -15,7 +15,7 @@ from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata, PexMetadata
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData, PexMetadata
 from pydantic import BaseModel, Extra
 
 from ..types import PexServerHandle
@@ -195,27 +195,27 @@ class MultiPexManager(AbstractContextManager):
     def create_pex_server(
         self,
         server_handle: PexServerHandle,
-        code_deployment_metadata: CodeDeploymentMetadata,
+        code_location_deploy_data: CodeLocationDeployData,
         instance_ref: Optional[InstanceRef],
     ):
         # we keep track of pex metadata in use to help cleanup unused resources over time
         self._pex_metadata_for_handle[server_handle.get_id()] = (
-            code_deployment_metadata.pex_metadata
+            code_location_deploy_data.pex_metadata
         )
 
         # install pex files and launch them - do it asynchronously to not block this call
         def _create_pex_server() -> None:
             try:
                 pex_executable = self._registry.get_pex_executable(
-                    check.not_none(code_deployment_metadata.pex_metadata)
+                    check.not_none(code_location_deploy_data.pex_metadata)
                 )
                 logging.info(
                     "Installed pex executable %s at %s",
-                    code_deployment_metadata.pex_metadata,
+                    code_location_deploy_data.pex_metadata,
                     pex_executable.source_path,
                 )
 
-                metadata = code_deployment_metadata
+                metadata = code_location_deploy_data
                 logging.info("Launching subprocess %s", pex_executable.source_path)
                 subprocess_args = [
                     pex_executable.source_path,

@@ -5,6 +5,7 @@ import time
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
 
 import dagster._check as check
@@ -23,7 +24,7 @@ from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import raise_http_error
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata, get_instance_ref_for_user_code
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData, get_instance_ref_for_user_code
 
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
@@ -88,6 +89,10 @@ AGENT_MAX_THREADPOOL_WORKERS = int(
     )
 )
 
+LIVENESS_CHECK_INTERVAL_SECONDS = float(
+    os.getenv("DAGSTER_CLOUD_AGENT_LIVENESS_CHECK_INTERVAL", "15.0")
+)
+
 
 class DagsterCloudAgent:
     def __init__(self, pending_requests_limit: int = DEFAULT_PENDING_REQUESTS_LIMIT):
@@ -126,6 +131,8 @@ class DagsterCloudAgent:
         self._active_deployments: Set[Tuple[str, bool]] = (  # deployment_name, is_branch_deployment
             set()
         )
+
+        self._last_liveness_check_time = None
 
     def __enter__(self):
         return self
@@ -277,9 +284,31 @@ class DagsterCloudAgent:
                     f"Failed to check for workspace updates: \n{serializable_error_info_from_exc_info(sys.exc_info())}"
                 )
 
+            self._write_liveness_sentinel_if_overdue()
+
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
                 time.sleep(SLEEP_INTERVAL_SECONDS)
+
+    def _write_liveness_sentinel_if_overdue(self):
+        if self._last_liveness_check_time is False:
+            return
+
+        now = time.time()
+        if self._last_liveness_check_time is None:
+            self._logger.info("Starting liveness sentinel")
+        elif self._last_liveness_check_time + LIVENESS_CHECK_INTERVAL_SECONDS > now:
+            return
+
+        # Write to a sentinel file to indicate that we've finished our initial
+        # reconciliation - this is used to indicate that we're ready to
+        # serve requests
+        try:
+            Path("/opt/liveness_sentinel.txt").touch(exist_ok=True)
+            self._last_liveness_check_time = now
+        except Exception as e:
+            self._logger.error(f"Failed to write liveness sentinel and disabling it: {e}")
+            self._last_liveness_check_time = False
 
     def _check_update_workspace(self, instance, user_code_launcher, upload_all):
         curr_time = pendulum.now("UTC")
@@ -403,8 +432,8 @@ class DagsterCloudAgent:
 
         for entry in entries:
             location_name = entry["locationName"]
-            deployment_metadata = deserialize_value(
-                entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
+            code_location_deploy_data = deserialize_value(
+                entry["serializedDeploymentMetadata"], CodeLocationDeployData
             )
             if entry["hasOutdatedData"]:
                 # Spin up a server for this location and upload its metadata to Cloud
@@ -413,7 +442,7 @@ class DagsterCloudAgent:
                     (deployment_name, location_name, is_branch_deployment)
                 ] = now
                 upload_metadata[(deployment_name, location_name)] = UserCodeLauncherEntry(
-                    code_deployment_metadata=deployment_metadata,
+                    code_location_deploy_data=code_location_deploy_data,
                     update_timestamp=float(entry["metadataTimestamp"]),
                 )
 
@@ -541,8 +570,8 @@ class DagsterCloudAgent:
                     location_key = (deployment_name, location_name)
 
                     all_locations.add(location_key)
-                    deployment_metadata = deserialize_value(
-                        entry["serializedDeploymentMetadata"], CodeDeploymentMetadata
+                    code_location_deploy_data = deserialize_value(
+                        entry["serializedDeploymentMetadata"], CodeLocationDeployData
                     )
 
                     # The GraphQL can return a mix of deployments with TTLs (for example, all
@@ -554,7 +583,7 @@ class DagsterCloudAgent:
                         user_code_launcher, is_branch_deployment
                     ) or location_key in cast(Set[Tuple[str, str]], locations_with_ttl_to_query):
                         deployment_map[location_key] = UserCodeLauncherEntry(
-                            code_deployment_metadata=deployment_metadata,
+                            code_location_deploy_data=code_location_deploy_data,
                             update_timestamp=float(entry["metadataTimestamp"]),
                         )
 

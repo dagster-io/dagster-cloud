@@ -265,7 +265,7 @@ class DockerUserCodeLauncher(
         location_name: str,
         desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
-        metadata = desired_entry.code_deployment_metadata
+        metadata = desired_entry.code_location_deploy_data
         container_name = unique_docker_resource_name(deployment_name, location_name)
 
         container_context = DockerContainerContext(

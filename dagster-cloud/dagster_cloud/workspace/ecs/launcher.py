@@ -278,13 +278,13 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def user_code_deployment_type(self) -> UserCodeDeploymentType:
         return UserCodeDeploymentType.ECS
 
-    def _write_liveness_sentinel(self) -> None:
+    def _write_readiness_sentinel(self) -> None:
         # Write to a sentinel file to indicate that we've finished our initial
         # reconciliation - this is used to indicate that we're ready to
         # serve requests
         Path("/opt/finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
         self._logger.info(
-            "Wrote liveness sentinel: indicating that agent is ready to serve requests"
+            "Wrote readiness sentinel: indicating that agent is ready to serve requests"
         )
 
     def _get_grpc_server_sidecars(
@@ -336,7 +336,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self._logger.info(
             f"Getting resource limits for {deployment_name}:{location_name}. resources: {self.server_resources}"
         )
-        metadata = self._actual_entries[(deployment_name, location_name)].code_deployment_metadata
+        metadata = self._actual_entries[(deployment_name, location_name)].code_location_deploy_data
         resources = metadata.container_context.get("ecs", {}).get("server_resources")
         return {
             "ecs": {
@@ -351,7 +351,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         location_name: str,
         desired_entry: UserCodeLauncherEntry,
     ) -> DagsterCloudGrpcServer:
-        metadata = desired_entry.code_deployment_metadata
+        metadata = desired_entry.code_location_deploy_data
 
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(
@@ -539,7 +539,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         server_handle: Service,
         server_endpoint: ServerEndpoint,
     ) -> None:
-        metadata = user_code_launcher_entry.code_deployment_metadata
+        metadata = user_code_launcher_entry.code_location_deploy_data
         self._logger.info(
             f"Waiting for service {server_handle.name} to be ready for gRPC server..."
         )

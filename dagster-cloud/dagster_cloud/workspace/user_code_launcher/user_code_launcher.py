@@ -53,7 +53,7 @@ from dagster._utils.error import SerializableErrorInfo, serializable_error_info_
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import raise_http_error
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData
 from typing_extensions import Self, TypeAlias
 
 from dagster_cloud.agent.queries import GET_AGENTS_QUERY
@@ -137,25 +137,25 @@ def async_serialize_exceptions(func):
     return wrapper
 
 
-@whitelist_for_serdes
+@whitelist_for_serdes(storage_field_names={"code_location_deploy_data": "code_deployment_metadata"})
 class UserCodeLauncherEntry(
     NamedTuple(
         "_UserCodeLauncherEntry",
         [
-            ("code_deployment_metadata", CodeDeploymentMetadata),
+            ("code_location_deploy_data", CodeLocationDeployData),
             ("update_timestamp", float),
         ],
     )
 ):
     def __new__(
         cls,
-        code_deployment_metadata,
+        code_location_deploy_data,
         update_timestamp,
     ):
         return super(UserCodeLauncherEntry, cls).__new__(
             cls,
             check.inst_param(
-                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+                code_location_deploy_data, "code_location_deploy_data", CodeLocationDeployData
             ),
             check.float_param(update_timestamp, "update_timestamp"),
         )
@@ -250,7 +250,7 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
         is_required=False,
         default_value=False,
         description=(
-            "Whether the agent update process expects a liveness sentinel to be written before an"
+            "Whether the agent update process expects a readiness sentinel to be written before an"
             " agent is considered healthy. If using zero-downtime agent updates, this should be set"
             " to True."
         ),
@@ -299,7 +299,7 @@ class DagsterCloudGrpcServer(
         [
             ("server_handle", Any),  # No Generic NamedTuples yet sadly
             ("server_endpoint", ServerEndpoint),
-            ("code_deployment_metadata", CodeDeploymentMetadata),
+            ("code_location_deploy_data", CodeLocationDeployData),
         ],
     ),
 ):
@@ -307,14 +307,14 @@ class DagsterCloudGrpcServer(
         cls,
         server_handle: Any,
         server_endpoint: ServerEndpoint,
-        code_deployment_metadata: CodeDeploymentMetadata,
+        code_location_deploy_data: CodeLocationDeployData,
     ):
         return super(DagsterCloudGrpcServer, cls).__new__(
             cls,
             server_handle,
             check.inst_param(server_endpoint, "server_endpoint", ServerEndpoint),
             check.inst_param(
-                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+                code_location_deploy_data, "code_location_deploy_data", CodeLocationDeployData
             ),
         )
 
@@ -630,11 +630,14 @@ class DagsterCloudUserCodeLauncher(
             response = deserialize_value(resp.text, DagsterCloudUploadWorkspaceResponse)
 
             if not response.updated:
-                # this condition is expected to be extremely unlikely
-                raise Exception(
-                    "Upload failed, job definitions changed while uploading:"
-                    f" {response.missing_job_snapshots}"
-                )
+                if response.missing_job_snapshots:
+                    # this condition is expected to be extremely unlikely
+                    raise Exception(
+                        "Workspace entry upload failed, job definitions changed while uploading:"
+                        f" {response.missing_job_snapshots}"
+                    )
+                else:
+                    raise Exception(f"Workspace entry upload failed: {response.message}")
 
             self._logger.info(
                 "Workspace entry for"
@@ -698,7 +701,7 @@ class DagsterCloudUserCodeLauncher(
         deployment_name: str,
         location_name: str,
         error_info: SerializableErrorInfo,
-        metadata: CodeDeploymentMetadata,
+        metadata: CodeLocationDeployData,
     ):
         self._logger.error(
             f"Unable to update {deployment_name}:{location_name}. Updating location with error data:"
@@ -708,7 +711,7 @@ class DagsterCloudUserCodeLauncher(
         # Update serialized error
         errored_workspace_entry = DagsterCloudUploadWorkspaceEntry(
             location_name=location_name,
-            deployment_metadata=metadata,
+            code_location_deploy_data=metadata,
             upload_location_data=None,
             serialized_error_info=error_info,
         )
@@ -722,7 +725,7 @@ class DagsterCloudUserCodeLauncher(
         deployment_name: str,
         location_name: str,
         server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
-        metadata: CodeDeploymentMetadata,
+        metadata: CodeLocationDeployData,
     ) -> None:
         """Attempt to update Dagster Cloud with snapshots for this code location. If there's a failure
         writing (e.g. a timeout while generating the needed snapshots), will attempt to upload the
@@ -743,7 +746,7 @@ class DagsterCloudUserCodeLauncher(
         try:
             loaded_workspace_entry = DagsterCloudUploadWorkspaceEntry(
                 location_name=location_name,
-                deployment_metadata=metadata,
+                code_location_deploy_data=metadata,
                 upload_location_data=self._get_upload_location_data(
                     deployment_name,
                     location_name,
@@ -772,7 +775,7 @@ class DagsterCloudUserCodeLauncher(
     def requires_images(self) -> bool:
         pass
 
-    def _resolve_image(self, metadata: CodeDeploymentMetadata) -> Optional[str]:
+    def _resolve_image(self, metadata: CodeLocationDeployData) -> Optional[str]:
         return metadata.image
 
     def _get_existing_pex_servers(
@@ -783,7 +786,7 @@ class DagsterCloudUserCodeLauncher(
         if not server:
             return []
 
-        _server_handle, server_endpoint, _code_deployment_metadata = server
+        _server_handle, server_endpoint, _code_location_deploy_data = server
         try:
             return (
                 server_endpoint.create_multipex_client()
@@ -858,12 +861,12 @@ class DagsterCloudUserCodeLauncher(
     ):
         deployment_name, location_name = to_update_key
 
-        code_deployment_metadata = desired_entry.code_deployment_metadata
-        pex_metadata = code_deployment_metadata.pex_metadata
+        code_location_deploy_data = desired_entry.code_location_deploy_data
+        pex_metadata = code_location_deploy_data.pex_metadata
         deployment_info = (
             f"(pex_tag={pex_metadata.pex_tag}, python_version={pex_metadata.python_version})"
             if pex_metadata
-            else f"(image={code_deployment_metadata})"
+            else f"(image={code_location_deploy_data})"
         )
         if not isinstance(server_or_error, SerializableErrorInfo):
             try:
@@ -891,7 +894,7 @@ class DagsterCloudUserCodeLauncher(
                     deployment_name,
                     location_name,
                     server_or_error,
-                    desired_entry.code_deployment_metadata,
+                    desired_entry.code_location_deploy_data,
                 )
             except Exception:
                 # If there was a failure uploading snapshots, log it but don't block other code locations
@@ -1218,9 +1221,9 @@ class DagsterCloudUserCodeLauncher(
         )
         if self._reconcile_count == 0 and self._requires_healthcheck:
             try:
-                self._write_liveness_sentinel()
+                self._write_readiness_sentinel()
             except:
-                self._logger.exception("Failed to write liveness sentinel file.")
+                self._logger.exception("Failed to write readiness sentinel file.")
 
         if self._reconcile_count == 0:
             self._logger.info(
@@ -1361,11 +1364,11 @@ class DagsterCloudUserCodeLauncher(
                         )
                         self._first_unavailable_times.pop(deployment_location, None)
 
-    def _write_liveness_sentinel(self) -> None:
+    def _write_readiness_sentinel(self) -> None:
         """Write a sentinel file to indicate that the agent is alive and grpc servers have been spun up."""
         pass
 
-    def _check_for_image(self, metadata: CodeDeploymentMetadata):
+    def _check_for_image(self, metadata: CodeLocationDeployData):
         image = self._resolve_image(metadata)
 
         if self.requires_images and not image:
@@ -1479,7 +1482,7 @@ class DagsterCloudUserCodeLauncher(
 
             desired_entry = desired_entries[to_update_key]
 
-            code_deployment_metadata = desired_entry.code_deployment_metadata
+            code_location_deploy_data = desired_entry.code_location_deploy_data
 
             # First check what multipex servers already exist for this location (any that are
             # no longer used will be cleaned up at the end)
@@ -1487,12 +1490,12 @@ class DagsterCloudUserCodeLauncher(
                 self._get_multipex_server_handles_for_location(deployment_name, location_name)
             )
 
-            if code_deployment_metadata.pex_metadata:
+            if code_location_deploy_data.pex_metadata:
                 try:
                     # See if a multipex server exists that satisfies this new metadata or if
                     # one needs to be created
                     multipex_server = self._get_multipex_server(
-                        deployment_name, location_name, desired_entry.code_deployment_metadata
+                        deployment_name, location_name, desired_entry.code_location_deploy_data
                     )
 
                     if multipex_server:
@@ -1507,17 +1510,17 @@ class DagsterCloudUserCodeLauncher(
                             )
                             multipex_server = None
 
-                    desired_pex_metadata = desired_entry.code_deployment_metadata.pex_metadata
+                    desired_pex_metadata = desired_entry.code_location_deploy_data.pex_metadata
                     desired_python_version = (
                         desired_pex_metadata.python_version if desired_pex_metadata else None
                     )
-                    multipex_server_repr = f"{deployment_name}:{location_name} image={desired_entry.code_deployment_metadata.image} python_version={desired_python_version}"
+                    multipex_server_repr = f"{deployment_name}:{location_name} image={desired_entry.code_location_deploy_data.image} python_version={desired_python_version}"
                     if not multipex_server:
                         self._logger.info(
                             f"Creating new multipex server for {multipex_server_repr}"
                         )
                         # confirm it's a valid image since _start_new_server_spinup will launch a container
-                        self._check_for_image(desired_entry.code_deployment_metadata)
+                        self._check_for_image(desired_entry.code_location_deploy_data)
                         multipex_server = self._start_new_server_spinup(
                             deployment_name, location_name, desired_entry
                         )
@@ -1525,7 +1528,7 @@ class DagsterCloudUserCodeLauncher(
                         assert self._get_multipex_server(
                             deployment_name,
                             location_name,
-                            desired_entry.code_deployment_metadata,
+                            desired_entry.code_location_deploy_data,
                         )
                         new_multipex_servers[to_update_key] = multipex_server
                     else:
@@ -1592,7 +1595,7 @@ class DagsterCloudUserCodeLauncher(
             deployment_name, location_name = to_update_key
             try:
                 desired_entry = desired_entries[to_update_key]
-                code_deployment_metadata = desired_entry.code_deployment_metadata
+                code_location_deploy_data = desired_entry.code_location_deploy_data
 
                 self._logger.info(f"Updating server for {deployment_name}:{location_name}")
                 existing_standalone_dagster_server_handles[to_update_key] = (
@@ -1605,7 +1608,7 @@ class DagsterCloudUserCodeLauncher(
                     deployment_name, location_name
                 )
 
-                self._check_for_image(code_deployment_metadata)
+                self._check_for_image(code_location_deploy_data)
 
                 new_dagster_servers[to_update_key] = self._start_new_dagster_server(
                     deployment_name,
@@ -1678,7 +1681,7 @@ class DagsterCloudUserCodeLauncher(
             current_multipex_server = self._get_multipex_server(
                 deployment_name,
                 location_name,
-                desired_entries[to_update_key].code_deployment_metadata,
+                desired_entries[to_update_key].code_location_deploy_data,
             )
 
             for multipex_server_handle in multipex_server_handles:
@@ -1759,7 +1762,7 @@ class DagsterCloudUserCodeLauncher(
                     deployment_name,
                     location_name,
                     server_or_error,
-                    self._actual_entries[location].code_deployment_metadata,
+                    self._actual_entries[location].code_location_deploy_data,
                 )
             except Exception:
                 self._logger.error(
@@ -1782,9 +1785,9 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name,
         location_name,
-        code_deployment_metadata,
+        code_location_deploy_data,
     ) -> Optional[DagsterCloudGrpcServer]:
-        if not code_deployment_metadata.pex_metadata:
+        if not code_location_deploy_data.pex_metadata:
             return None
 
         cand_server = self._multipex_servers.get((deployment_name, location_name))
@@ -1793,21 +1796,21 @@ class DagsterCloudUserCodeLauncher(
             return None
 
         cand_python_version = (
-            cand_server.code_deployment_metadata.pex_metadata.python_version
-            if cand_server.code_deployment_metadata.pex_metadata
+            cand_server.code_location_deploy_data.pex_metadata.python_version
+            if cand_server.code_location_deploy_data.pex_metadata
             else None
         )
         python_version = (
-            code_deployment_metadata.pex_metadata.python_version
-            if code_deployment_metadata.pex_metadata
+            code_location_deploy_data.pex_metadata.python_version
+            if code_location_deploy_data.pex_metadata
             else None
         )
         if (
-            (cand_server.code_deployment_metadata.image == code_deployment_metadata.image)
+            (cand_server.code_location_deploy_data.image == code_location_deploy_data.image)
             and (cand_python_version == python_version)
             and (
-                cand_server.code_deployment_metadata.container_context
-                == code_deployment_metadata.container_context
+                cand_server.code_location_deploy_data.container_context
+                == code_location_deploy_data.container_context
             )
         ):
             return cand_server
@@ -1830,7 +1833,7 @@ class DagsterCloudUserCodeLauncher(
                     location_name=location_name,
                     metadata_update_timestamp=int(desired_entry.update_timestamp),
                 ),
-                code_deployment_metadata=desired_entry.code_deployment_metadata,
+                code_location_deploy_data=desired_entry.code_location_deploy_data,
                 instance_ref=self._instance.ref_for_deployment(deployment_name),
             )
         )
@@ -1838,9 +1841,9 @@ class DagsterCloudUserCodeLauncher(
     def _start_new_dagster_server(
         self, deployment_name: str, location_name: str, desired_entry: UserCodeLauncherEntry
     ) -> DagsterCloudGrpcServer:
-        if desired_entry.code_deployment_metadata.pex_metadata:
+        if desired_entry.code_location_deploy_data.pex_metadata:
             multipex_server = self._get_multipex_server(
-                deployment_name, location_name, desired_entry.code_deployment_metadata
+                deployment_name, location_name, desired_entry.code_location_deploy_data
             )
 
             assert multipex_server  # should have been started earlier or we should never reach here
@@ -1861,7 +1864,7 @@ class DagsterCloudUserCodeLauncher(
                         ("timestamp", str(int(desired_entry.update_timestamp))),
                     ],
                 ),
-                desired_entry.code_deployment_metadata,
+                desired_entry.code_location_deploy_data,
             )
         else:
             return self._start_new_server_spinup(deployment_name, location_name, desired_entry)

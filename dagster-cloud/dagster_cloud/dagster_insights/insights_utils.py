@@ -31,12 +31,12 @@ def get_current_context_and_asset_key() -> (
 def get_asset_key_for_output(
     context: Union[OpExecutionContext, AssetExecutionContext], output_name: str
 ) -> Optional[AssetKey]:
-    asset_info = context.job_def.asset_layer.asset_info_for_output(
+    asset_key = context.job_def.asset_layer.asset_key_for_output(
         node_handle=context.op_handle, output_name=output_name
     )
-    if asset_info is None:
+    if asset_key is None:
         return None
-    return asset_info.key
+    return asset_key
 
 
 def extract_asset_info_from_event(context, dagster_event, record_observation_usage):

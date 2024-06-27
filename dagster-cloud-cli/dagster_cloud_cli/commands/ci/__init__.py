@@ -78,6 +78,7 @@ def branch_deployment(
     dagster_env: Optional[str] = DAGSTER_ENV_OPTION,
     mark_closed: bool = False,
     read_only: bool = False,
+    base_deployment_name: Optional[str] = None,
 ):
     try:
         if organization:
@@ -89,7 +90,12 @@ def branch_deployment(
             print(get_branch_deployment_name_from_context(url, project_dir))
             return
 
-        print(create_or_update_deployment_from_context(url, project_dir, mark_closed))
+        print(
+            create_or_update_deployment_from_context(
+                url, project_dir, mark_closed, base_deployment_name=base_deployment_name
+            )
+        )
+
     except ValueError as err:
         logging.error(
             f"cannot determine branch deployment: {err}",
@@ -97,13 +103,18 @@ def branch_deployment(
         sys.exit(1)
 
 
-def create_or_update_deployment_from_context(url, project_dir: str, mark_closed=False) -> str:
+def create_or_update_deployment_from_context(
+    url,
+    project_dir: str,
+    mark_closed=False,
+    base_deployment_name: Optional[str] = None,
+) -> str:
     source = metrics.get_source()
     if source == CliEventTags.source.github:
         event = github_context.get_github_event(project_dir)
         api_token = os.environ[TOKEN_ENV_VAR_NAME]
         deployment_name = code_location.create_or_update_branch_deployment_from_github_context(
-            url, api_token, event, mark_closed
+            url, api_token, event, mark_closed, base_deployment_name=base_deployment_name
         )
         if not deployment_name:
             raise ValueError(
@@ -129,6 +140,7 @@ def create_or_update_deployment_from_context(url, project_dir: str, mark_closed=
                 author_name=event.git_metadata.name,
                 author_email=event.git_metadata.email,
                 commit_message=event.git_metadata.message,
+                base_deployment_name=base_deployment_name,
             )
             logging.info(
                 "Got branch deployment %r for branch %r",
@@ -258,11 +270,12 @@ def init(
     # available (eg. if not in a PR) then we fallback to the --deployment flag.
 
     try:
-        branch_deployment = create_or_update_deployment_from_context(url, project_dir)
+        branch_deployment = create_or_update_deployment_from_context(
+            url, project_dir, base_deployment_name=deployment
+        )
         if deployment:
             ui.print(
-                f"Deploying to branch deployment {branch_deployment}, ignoring"
-                f" --deployment={deployment}"
+                f"Deploying to branch deployment {branch_deployment}, and using base deployment {deployment}"
             )
         deployment = branch_deployment
         is_branch_deployment = True

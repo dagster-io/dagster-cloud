@@ -3,7 +3,7 @@ from typing import List, NamedTuple, Optional
 import dagster._check as check
 from dagster._core.instance.ref import InstanceRef
 from dagster._serdes import create_snapshot_id, whitelist_for_serdes
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData
 
 
 # Enough to uniquely create (and later identify) a given PEX server - the
@@ -32,13 +32,13 @@ class PexServerHandle(
         return create_snapshot_id(self)
 
 
-@whitelist_for_serdes
+@whitelist_for_serdes(storage_field_names={"code_location_deploy_data": "code_deployment_metadata"})
 class CreatePexServerArgs(
     NamedTuple(
         "_CreatePexServerArgs",
         [
             ("server_handle", PexServerHandle),
-            ("code_deployment_metadata", CodeDeploymentMetadata),
+            ("code_location_deploy_data", CodeLocationDeployData),
             ("instance_ref", Optional[InstanceRef]),
         ],
     )
@@ -46,14 +46,14 @@ class CreatePexServerArgs(
     def __new__(
         cls,
         server_handle: PexServerHandle,
-        code_deployment_metadata: CodeDeploymentMetadata,
+        code_location_deploy_data: CodeLocationDeployData,
         instance_ref: Optional[InstanceRef] = None,
     ):
         return super(CreatePexServerArgs, cls).__new__(
             cls,
             check.inst_param(server_handle, "server_handle", PexServerHandle),
             check.inst_param(
-                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+                code_location_deploy_data, "code_location_deploy_data", CodeLocationDeployData
             ),
             check.opt_inst_param(instance_ref, "instance_ref", InstanceRef),
         )

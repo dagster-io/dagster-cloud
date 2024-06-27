@@ -111,7 +111,6 @@ from .queries import (
     SET_CONCURRENCY_SLOTS_MUTATION,
     STORE_EVENT_BATCH_MUTATION,
     STORE_EVENT_MUTATION,
-    UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
     UPGRADE_EVENT_LOG_STORAGE_MUTATION,
     WIPE_ASSET_CACHED_STATUS_DATA_MUTATION,
     WIPE_ASSET_MUTATION,
@@ -749,35 +748,17 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
         return result
 
-    def can_cache_asset_status_data(self) -> bool:
+    def can_read_asset_status_cache(self) -> bool:
         # cached_status_data column exists in the asset_key table
         return True
+
+    def can_write_asset_status_cache(self) -> bool:
+        return False
 
     def update_asset_cached_status_data(
         self, asset_key: AssetKey, cache_values: AssetStatusCacheValue
     ) -> None:
-        self._execute_query(
-            UPDATE_ASSET_CACHED_STATUS_DATA_MUTATION,
-            variables={
-                "assetKey": asset_key.to_string(),
-                "cacheValues": {
-                    "latestStorageId": cache_values.latest_storage_id,
-                    "partitionsDefId": cache_values.partitions_def_id,
-                    "serializedMaterializedPartitionSubset": (
-                        cache_values.serialized_materialized_partition_subset
-                    ),
-                    "serializedFailedPartitionSubset": (
-                        cache_values.serialized_failed_partition_subset
-                    ),
-                    "serializedInProgressPartitionSubset": (
-                        cache_values.serialized_in_progress_partition_subset
-                    ),
-                    "earliestInProgressMaterializationEventId": (
-                        cache_values.earliest_in_progress_materialization_event_id
-                    ),
-                },
-            },
-        )
+        raise NotImplementedError("Not callable from user cloud")
 
     def wipe_asset_cached_status(self, asset_key: AssetKey) -> None:
         res = self._execute_query(

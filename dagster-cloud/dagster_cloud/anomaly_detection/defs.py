@@ -1,3 +1,4 @@
+import datetime
 from typing import Iterable, Optional, Sequence, Union, cast
 
 from dagster import (
@@ -28,6 +29,7 @@ from dagster._core.definitions.events import CoercibleToAssetKey
 from dagster._core.definitions.source_asset import SourceAsset
 from dagster._core.errors import DagsterError, DagsterInvariantViolationError
 from dagster._core.instance import DagsterInstance
+from dagster._time import get_current_timestamp
 from dagster_cloud_cli.core.graphql_client import (
     DagsterCloudGraphQLClient,
     create_cloud_webserver_client,
@@ -110,13 +112,21 @@ def handle_anomaly_detection_inference_failure(
         data["__typename"] == "AnomalyDetectionFailure"
         and data["message"] == params.model_version.minimum_required_records_msg
     ):
+        # Pause evaluation for a day if there are not enough records.
+        metadata[FRESH_UNTIL_METADATA_KEY] = MetadataValue.timestamp(
+            get_current_timestamp() + datetime.timedelta(days=1).total_seconds()
+        )
+        description = (
+            f"Anomaly detection failed: {data['message']} Any sensors will wait to "
+            "re-evaluate this check for a day."
+        )
         # Intercept failure in the case of not enough records, and return a pass to avoid
         # being too noisy with failures.
         return AssetCheckResult(
             passed=True,
             severity=severity,
             metadata=metadata,
-            description=data["message"],
+            description=description,
             asset_key=asset_key,
         )
     raise DagsterCloudAnomalyDetectionFailed(f"Anomaly detection failed: {data['message']}")

@@ -11,6 +11,7 @@ def create_or_update_branch_deployment_from_github_context(
     dagster_cloud_api_token: str,
     github_event: github_context.GithubEvent,
     mark_closed: bool,
+    base_deployment_name: Optional[str],
 ) -> Optional[str]:
     """Return the branch deployment associated with the github PR."""
     event = github_event
@@ -35,6 +36,7 @@ def create_or_update_branch_deployment_from_github_context(
                 author_email=event.author_email,
                 commit_message=event.commit_msg,
                 author_avatar_url=github_event.get_github_avatar_url(),
+                base_deployment_name=base_deployment_name,
             )
         logging.info(
             "Got branch deployment %r for branch %r",

@@ -1,14 +1,12 @@
 import os
 import tempfile
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Dict, List, NamedTuple, Optional, Tuple, Union
 
 import requests
 from dagster import AssetExecutionContext, DagsterInstance, OpExecutionContext
 from dagster._annotations import experimental
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
-from gql import Client, gql
-from gql.transport.requests import RequestsHTTPTransport
 
 from dagster_cloud.instance import DagsterCloudAgentInstance
 
@@ -24,25 +22,6 @@ class DagsterMetric(NamedTuple):
 
     metric_name: str
     metric_value: float
-
-
-def query_graphql_from_instance(
-    instance: DagsterInstance, query_text: str, variables=None
-) -> Dict[str, Any]:
-    headers = {}
-
-    url, cloud_token = get_url_and_token_from_instance(instance)
-
-    headers["Dagster-Cloud-API-Token"] = cloud_token
-
-    transport = RequestsHTTPTransport(
-        url=url,
-        use_json=True,
-        timeout=300,
-        headers={"Dagster-Cloud-Api-Token": cloud_token},
-    )
-    client = Client(transport=transport, fetch_schema_from_transport=True)
-    return client.execute(gql(query_text), variable_values=variables or dict())
 
 
 def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str]:

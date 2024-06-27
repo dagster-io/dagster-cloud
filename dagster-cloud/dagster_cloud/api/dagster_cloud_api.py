@@ -14,7 +14,7 @@ from dagster._core.utils import RequestUtilizationMetrics
 from dagster._serdes import whitelist_for_serdes
 from dagster._utils.container import ContainerUtilizationMetrics
 from dagster._utils.error import SerializableErrorInfo
-from dagster_cloud_cli.core.workspace import CodeDeploymentMetadata
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData
 from typing_extensions import NotRequired
 
 from dagster_cloud.agent import AgentQueuesConfig
@@ -55,7 +55,7 @@ class DagsterCloudUploadLocationData(NamedTuple):
     dagster_library_versions: Optional[Mapping[str, str]] = None
 
 
-@whitelist_for_serdes
+@whitelist_for_serdes(storage_field_names={"code_location_deploy_data": "deployment_metadata"})
 class DagsterCloudUploadWorkspaceEntry(NamedTuple):
     """Serialized object uploaded by the Dagster Cloud agent with information about
     a repository location - either the serialized DagsterCloudUploadLocationData
@@ -64,7 +64,7 @@ class DagsterCloudUploadWorkspaceEntry(NamedTuple):
     """
 
     location_name: str
-    deployment_metadata: CodeDeploymentMetadata
+    code_location_deploy_data: CodeLocationDeployData
     upload_location_data: Optional[DagsterCloudUploadLocationData]
     serialized_error_info: Optional[SerializableErrorInfo]
 
@@ -274,7 +274,7 @@ class DagsterCloudRepositoryData(
         )
 
 
-@whitelist_for_serdes
+@whitelist_for_serdes(storage_field_names={"code_location_deploy_data": "code_deployment_metadata"})
 class LoadRepositoriesResponse(
     NamedTuple(
         "_LoadRepositoriesResponse",
@@ -282,7 +282,7 @@ class LoadRepositoriesResponse(
             ("repository_datas", Sequence[DagsterCloudRepositoryData]),
             ("container_image", Optional[str]),
             ("executable_path", Optional[str]),
-            ("code_deployment_metadata", Optional[CodeDeploymentMetadata]),
+            ("code_location_deploy_data", Optional[CodeLocationDeployData]),
             ("dagster_library_versions", Optional[Mapping[str, str]]),
         ],
     )
@@ -292,7 +292,7 @@ class LoadRepositoriesResponse(
         repository_datas,
         container_image,
         executable_path,
-        code_deployment_metadata=None,
+        code_location_deploy_data=None,
         dagster_library_versions: Optional[Mapping[str, str]] = None,
     ):
         return super(cls, LoadRepositoriesResponse).__new__(
@@ -305,7 +305,7 @@ class LoadRepositoriesResponse(
             check.opt_str_param(container_image, "container_image"),
             check.opt_str_param(executable_path, "executable_path"),
             check.opt_inst_param(
-                code_deployment_metadata, "code_deployment_metadata", CodeDeploymentMetadata
+                code_location_deploy_data, "code_location_deploy_data", CodeLocationDeployData
             ),
             check.opt_nullable_mapping_param(dagster_library_versions, "dagster_library_versions"),
         )
