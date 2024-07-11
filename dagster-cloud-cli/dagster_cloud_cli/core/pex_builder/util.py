@@ -11,7 +11,8 @@ import click
 from packaging import version
 
 TARGET_PYTHON_VERSIONS = [
-    version.Version(python_version) for python_version in ["3.7", "3.8", "3.9", "3.10", "3.11"]
+    version.Version(python_version)
+    for python_version in ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
 ]
 
 

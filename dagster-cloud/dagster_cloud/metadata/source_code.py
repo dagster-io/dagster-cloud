@@ -4,7 +4,11 @@ from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 from dagster import DagsterInvariantViolationError
 from dagster._annotations import experimental
-from dagster._core.definitions.metadata import link_to_source_control
+from dagster._core.definitions.metadata import (
+    AnchorBasedFilePathMapping,
+    link_code_references_to_git,
+)
+from dagster._core.definitions.metadata.source_code import FilePathMapping
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 
 if TYPE_CHECKING:
@@ -39,11 +43,11 @@ def _locate_git_root() -> Optional[Path]:
 
 
 @experimental
-def link_to_git_if_cloud(
+def link_code_references_to_git_if_cloud(
     assets_defs: Sequence[Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition"]],
-    source_control_url: Optional[str] = None,
-    source_control_branch: Optional[str] = None,
-    repository_root_absolute_path: Optional[Union[Path, str]] = None,
+    git_url: Optional[str] = None,
+    git_branch: Optional[str] = None,
+    file_path_mapping: Optional[FilePathMapping] = None,
 ) -> Sequence[Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition"]]:
     """Wrapper function which converts local file path code references to hosted git URLs
     if running in a Dagster Plus cloud environment. This is determined by the presence of
@@ -55,47 +59,75 @@ def link_to_git_if_cloud(
             The asset definitions to which source control metadata should be attached.
             Only assets with local file code references (such as those created by
             `with_source_code_references`) will be converted.
-        source_control_url (Optional[str]): Override base URL for the source control system. By default,
+        git_url (Optional[str]): Override base URL for the source control system. By default,
             inferred from the `DAGSTER_CLOUD_GIT_URL` environment variable provided by cloud.
             For example, "https://github.com/dagster-io/dagster".
-        source_control_branch (str): Override branch in the source control system, such as "master".
+        git_branch (str): Override branch in the source control system, such as "master".
             Defaults to the `DAGSTER_CLOUD_GIT_SHA` or `DAGSTER_CLOUD_GIT_BRANCH` environment variable.
-        repository_root_absolute_path (Union[Path, str]): Override path to the root of the
-            repository on disk. This is used to calculate the relative path to the source file
-            from the repository root and append it to the source control URL. By default, inferred
-            from walking up the directory tree from the code location entrypoint until the git root
-            is found.
+        file_path_mapping (Optional[FilePathMapping]):
+            Specifies the mapping between local file paths and their corresponding paths in a source control repository.
+            If None, the function will attempt to infer the git root of the repository and use that as a reference
+            point. Simple usage is to provide a `AnchorBasedFilePathMapping` instance, which specifies an anchor file in the
+            repository and the corresponding local file path, which is extrapolated to all other local file paths.
+            Alternatively, a mapping can be provided which takes a local file path and returns the corresponding path in
+            the repository, allowing for more complex mappings.
+
+
+    Examples:
+        Basic usage:
+        .. code-block:: python
+                defs = Definitions(
+                    assets=link_code_references_to_git_if_cloud(
+                        with_source_code_references([my_dbt_assets]),
+                    )
+                )
+
+        Provide custom mapping for repository file paths, e.g. if local files no longer match
+        the repository structure:
+        .. code-block:: python
+                defs = Definitions(
+                    assets=link_code_references_to_git_if_cloud(
+                        with_source_code_references([my_dbt_assets]),
+                        file_path_mapping=AnchorBasedFilePathMapping(
+                            local_file_anchor=Path(__file__),
+                            file_anchor_path_in_repository="python_modules/my_module/my-module/__init__.py",
+                        ),
+                    )
+                )
     """
     is_dagster_cloud = os.getenv("DAGSTER_CLOUD_DEPLOYMENT_NAME") is not None
 
     if not is_dagster_cloud:
         return assets_defs
 
-    source_control_url = source_control_url or os.getenv("DAGSTER_CLOUD_GIT_URL")
-    source_control_branch = (
-        source_control_branch
-        or os.getenv("DAGSTER_CLOUD_GIT_SHA")
-        or os.getenv("DAGSTER_CLOUD_GIT_BRANCH")
+    git_url = git_url or os.getenv("DAGSTER_CLOUD_GIT_URL")
+    git_branch = (
+        git_branch or os.getenv("DAGSTER_CLOUD_GIT_SHA") or os.getenv("DAGSTER_CLOUD_GIT_BRANCH")
     )
-    repository_root_absolute_path = repository_root_absolute_path or _locate_git_root()
 
-    if not source_control_url or not source_control_branch:
+    if not git_url or not git_branch:
         raise ValueError(
             "Detected that this is a Dagster Cloud deployment, but"
             " could not infer source control information for this repository. Please provide"
-            " values for `source_control_url` and `source_control_branch`."
+            " values for `git_url` and `git_branch`."
         )
 
-    if not repository_root_absolute_path:
-        raise ValueError(
-            "Detected that this is a Dagster Cloud deployment, but"
-            " could not infer the git root for the repository. Please provide a value for "
-            "`repository_root_absolute_path`."
+    if not file_path_mapping:
+        git_root = _locate_git_root()
+        if not git_root:
+            raise ValueError(
+                "Detected that this is a Dagster Cloud deployment, but"
+                " could not infer the git root for the repository. Please provide a value for "
+                "`file_path_mapping`."
+            )
+        file_path_mapping = AnchorBasedFilePathMapping(
+            local_file_anchor=git_root,
+            file_anchor_path_in_repository="",
         )
 
-    return link_to_source_control(
+    return link_code_references_to_git(
         assets_defs=assets_defs,
-        source_control_url=source_control_url,
-        source_control_branch=source_control_branch,
-        repository_root_absolute_path=repository_root_absolute_path,
+        git_url=git_url,
+        git_branch=git_branch,
+        file_path_mapping=file_path_mapping,
     )

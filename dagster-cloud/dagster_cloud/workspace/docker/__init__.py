@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import docker
+import docker.errors
 from dagster import (
     Field,
     IntSource,
@@ -14,9 +15,9 @@ from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster._utils import find_free_port
 from dagster._utils.merger import merge_dicts
+from dagster._vendored.dateutil.parser import parse
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
-from dateutil.parser import parse
 from docker.models.containers import Container
 from typing_extensions import Self
 

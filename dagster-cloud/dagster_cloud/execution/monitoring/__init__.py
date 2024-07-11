@@ -411,8 +411,7 @@ def run_worker_monitoring_thread_iteration(
         logger.debug(f"Thread got statuses: {statuses}")
         with run_worker_monitoring_lock:
             statuses_dict.clear()
-            for deployment_name, statuses in statuses.items():
-                statuses_dict[deployment_name] = statuses
+            statuses_dict.update(statuses)
 
     except Exception:
         error_info = serializable_error_info_from_exc_info(sys.exc_info())

@@ -1,6 +1,7 @@
 import json
 import os
 from collections import defaultdict
+from datetime import timezone
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -49,7 +50,7 @@ from dagster._core.storage.event_log.base import (
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
 from dagster._serdes import ConfigurableClass, ConfigurableClassData, serialize_value
 from dagster._serdes.serdes import deserialize_value
-from dagster._utils import datetime_as_float, utc_datetime_from_timestamp
+from dagster._time import datetime_from_timestamp
 from dagster._utils.concurrency import (
     ClaimedSlotInfo,
     ConcurrencyClaimStatus,
@@ -154,9 +155,7 @@ def _input_for_dagster_event(dagster_event: Optional[DagsterEvent]):
         "eventTypeValue": dagster_event.event_type_value,
         "pipelineName": dagster_event.job_name,
         "stepHandleKey": dagster_event.step_handle.to_key() if dagster_event.step_handle else None,
-        "solidHandleId": (
-            dagster_event.node_handle.to_string() if dagster_event.node_handle else None
-        ),
+        "solidHandleId": (str(dagster_event.node_handle) if dagster_event.node_handle else None),
         "stepKindValue": dagster_event.step_kind_value,
         "loggingTags": (
             json.dumps(dagster_event.logging_tags) if dagster_event.logging_tags else None
@@ -213,9 +212,8 @@ def _get_event_records_filter_input(
         # we should parse this correctly, even if this is a vestigial field that only has semantic
         # meaning in the context of a run-sharded cursor against a SQLite backed event-log
         updated_dt = event_records_filter.after_cursor.run_updated_after
-        run_updated_timestamp = (
-            updated_dt.timestamp() if updated_dt.tzinfo else datetime_as_float(updated_dt)
-        )
+        updated_dt = updated_dt if updated_dt.tzinfo else updated_dt.replace(tzinfo=timezone.utc)
+        run_updated_timestamp = updated_dt.timestamp()
 
     return {
         "eventType": (
@@ -416,9 +414,9 @@ def _pending_step_from_graphql(graphene_pending_step: Dict) -> PendingStepInfo:
     return PendingStepInfo(
         graphene_pending_step["runId"],
         graphene_pending_step["stepKey"],
-        enqueued_timestamp=utc_datetime_from_timestamp(graphene_pending_step["enqueuedTimestamp"]),
+        enqueued_timestamp=datetime_from_timestamp(graphene_pending_step["enqueuedTimestamp"]),
         assigned_timestamp=(
-            utc_datetime_from_timestamp(graphene_pending_step["assignedTimestamp"])
+            datetime_from_timestamp(graphene_pending_step["assignedTimestamp"])
             if graphene_pending_step["assignedTimestamp"]
             else None
         ),
@@ -883,7 +881,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         ]
 
         # Translate list to tuple
-        return {key: tuple(val) for key, val in result.items()}
+        return {key: tuple(val) for key, val in result.items()}  # type: ignore
 
     def get_event_tags_for_asset(
         self,
@@ -1053,12 +1051,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             slot_status=ConcurrencySlotStatus(claim_status["slotStatus"]),
             priority=claim_status["priority"],
             assigned_timestamp=(
-                utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
+                datetime_from_timestamp(claim_status["assignedTimestamp"])
                 if claim_status["assignedTimestamp"]
                 else None
             ),
             enqueued_timestamp=(
-                utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
+                datetime_from_timestamp(claim_status["enqueuedTimestamp"])
                 if claim_status["enqueuedTimestamp"]
                 else None
             ),
@@ -1084,12 +1082,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             slot_status=ConcurrencySlotStatus(claim_status["slotStatus"]),
             priority=claim_status["priority"],
             assigned_timestamp=(
-                utc_datetime_from_timestamp(claim_status["assignedTimestamp"])
+                datetime_from_timestamp(claim_status["assignedTimestamp"])
                 if claim_status["assignedTimestamp"]
                 else None
             ),
             enqueued_timestamp=(
-                utc_datetime_from_timestamp(claim_status["enqueuedTimestamp"])
+                datetime_from_timestamp(claim_status["enqueuedTimestamp"])
                 if claim_status["enqueuedTimestamp"]
                 else None
             ),

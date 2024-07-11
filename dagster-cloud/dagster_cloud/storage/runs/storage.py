@@ -46,7 +46,7 @@ from dagster._serdes import (
     deserialize_value,
     serialize_value,
 )
-from dagster._utils import utc_datetime_from_timestamp
+from dagster._time import datetime_from_timestamp
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import DagsterCloudAgentServerError
 from typing_extensions import Self
@@ -117,10 +117,10 @@ def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
             check.str_elem(graphene_run_record, "serializedPipelineRun"),
             DagsterRun,
         ),
-        create_timestamp=utc_datetime_from_timestamp(
+        create_timestamp=datetime_from_timestamp(
             check.float_elem(graphene_run_record, "createTimestamp")
         ),
-        update_timestamp=utc_datetime_from_timestamp(
+        update_timestamp=datetime_from_timestamp(
             check.float_elem(graphene_run_record, "updateTimestamp")
         ),
         start_time=graphene_run_record.get("startTime"),

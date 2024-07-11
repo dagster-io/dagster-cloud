@@ -9,7 +9,7 @@ import dagster._check as check
 import requests
 from dagster import InputContext, MemoizableIOManager, OutputContext, io_manager
 from dagster._utils import PICKLE_PROTOCOL
-from dateutil import parser
+from dagster._vendored.dateutil import parser
 
 ECS_AGENT_IP = "169.254.170.2"
 

@@ -16,7 +16,7 @@ from dagster_dbt import DbtCliInvocation
 from dagster_dbt.version import __version__ as dagster_dbt_version
 from packaging import version
 
-from ..insights_utils import extract_asset_info_from_event
+from ..insights_utils import extract_asset_info_from_event, handle_raise_on_error
 from .bigquery_utils import build_bigquery_cost_metadata, marker_asset_key_for_job
 
 if TYPE_CHECKING:
@@ -47,6 +47,7 @@ class BigQueryCostInfo:
         )
 
 
+@handle_raise_on_error("dbt_cli_invocation")
 def dbt_with_bigquery_insights(
     context: Union[OpExecutionContext, AssetExecutionContext],
     dbt_cli_invocation: DbtCliInvocation,
@@ -199,10 +200,8 @@ def dbt_with_bigquery_insights(
         job_ids = [item.job_id for item in cost_info_list]
         asset_key = cost_info_list[0].asset_key
         partition = cost_info_list[0].partition
-        context.log_event(
-            AssetObservation(
-                asset_key=asset_key,
-                partition=partition,
-                metadata=build_bigquery_cost_metadata(job_ids, bytes_billed, slots_ms),
-            )
+        yield AssetObservation(
+            asset_key=asset_key,
+            partition=partition,
+            metadata=build_bigquery_cost_metadata(job_ids, bytes_billed, slots_ms),
         )

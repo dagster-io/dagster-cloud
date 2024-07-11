@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Optional, Tuple, Union
 
 import dagster._check as check
@@ -67,3 +68,53 @@ def extract_asset_info_from_event(context, dagster_event, record_observation_usa
         return asset_key, partition_key
 
     return None, None
+
+
+def handle_raise_on_error(invocation_arg_name: str, arg_position: int = 1):
+    # defer import since dagster_cloud shouldn't depend on dagster_dbt
+    # but this should only be used in envs that have dagster_dbt
+    from dagster_dbt import DbtCliInvocation
+
+    def raise_decorator(wrapper_fn):
+        def inner(*args, **kwargs):
+            from_args = len(args) > arg_position
+            dbt_cli_invocation = (
+                args[arg_position] if from_args else kwargs.get(invocation_arg_name)
+            )
+            assert isinstance(dbt_cli_invocation, DbtCliInvocation)
+
+            # If the user has set raise_on_error=True, we want to raise the error, but not before we're
+            # able to emit the cost information.  This context manager provides a replacement invocation
+            # that will not raise, but will handle errors after the context is returned
+            raise_on_error = dbt_cli_invocation.raise_on_error
+
+            if not raise_on_error:
+                yield from wrapper_fn(*args, **kwargs)
+                return
+
+            stubbed_dbt_cli_invocation = replace(dbt_cli_invocation, raise_on_error=False)
+            new_args = (
+                [
+                    *args[:arg_position],
+                    stubbed_dbt_cli_invocation,
+                    *args[arg_position + 1 :],
+                ]
+                if from_args
+                else args
+            )
+            new_kwargs = (
+                {
+                    **kwargs,
+                    invocation_arg_name: stubbed_dbt_cli_invocation,
+                }
+                if not from_args
+                else kwargs
+            )
+            yield from wrapper_fn(*new_args, **new_kwargs)
+            error = stubbed_dbt_cli_invocation.get_error()
+            if error and raise_on_error:
+                raise error
+
+        return inner
+
+    return raise_decorator

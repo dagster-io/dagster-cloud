@@ -23,7 +23,7 @@ setup(
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.7.12",
+        "dagster==1.7.13",
         "packaging>=20.9",
         "questionary",
         "requests",
@@ -39,7 +39,11 @@ setup(
     author="Elementl",
     license="Apache-2.0",
     classifiers=[
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
     ],

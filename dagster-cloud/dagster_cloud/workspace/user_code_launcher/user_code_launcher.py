@@ -395,7 +395,7 @@ class DagsterCloudUserCodeLauncher(
                 if not isinstance(s, SerializableErrorInfo)
             ] + list(self._pending_delete_grpc_server_handles)
 
-    def get_active_agent_ids(self) -> Set[str]:
+    def get_active_agent_ids(self) -> Optional[Set[str]]:
         try:
             result = self._instance.organization_scoped_graphql_client().execute(
                 GET_AGENTS_QUERY,
@@ -404,9 +404,9 @@ class DagsterCloudUserCodeLauncher(
         except:
             self._logger.exception(
                 "Could not connect to graphql server to "
-                "retrieve active agent_ids. Just returning this agent as an active ID."
+                "retrieve active agent_ids. Dangling code servers from other agents will not be removed."
             )
-            return set([self._instance.instance_uuid])
+            return None
         self._logger.info(f"Active agent ids response: {result}")
         return set(agent_data["id"] for agent_data in result["data"]["agents"])
 
@@ -976,7 +976,9 @@ class DagsterCloudUserCodeLauncher(
             with self._grpc_servers_lock:
                 self._pending_delete_grpc_server_handles.discard(server_handle)
 
-    def _cleanup_servers(self, active_agent_ids: Set[str], include_own_servers: bool) -> None:
+    def _cleanup_servers(
+        self, active_agent_ids: Optional[Set[str]], include_own_servers: bool
+    ) -> None:
         """Remove all servers, across all deployments and locations."""
         with ThreadPoolExecutor() as executor:
             futures = []
@@ -1010,7 +1012,7 @@ class DagsterCloudUserCodeLauncher(
         """Returns the update_timestamp value from the given code server."""
 
     def _can_cleanup_server(
-        self, handle: ServerHandle, active_agent_ids: Set[str], include_own_servers: bool
+        self, handle: ServerHandle, active_agent_ids: Optional[Set[str]], include_own_servers: bool
     ) -> bool:
         """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active)."""
         agent_id_for_server = self.get_agent_id_for_server(handle)
@@ -1045,7 +1047,9 @@ class DagsterCloudUserCodeLauncher(
             self._logger.info("Not cleaning up server since it was recently created")
             return False
 
-        return agent_id_for_server not in cast(Set[str], active_agent_ids)
+        return (active_agent_ids is not None) and (
+            agent_id_for_server not in cast(Set[str], active_agent_ids)
+        )
 
     def _graceful_cleanup_servers(self, include_own_servers: bool):  # ServerHandles
         active_agent_ids = self.get_active_agent_ids()

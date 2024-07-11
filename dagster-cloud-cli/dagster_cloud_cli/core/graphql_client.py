@@ -34,6 +34,7 @@ RETRY_STATUS_CODES = [
     503,
     504,
     429,
+    409,
 ]
 
 
@@ -165,17 +166,14 @@ def _retry_loop(
                 sleep_time = 0
                 if requested_sleep_time:
                     sleep_time = requested_sleep_time
-                elif retry_number > 1:
-                    sleep_time = backoff_factor * (2 ** (retry_number - 1))
-
-                if sleep_time > 0:
-                    logger.warning(
-                        f"Error in Dagster Cloud request ({error_msg}). Retrying in"
-                        f" {sleep_time} seconds..."
-                    )
-                    time.sleep(sleep_time)
                 else:
-                    logger.warning(f"Error in Dagster Cloud request ({error_msg}). Retrying now.")
+                    sleep_time = backoff_factor * (2**retry_number)
+
+                logger.warning(
+                    f"Error in Dagster Cloud request ({error_msg}). Retrying in"
+                    f" {sleep_time} seconds..."
+                )
+                time.sleep(sleep_time)
             else:
                 # Throw the error straight if no retries were involved
                 if max_retries == 0 or not retryable_error:

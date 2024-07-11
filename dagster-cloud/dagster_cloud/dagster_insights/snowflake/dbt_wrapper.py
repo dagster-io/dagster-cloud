@@ -11,13 +11,14 @@ from dagster import (
     Output,
 )
 
-from ..insights_utils import extract_asset_info_from_event
+from ..insights_utils import extract_asset_info_from_event, handle_raise_on_error
 from .snowflake_utils import OPAQUE_ID_SQL_SIGIL, build_opaque_id_metadata, marker_asset_key_for_job
 
 if TYPE_CHECKING:
     from dagster_dbt import DbtCliInvocation
 
 
+@handle_raise_on_error("dbt_cli_invocation")
 def dbt_with_snowflake_insights(
     context: Union[OpExecutionContext, AssetExecutionContext],
     dbt_cli_invocation: "DbtCliInvocation",
@@ -110,10 +111,8 @@ def dbt_with_snowflake_insights(
     for asset_key, partition, unique_id in asset_and_partition_key_to_unique_id:
         # must match the query-comment in dbt_project.yml
         opaque_id = f"{unique_id}:{invocation_id}"
-        context.log_event(
-            AssetObservation(
-                asset_key=asset_key,
-                partition=partition,
-                metadata=build_opaque_id_metadata(opaque_id),
-            )
+        yield AssetObservation(
+            asset_key=asset_key,
+            partition=partition,
+            metadata=build_opaque_id_metadata(opaque_id),
         )
