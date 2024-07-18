@@ -79,7 +79,7 @@ def _build_check_for_assets(
             for asset_key in asset_keys
         ],
         can_subset=True,
-        name=f"anomaly_detection_freshness_check_{unique_id_from_asset_and_check_keys(asset_keys, [])}",
+        name=f"anomaly_detection_freshness_check_{unique_id_from_asset_and_check_keys(asset_keys)}",
     )
     def the_check(context: AssetCheckExecutionContext) -> Iterable[AssetCheckResult]:
         if not _is_agent_instance(context.instance):
@@ -140,7 +140,7 @@ def _anomaly_detection_inner(
     severity: AssetCheckSeverity,
 ) -> AssetCheckResult:
     asset_key = check_key.asset_key
-    if not context.job_def.asset_layer.has(asset_key):
+    if not context.job_def.asset_layer.asset_graph.has(asset_key):
         raise Exception(f"Could not find targeted asset {asset_key.to_string()}.")
     result = client.execute(
         ANOMALY_DETECTION_INFERENCE_MUTATION,

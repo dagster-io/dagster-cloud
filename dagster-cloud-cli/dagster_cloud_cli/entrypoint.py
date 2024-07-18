@@ -184,7 +184,7 @@ app.add_typer(agent_app, name="agent", no_args_is_help=True)
 app.add_typer(config_app, name="config", no_args_is_help=True)
 app.add_typer(deployment_app, name="deployment", no_args_is_help=True)
 app.add_typer(organization_app, name="organization", no_args_is_help=True)
-app.add_typer(workspace_app, name="workspace", no_args_is_help=True)
+app.add_typer(workspace_app, name="workspace", no_args_is_help=True, hidden=True)
 _import_commands(
     deployment_app,
     workspace_app,
