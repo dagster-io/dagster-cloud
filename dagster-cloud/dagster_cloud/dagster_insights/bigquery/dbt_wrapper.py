@@ -195,9 +195,9 @@ def dbt_with_bigquery_insights(
         return
 
     for cost_info_list in cost_by_asset.values():
-        bytes_billed = sum(item.bytes_billed for item in cost_info_list)
-        slots_ms = sum(item.slots_ms for item in cost_info_list)
-        job_ids = [item.job_id for item in cost_info_list]
+        bytes_billed = sum(item.bytes_billed or 0 for item in cost_info_list)
+        slots_ms = sum(item.slots_ms or 0 for item in cost_info_list)
+        job_ids = [item.job_id for item in cost_info_list if item.job_id]
         asset_key = cost_info_list[0].asset_key
         partition = cost_info_list[0].partition
         yield AssetObservation(
