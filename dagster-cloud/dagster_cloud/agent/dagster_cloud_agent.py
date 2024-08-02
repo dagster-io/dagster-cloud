@@ -23,7 +23,7 @@ from dagster._utils.error import SerializableErrorInfo, serializable_error_info_
 from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
-from dagster_cloud_cli.core.errors import raise_http_error
+from dagster_cloud_cli.core.errors import DagsterCloudHTTPError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData, get_instance_ref_for_user_code
 
 from dagster_cloud.api.dagster_cloud_api import (
@@ -44,6 +44,7 @@ from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,
+    truncate_serialized_error,
 )
 
 from ..util import SERVER_HANDLE_TAG, compressed_namedtuple_upload_file, is_isolated_run
@@ -249,16 +250,32 @@ class DagsterCloudAgent:
             " been loaded."
         )
 
+        heartbeat_error_size_limit = int(os.getenv("DAGSTER_CLOUD_AGENT_ERROR_SIZE_LIMIT", "10000"))
+
         while True:
             try:
                 for error in self.run_iteration(instance, user_code_launcher):
                     if error:
                         self._logger.error(str(error))
-                        self._errors.appendleft((error, pendulum.now("UTC")))
+                        self._errors.appendleft(
+                            (
+                                truncate_serialized_error(
+                                    error, heartbeat_error_size_limit, max_depth=3
+                                ),
+                                pendulum.now("UTC"),
+                            )
+                        )
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
                 self._logger.error(f"Caught error:\n{error_info}")
-                self._errors.appendleft((error_info, pendulum.now("UTC")))
+                self._errors.appendleft(
+                    (
+                        truncate_serialized_error(
+                            error_info, heartbeat_error_size_limit, max_depth=3
+                        ),
+                        pendulum.now("UTC"),
+                    )
+                )
 
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
@@ -268,9 +285,7 @@ class DagsterCloudAgent:
                 try:
                     self._check_add_heartbeat(instance, agent_uuid, heartbeat_interval_seconds)
                 except Exception:
-                    self._logger.error(
-                        f"Failed to add heartbeat: \n{serializable_error_info_from_exc_info(sys.exc_info())}"
-                    )
+                    self._logger.exception("Failed to add heartbeat")
 
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
@@ -350,36 +365,7 @@ class DagsterCloudAgent:
         code_server_heartbeats_dict = instance.user_code_launcher.get_grpc_server_heartbeats()
 
         agent_image_tag = os.getenv("DAGSTER_CLOUD_AGENT_IMAGE_TAG")
-        serialized_agent_heartbeats = [
-            {
-                "deploymentName": deployment_name,
-                "serializedAgentHeartbeat": serialize_value(
-                    AgentHeartbeat(
-                        timestamp=curr_time.float_timestamp,
-                        agent_id=agent_uuid,
-                        agent_label=instance.dagster_cloud_api_agent_label,
-                        agent_type=(
-                            type(instance.user_code_launcher).__name__
-                            if instance.user_code_launcher
-                            else None
-                        ),
-                        metadata=merge_dicts(
-                            {AGENT_VERSION_LABEL: __version__},
-                            {"image_tag": agent_image_tag} if agent_image_tag else {},
-                            {
-                                "utilization_metrics": self._utilization_metrics
-                                if instance.user_code_launcher.agent_metrics_enabled
-                                else {}
-                            },
-                        ),
-                        run_worker_statuses=run_worker_statuses_dict[deployment_name],
-                        code_server_heartbeats=code_server_heartbeats_dict.get(deployment_name, []),
-                        agent_queues_config=instance.agent_queues_config,
-                    )
-                ),
-            }
-            for deployment_name in self._active_deployment_names
-        ]
+
         if instance.user_code_launcher.agent_metrics_enabled:
             num_running_requests = self._utilization_metrics["request_utilization"][
                 "num_running_requests"
@@ -393,14 +379,89 @@ class DagsterCloudAgent:
 
         self._last_heartbeat_time = curr_time
 
-        instance.organization_scoped_graphql_client().execute(
-            ADD_AGENT_HEARTBEATS_MUTATION,
-            variable_values={
-                "serializedAgentHeartbeats": serialized_agent_heartbeats,
-                "serializedErrors": [serialize_value(error) for error in errors],
-            },
-            idempotent_mutation=True,
-        )
+        heartbeats = {
+            deployment_name: AgentHeartbeat(
+                timestamp=curr_time.float_timestamp,
+                agent_id=agent_uuid,
+                agent_label=instance.dagster_cloud_api_agent_label,
+                agent_type=(
+                    type(instance.user_code_launcher).__name__
+                    if instance.user_code_launcher
+                    else None
+                ),
+                metadata=merge_dicts(
+                    {AGENT_VERSION_LABEL: __version__},
+                    {"image_tag": agent_image_tag} if agent_image_tag else {},
+                    {
+                        "utilization_metrics": self._utilization_metrics
+                        if instance.user_code_launcher.agent_metrics_enabled
+                        else {}
+                    },
+                ),
+                run_worker_statuses=run_worker_statuses_dict[deployment_name],
+                code_server_heartbeats=code_server_heartbeats_dict.get(deployment_name, []),
+                agent_queues_config=instance.agent_queues_config,
+            )
+            for deployment_name in self._active_deployment_names
+        }
+
+        serialized_agent_heartbeats = [
+            {
+                "deploymentName": deployment_name,
+                "serializedAgentHeartbeat": serialize_value(heartbeat),
+            }
+            for deployment_name, heartbeat in heartbeats.items()
+        ]
+
+        serialized_errors = [serialize_value(error) for error in errors]
+        try:
+            instance.organization_scoped_graphql_client().execute(
+                ADD_AGENT_HEARTBEATS_MUTATION,
+                variable_values={
+                    "serializedAgentHeartbeats": serialized_agent_heartbeats,
+                    "serializedErrors": serialized_errors,
+                },
+                idempotent_mutation=True,
+            )
+        except DagsterCloudHTTPError as e:
+            if e.response.status_code == 413:
+                heartbeats_size = sum([len(heartbeat) for heartbeat in serialized_agent_heartbeats])
+                errors_size = sum([len(error) for error in serialized_errors])
+
+                error_message = f"Request with {heartbeats_size} heartbeat bytes and {errors_size} error bytes was too large, submitting a smaller heartbeat without messages and stack traces."
+                self._logger.exception(error_message)
+
+                serialized_agent_heartbeats = [
+                    {
+                        "deploymentName": deployment_name,
+                        "serializedAgentHeartbeat": serialize_value(
+                            heartbeat.without_messages_and_errors()
+                        ),
+                    }
+                    for deployment_name, heartbeat in heartbeats.items()
+                ]
+
+                instance.organization_scoped_graphql_client().execute(
+                    ADD_AGENT_HEARTBEATS_MUTATION,
+                    variable_values={
+                        "serializedAgentHeartbeats": serialized_agent_heartbeats,
+                        "serializedErrors": [
+                            serialize_value(
+                                TimestampedError(
+                                    curr_time.timestamp(),
+                                    SerializableErrorInfo(
+                                        error_message,
+                                        stack=[],
+                                        cls_name=None,
+                                    ),
+                                )
+                            )
+                        ],
+                    },
+                    idempotent_mutation=True,
+                )
+            else:
+                raise
 
     @property
     def executor(self) -> ThreadPoolExecutor:

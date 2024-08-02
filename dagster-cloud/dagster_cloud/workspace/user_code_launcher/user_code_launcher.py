@@ -84,6 +84,8 @@ from dagster_cloud.pex.grpc.types import (
 )
 from dagster_cloud.util import diff_serializable_namedtuple_map
 
+from .utils import truncate_serialized_error
+
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25
 ACTIVE_AGENT_HEARTBEAT_INTERVAL = int(
@@ -123,71 +125,6 @@ INIT_UPLOAD_LOCATIONS_QUERY = """
 """
 
 DEFAULT_SERVER_TTL_SECONDS = 60 * 60 * 24
-
-
-ERROR_CLASS_NAME_SIZE_LIMIT = 1000
-
-
-def _truncate_code_location_error(
-    error_info: SerializableErrorInfo, field_size_limit: int, max_depth: int
-):
-    if error_info.cause:
-        if max_depth == 0:
-            new_cause = (
-                error_info.cause
-                if len(serialize_value(error_info.cause)) <= field_size_limit
-                else SerializableErrorInfo(
-                    message="(Cause truncated due to size limitations)",
-                    stack=[],
-                    cls_name=None,
-                )
-            )
-        else:
-            new_cause = _truncate_code_location_error(
-                error_info.cause, field_size_limit, max_depth=max_depth - 1
-            )
-        error_info = error_info._replace(cause=new_cause)
-
-    if error_info.context:
-        if max_depth == 0:
-            new_context = (
-                error_info.context
-                if len(serialize_value(error_info.context)) <= field_size_limit
-                else SerializableErrorInfo(
-                    message="(Context truncated due to size limitations)",
-                    stack=[],
-                    cls_name=None,
-                )
-            )
-        else:
-            new_context = _truncate_code_location_error(
-                error_info.context, field_size_limit, max_depth=max_depth - 1
-            )
-        error_info = error_info._replace(context=new_context)
-
-    stack_size_so_far = 0
-    truncated_stack = []
-    for stack_elem in error_info.stack:
-        stack_size_so_far += len(stack_elem)
-        if stack_size_so_far > field_size_limit:
-            truncated_stack.append("(TRUNCATED)")
-            break
-
-        truncated_stack.append(stack_elem)
-
-    error_info = error_info._replace(stack=truncated_stack)
-
-    if len(error_info.message) > field_size_limit:
-        error_info = error_info._replace(
-            message=error_info.message[:field_size_limit] + " (TRUNCATED)"
-        )
-
-    if error_info.cls_name and len(error_info.cls_name) > ERROR_CLASS_NAME_SIZE_LIMIT:
-        error_info = error_info._replace(
-            cls_name=error_info.cls_name[:ERROR_CLASS_NAME_SIZE_LIMIT] + " (TRUNCATED)"
-        )
-
-    return error_info
 
 
 def async_serialize_exceptions(func):
@@ -782,7 +719,7 @@ class DagsterCloudUserCodeLauncher(
             location_name=location_name,
             code_location_deploy_data=metadata,
             upload_location_data=None,
-            serialized_error_info=_truncate_code_location_error(
+            serialized_error_info=truncate_serialized_error(
                 error_info, error_character_size_limit, max_depth=5
             ),
         )
@@ -2021,7 +1958,7 @@ class DagsterCloudUserCodeLauncher(
             )
 
             truncated_error = (
-                _truncate_code_location_error(
+                truncate_serialized_error(
                     endpoint_or_error, heartbeat_error_size_limit, max_depth=2
                 )
                 if isinstance(endpoint_or_error, SerializableErrorInfo)

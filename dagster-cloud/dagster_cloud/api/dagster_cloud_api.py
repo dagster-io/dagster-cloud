@@ -494,7 +494,7 @@ class AgentHeartbeat(
             ("errors", Optional[Sequence[TimestampedError]]),
             ("metadata", AgentHeartbeatMetadata),
             ("run_worker_statuses", Optional[CloudRunWorkerStatuses]),
-            ("code_server_heartbeats", Optional[Sequence[CloudCodeServerHeartbeat]]),
+            ("code_server_heartbeats", Sequence[CloudCodeServerHeartbeat]),
             ("agent_queues_config", AgentQueuesConfig),
         ],
     )
@@ -531,6 +531,20 @@ class AgentHeartbeat(
                 check.opt_inst_param(agent_queues_config, "agent_queues_config", AgentQueuesConfig)
                 or AgentQueuesConfig()
             ),
+        )
+
+    def without_messages_and_errors(self) -> "AgentHeartbeat":
+        return self._replace(
+            errors=[],
+            run_worker_statuses=self.run_worker_statuses.without_messages_and_errors()
+            if self.run_worker_statuses
+            else None,
+            code_server_heartbeats=[
+                heartbeat.without_messages_and_errors() for heartbeat in self.code_server_heartbeats
+            ],
+            metadata={
+                key: val for key, val in self.metadata.items() if key != "utilization_metrics"
+            },
         )
 
     def get_agent_utilization_metrics(self) -> Optional[AgentUtilizationMetrics]:

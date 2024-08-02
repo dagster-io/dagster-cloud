@@ -109,6 +109,15 @@ class CloudCodeServerHeartbeat(
     def get_code_server_utilization_metrics(self) -> Optional[CloudCodeServerUtilizationMetrics]:
         return self.metadata.get("utilization_metrics")
 
+    def without_messages_and_errors(self) -> "CloudCodeServerHeartbeat":
+        return self._replace(
+            error=None,
+            metadata=cast(
+                CloudCodeServerHeartbeatMetadata,
+                {},
+            ),
+        )
+
 
 RUN_WORKER_STATUS_MESSAGE_LIMIT = int(
     os.getenv("DAGSTER_CLOUD_RUN_WORKER_STATUS_MESSAGE_SIZE_LIMIT", "1000")
@@ -193,6 +202,9 @@ class CloudRunWorkerStatuses(
                 run_worker_monitoring_thread_alive, "run_worker_monitoring_thread_alive"
             ),
         )
+
+    def without_messages_and_errors(self) -> "CloudRunWorkerStatuses":
+        return self._replace(statuses=[status._replace(message="") for status in self.statuses])
 
 
 class _GetCurrentRunsError(Enum):
