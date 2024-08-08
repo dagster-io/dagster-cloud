@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Optional, Sequence, Set
 import dagster._check as check
 from dagster import AssetKey
 from dagster._core.definitions.declarative_automation.serialized_objects import (
-    AssetConditionEvaluationWithRunIds,
+    AutomationConditionEvaluationWithRunIds,
 )
 from dagster._core.definitions.run_request import InstigatorType
 from dagster._core.scheduler.instigation import (
@@ -201,7 +201,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
     def add_auto_materialize_asset_evaluations(
         self,
         evaluation_id: int,
-        asset_evaluations: Sequence[AssetConditionEvaluationWithRunIds],
+        asset_evaluations: Sequence[AutomationConditionEvaluationWithRunIds],
     ) -> None:
         raise NotImplementedError("Not callable from user cloud")
 

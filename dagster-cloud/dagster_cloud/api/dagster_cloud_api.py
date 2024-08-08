@@ -4,7 +4,6 @@ from enum import Enum
 from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, TypedDict, Union, cast
 
 import dagster._check as check
-import pendulum
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
 from dagster._core.events.log import EventLogEntry
@@ -12,6 +11,7 @@ from dagster._core.remote_representation import CodeLocationOrigin, ExternalRepo
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.utils import RequestUtilizationMetrics
 from dagster._serdes import whitelist_for_serdes
+from dagster._time import get_current_datetime, get_current_timestamp
 from dagster._utils.container import ContainerUtilizationMetrics
 from dagster._utils.error import SerializableErrorInfo
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData
@@ -367,7 +367,7 @@ class DagsterCloudApiRequest(
                 expire_at,
                 "expire_at",
                 default=(
-                    pendulum.now("UTC") + timedelta(milliseconds=DEFAULT_EXPIRATION_MILLISECONDS)
+                    get_current_datetime() + timedelta(milliseconds=DEFAULT_EXPIRATION_MILLISECONDS)
                 ).timestamp(),
             ),
             check.opt_bool_param(is_branch_deployment, "is_branch_deployment", default=False),
@@ -375,7 +375,7 @@ class DagsterCloudApiRequest(
 
     @property
     def is_expired(self) -> bool:
-        return pendulum.now("UTC").timestamp() > self.expire_at
+        return get_current_timestamp() > self.expire_at
 
     @staticmethod
     def format_request(request_id: str, request_api: Union[str, DagsterCloudApi]) -> str:

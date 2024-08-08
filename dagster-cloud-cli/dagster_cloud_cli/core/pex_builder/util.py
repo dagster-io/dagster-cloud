@@ -51,7 +51,7 @@ def get_pex_flags(python_version: version.Version, build_sdists: bool = True) ->
     return [
         # this platform matches what can run on our serverless base images
         # the version tag is a major/minor string like "38"
-        f"--platform=manylinux2014_x86_64-cp-{version_tag}-cp{version_tag}",
+        f"--platform=manylinux_2_28_x86_64-cp-{version_tag}-cp{version_tag}",
         *include_current,
         # this ensures PEX_PATH is not cleared and any subprocess invoked can also use this.
         # this is important for running console scripts that use the pex environment (eg dbt)

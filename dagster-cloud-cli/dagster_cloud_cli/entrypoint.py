@@ -197,7 +197,7 @@ app.add_typer(job_app, name="job", no_args_is_help=True)
 app.add_typer(run_app, name="run", no_args_is_help=True, hidden=True)
 app.add_typer(serverless_app, name="serverless", no_args_is_help=True)
 app.add_typer(pex_app, name="pex", hidden=True, no_args_is_help=True)
-app.add_typer(ci_app, name="ci", hidden=True, no_args_is_help=True)
+app.add_typer(ci_app, name="ci", no_args_is_help=True)
 
 # Deprecated in favor of organization
 app.add_typer(legacy_settings_app, name="settings", hidden=True)

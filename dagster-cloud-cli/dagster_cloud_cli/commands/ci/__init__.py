@@ -44,7 +44,7 @@ from dagster_cloud_cli.types import CliEventTags, CliEventType
 from .. import metrics
 from . import checks, report, state
 
-app = Typer(hidden=True, help="CI/CD agnostic commands")
+app = Typer(help="CI/CD agnostic commands")
 
 
 @app.command(help="Print json information about current CI/CD environment")

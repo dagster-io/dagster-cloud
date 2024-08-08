@@ -34,7 +34,6 @@ from typing import (
 
 import dagster._check as check
 import grpc
-import pendulum
 from dagster import BoolSource, Field, IntSource
 from dagster._api.list_repositories import sync_list_repositories_grpc
 from dagster._core.definitions.selector import JobSelector
@@ -49,6 +48,7 @@ from dagster._core.remote_representation.origin import (
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import GetCurrentImageResult
 from dagster._serdes import deserialize_value, serialize_value, whitelist_for_serdes
+from dagster._time import get_current_timestamp
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
@@ -1050,7 +1050,7 @@ class DagsterCloudUserCodeLauncher(
         if (
             update_timestamp_for_server
             and update_timestamp_for_server
-            >= pendulum.now("UTC").timestamp() - CLEANUP_SERVER_GRACE_PERIOD_SECONDS
+            >= get_current_timestamp() - CLEANUP_SERVER_GRACE_PERIOD_SECONDS
         ):
             self._logger.info("Not cleaning up server since it was recently created")
             return False
@@ -1199,7 +1199,7 @@ class DagsterCloudUserCodeLauncher(
             # Wait for the first time the desired metadata is set before reconciling
             return
 
-        now = pendulum.now("UTC").timestamp()
+        now = get_current_timestamp()
 
         if not self._last_refreshed_actual_entries:
             self._last_refreshed_actual_entries = now
@@ -1356,7 +1356,7 @@ class DagsterCloudUserCodeLauncher(
                             deployment_location
                         )
 
-                        now = pendulum.now("UTC").timestamp()
+                        now = get_current_timestamp()
 
                         if not first_unavailable_time:
                             self._logger.warning(

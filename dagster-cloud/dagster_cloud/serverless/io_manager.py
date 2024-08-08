@@ -7,14 +7,14 @@ from typing import Sequence, Tuple, Union
 import boto3
 import dagster._check as check
 import requests
-from dagster import InputContext, MemoizableIOManager, OutputContext, io_manager
+from dagster import InputContext, IOManager, OutputContext, io_manager
 from dagster._utils import PICKLE_PROTOCOL
 from dagster._vendored.dateutil import parser
 
 ECS_AGENT_IP = "169.254.170.2"
 
 
-class PickledObjectServerlessIOManager(MemoizableIOManager):
+class PickledObjectServerlessIOManager(IOManager):
     def __init__(
         self,
         s3_bucket,

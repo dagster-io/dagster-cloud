@@ -103,6 +103,7 @@ from .queries import (
     GET_RUN_STATUS_CHANGE_EVENTS_QUERY,
     GET_STATS_FOR_RUN_QUERY,
     GET_STEP_STATS_FOR_RUN_QUERY,
+    GET_UPDATED_DATA_VERSION_PARTITIONS,
     HAS_ASSET_KEY_QUERY,
     HAS_DYNAMIC_PARTITION_QUERY,
     INITIALIZE_CONCURRENCY_LIMIT_MUTATION,
@@ -958,6 +959,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
         return res
 
+    def wipe_asset_partitions(self, asset_key: AssetKey, partition_keys: Sequence[str]) -> None:
+        """Remove asset index history from event log for given asset partitions."""
+        raise NotImplementedError(
+            "Partitioned asset wipe is not supported yet for this event log storage."
+        )
+
     @property
     def supports_global_concurrency_limits(self) -> bool:
         return True
@@ -1223,3 +1230,17 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 run_id=info["runId"],
             )
         return None
+
+    def get_updated_data_version_partitions(
+        self, asset_key: AssetKey, partitions: Iterable[str], since_storage_id: int
+    ) -> Set[str]:
+        res = self._execute_query(
+            GET_UPDATED_DATA_VERSION_PARTITIONS,
+            variables={
+                "assetKey": asset_key.to_string(),
+                "partitions": list(partitions),
+                "afterStorageId": since_storage_id,
+            },
+        )
+        partitions = res["data"]["eventLogs"]["getUpdatedDataVersionPartitions"]
+        return set(partitions)

@@ -716,3 +716,11 @@ GET_LATEST_PLANNED_MATERIALIZATION_INFO = """
     }
 
 """
+
+GET_UPDATED_DATA_VERSION_PARTITIONS = """
+    query getUpdatedDataVersionPartitions($assetKey: String!, $partitions: [String!]!, $afterStorageId: BigInt!) {
+        eventLogs {
+            getUpdatedDataVersionPartitions(assetKey: $assetKey, partitions: $partitions, afterStorageId: $afterStorageId)
+        }
+    }
+"""

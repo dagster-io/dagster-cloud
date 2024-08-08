@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
 
 import dagster._check as check
-import pendulum
 from dagster import DagsterInstance
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._core.remote_representation import CodeLocationOrigin
@@ -18,6 +17,7 @@ from dagster._core.utils import FuturesAwareThreadPoolExecutor
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import CancelExecutionRequest
 from dagster._serdes import deserialize_value, serialize_value
+from dagster._time import get_current_datetime, get_current_timestamp
 from dagster._utils.container import retrieve_containerized_utilization_metrics
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.interrupts import raise_interrupts_as
@@ -262,7 +262,7 @@ class DagsterCloudAgent:
                                 truncate_serialized_error(
                                     error, heartbeat_error_size_limit, max_depth=3
                                 ),
-                                pendulum.now("UTC"),
+                                get_current_datetime(),
                             )
                         )
             except Exception:
@@ -273,7 +273,7 @@ class DagsterCloudAgent:
                         truncate_serialized_error(
                             error_info, heartbeat_error_size_limit, max_depth=3
                         ),
-                        pendulum.now("UTC"),
+                        get_current_datetime(),
                     )
                 )
 
@@ -319,6 +319,10 @@ class DagsterCloudAgent:
         # reconciliation - this is used to indicate that we're ready to
         # serve requests
         try:
+            if not os.access("/opt", os.W_OK):
+                self._logger.warning("Disabling liveness sentinel - /opt is not writable")
+                self._last_liveness_check_time = False
+                return
             Path("/opt/liveness_sentinel.txt").touch(exist_ok=True)
             self._last_liveness_check_time = now
         except Exception as e:
@@ -326,7 +330,7 @@ class DagsterCloudAgent:
             self._last_liveness_check_time = False
 
     def _check_update_workspace(self, instance, user_code_launcher, upload_all):
-        curr_time = pendulum.now("UTC")
+        curr_time = get_current_datetime()
 
         if (
             self._last_workspace_check_time
@@ -344,7 +348,7 @@ class DagsterCloudAgent:
         agent_uuid,
         heartbeat_interval_seconds,
     ):
-        curr_time = pendulum.now("UTC")
+        curr_time = get_current_datetime()
 
         if (
             self._last_heartbeat_time
@@ -365,7 +369,6 @@ class DagsterCloudAgent:
         code_server_heartbeats_dict = instance.user_code_launcher.get_grpc_server_heartbeats()
 
         agent_image_tag = os.getenv("DAGSTER_CLOUD_AGENT_IMAGE_TAG")
-
         if instance.user_code_launcher.agent_metrics_enabled:
             num_running_requests = self._utilization_metrics["request_utilization"][
                 "num_running_requests"
@@ -381,7 +384,7 @@ class DagsterCloudAgent:
 
         heartbeats = {
             deployment_name: AgentHeartbeat(
-                timestamp=curr_time.float_timestamp,
+                timestamp=curr_time.timestamp(),
                 agent_id=agent_uuid,
                 agent_label=instance.dagster_cloud_api_agent_label,
                 agent_type=(
@@ -938,7 +941,7 @@ class DagsterCloudAgent:
         user_code_launcher: DagsterCloudUserCodeLauncher,
         submitted_to_executor_timestamp: float,
     ) -> Optional[SerializableErrorInfo]:
-        thread_start_run_timestamp = pendulum.now("UTC").timestamp()
+        thread_start_run_timestamp = get_current_timestamp()
         api_result: Optional[DagsterCloudApiResponse] = None
         error_info: Optional[SerializableErrorInfo] = None
 
@@ -973,7 +976,7 @@ class DagsterCloudAgent:
 
         self._logger.info(f"Finished processing request {request}.")
 
-        thread_finished_request_time = pendulum.now("UTC").timestamp()
+        thread_finished_request_time = get_current_timestamp()
         thread_telemetry = DagsterCloudApiThreadTelemetry(
             submitted_to_executor_timestamp=submitted_to_executor_timestamp,
             thread_start_run_timestamp=thread_start_run_timestamp,
@@ -1075,7 +1078,7 @@ class DagsterCloudAgent:
         # send all ready requests to the threadpool
         for json_request in self._ready_requests:
             request_id = json_request["requestId"]
-            submitted_to_executor_timestamp = pendulum.now("UTC").timestamp()
+            submitted_to_executor_timestamp = get_current_timestamp()
             future = self._executor.submit(
                 self._process_api_request,
                 json_request,
@@ -1109,7 +1112,7 @@ class DagsterCloudAgent:
         if instance.user_code_launcher.agent_metrics_enabled and (
             self._utilization_metrics["container_utilization"]["measurement_timestamp"] is None
             or (
-                pendulum.now("UTC").timestamp()
+                get_current_timestamp()
                 - self._utilization_metrics["container_utilization"]["measurement_timestamp"]
                 > AGENT_UTILIZATION_METRICS_INTERVAL_SECONDS
             )
