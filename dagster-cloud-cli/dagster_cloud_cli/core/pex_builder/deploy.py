@@ -144,9 +144,9 @@ def build_locations(
     return location_builds
 
 
-def get_base_image_for(
+def get_user_specified_base_image_for(
     dagster_cloud_url: str, dagster_cloud_api_token: str, location_build: LocationBuild
-) -> str:
+) -> Optional[str]:
     # Full path to base image is supplied
     base_image = os.getenv("SERVERLESS_BASE_IMAGE")
     if base_image:
@@ -160,24 +160,7 @@ def get_base_image_for(
             registry_info = gql.get_ecr_info(client)
             return f"{registry_info['registry_url']}:{base_image_tag}"
 
-    # Use the default base image in dagster cloud
-    # TODO: Read from cloud API or another config?
-    registry_subdomain = (
-        "878483074102" if ".dogfood." in os.getenv("DAGSTER_CLOUD_URL", "") else "657821118200"
-    )
-    default_image_prefix = (
-        registry_subdomain + ".dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-"
-    )
-    image_prefix = os.getenv(
-        "SERVERLESS_BASE_IMAGE_PREFIX",
-        default_image_prefix,
-    )
-    python_version = location_build.deps_requirements.python_version
-    # We only build base image for 1.0.17 and beyond.
-    dagster_version = location_build.dagster_version if location_build.dagster_version else "1.0.17"
-    dagster_version = str(max(version.Version("1.0.17"), version.Version(dagster_version)))
-    py_tag = f"py{python_version.major}.{python_version.minor}"  # eg 'py3.8'
-    return f"{image_prefix}{py_tag}:{dagster_version}"
+    return None
 
 
 def notify(deployment_name: Optional[str], location_name: str, action: str):

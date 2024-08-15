@@ -44,7 +44,19 @@ from dagster_cloud_cli.types import CliEventTags, CliEventType
 from .. import metrics
 from . import checks, report, state
 
-app = Typer(help="CI/CD agnostic commands")
+app = Typer(help="Commands for deploying code to Dagster+ from any CI/CD environment")
+
+
+class LogLevel(str, Enum):
+    debug = "DEBUG"
+    info = "INFO"
+    warning = "WARNING"
+    error = "ERROR"
+
+
+@app.callback()
+def main(loglevel: LogLevel = LogLevel.warning):
+    logging.basicConfig(level=logging.getLevelName(loglevel))
 
 
 @app.command(help="Print json information about current CI/CD environment")
@@ -614,7 +626,7 @@ def _build_pex(
     )
     return state.PexBuildOutput(
         python_version=python_version,
-        image=location_kwargs["image"],
+        image=location_kwargs.get("image"),
         pex_tag=location_kwargs["pex_tag"],
     )
 
@@ -740,6 +752,7 @@ def _deploy(
         if location_state.build_output.strategy == "python-executable":
             metrics.instrument_add_tags([CliEventTags.server_strategy.pex])
             location_args["pex_tag"] = location_state.build_output.pex_tag
+            location_args["python_version"] = location_state.build_output.python_version
         else:
             metrics.instrument_add_tags([CliEventTags.server_strategy.docker])
 

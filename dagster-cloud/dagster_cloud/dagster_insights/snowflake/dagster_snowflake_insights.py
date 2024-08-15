@@ -1,20 +1,11 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 
-import dagster._check as check
-from dagster import (
-    AssetKey,
-    AssetsDefinition,
-    DagsterEventType,
-    DagsterInstance,
-    EventLogRecord,
-    EventRecordsFilter,
-    ScheduleDefinition,
-)
+from dagster import AssetKey, AssetsDefinition, ScheduleDefinition
 
-from .snowflake_utils import OPAQUE_ID_METADATA_KEY_PREFIX, OPAQUE_ID_SQL_SIGIL
+from .snowflake_utils import OPAQUE_ID_SQL_SIGIL
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection
@@ -28,60 +19,6 @@ class AssetMaterializationId:
     asset_key: AssetKey
     partition: Optional[str]
     step_key: str
-
-
-def get_opaque_ids_to_assets(
-    instance: DagsterInstance,
-    min_datetime: datetime,
-    max_datetime: datetime,
-) -> Iterable[Tuple[AssetMaterializationId, str]]:
-    """Given access to the Dagster GraphQL API, queries for all asset materializations that occurred
-    in the provided time range and returns a mapping from AssetMaterializationId to opaque
-    Snowflake query ID.
-    """
-    records: Sequence[EventLogRecord] = []
-    last_response = []
-    first = True
-
-    while len(last_response) == EVENT_RECORDS_LIMIT or first:
-        last_response = instance.get_event_records(
-            EventRecordsFilter(
-                event_type=DagsterEventType.ASSET_OBSERVATION,
-                before_timestamp=max_datetime.timestamp(),
-                after_timestamp=min_datetime.timestamp(),
-                after_cursor=last_response[-1].storage_id if last_response else None,
-            ),
-            limit=EVENT_RECORDS_LIMIT,
-        )
-        first = False
-        records.extend(last_response)
-
-    for record in records:
-        asset_key = record.asset_key
-        if asset_key is None:
-            # should never happen, but we must appease the type checker
-            raise RuntimeError("asset_key is None, which should never happen")
-        run_id = check.not_none(record.run_id)
-        partition = record.partition_key
-        step_key = check.not_none(record.event_log_entry.step_key)
-        opaque_id = None
-
-        observation = check.not_none(record.event_log_entry.asset_observation)
-
-        for metadata_key in observation.metadata:
-            if metadata_key.startswith(OPAQUE_ID_METADATA_KEY_PREFIX):
-                opaque_id = metadata_key[len(OPAQUE_ID_METADATA_KEY_PREFIX) :]
-                break
-        if opaque_id is not None:
-            yield (
-                AssetMaterializationId(
-                    run_id=run_id,
-                    asset_key=asset_key,
-                    partition=partition,
-                    step_key=step_key,
-                ),
-                opaque_id,
-            )
 
 
 QUERY_HISTORY_TIME_PADDING = timedelta(hours=1)  # deal with desynchronized clocks

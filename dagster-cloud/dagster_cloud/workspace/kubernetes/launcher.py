@@ -381,7 +381,15 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self, deployment_name: str, location_name: str
     ) -> CloudContainerResourceLimits:
         metadata = self._actual_entries[(deployment_name, location_name)].code_location_deploy_data
-        resources = metadata.container_context.get("k8s", {}).get("resources", {})
+        k8s_container_context = metadata.container_context.get("k8s", {})
+        resources = (
+            k8s_container_context.get("server_k8s_config", {})
+            .get("container_config", {})
+            .get("resources", {})
+        )
+        if not resources:
+            resources = k8s_container_context.get("resources", {})
+
         self._logger.info(
             f"Getting resource limits for deployment {deployment_name} in location {location_name}: {resources}"
         )

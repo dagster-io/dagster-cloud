@@ -489,7 +489,11 @@ def get_location_document(name: Optional[str], kwargs: Dict[str, Any]) -> Dict[s
             "executable_path": kwargs.get("executable_path"),
             "attribute": kwargs.get("attribute"),
             "git": {"commit_hash": kwargs.get("commit_hash"), "url": kwargs.get("git_url")},
-            "pex_metadata": {"pex_tag": kwargs["pex_tag"]} if kwargs.get("pex_tag") else None,
+            "pex_metadata": (
+                {"pex_tag": kwargs["pex_tag"], "python_version": kwargs.get("python_version")}
+                if kwargs.get("pex_tag")
+                else None
+            ),
         }
     )
     return deep_merge_dicts(location_doc_from_file, location_doc_from_kwargs)

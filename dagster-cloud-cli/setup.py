@@ -23,7 +23,7 @@ setup(
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),
     include_package_data=True,
     install_requires=[
-        "dagster==1.8.0",
+        "dagster==1.8.1",
         "packaging>=20.9",
         "questionary",
         "requests",
@@ -50,6 +50,7 @@ setup(
     entry_points={
         "console_scripts": [
             "dagster-cloud = dagster_cloud_cli.entrypoint:app",
+            "dagster-plus = dagster_cloud_cli.entrypoint:app",
         ]
     },
 )

@@ -96,6 +96,7 @@ def get_cached_deps_details(
         # Don't return partial information
         if "deps_pex_name" in data and "dagster_version" in data:
             return data
+    logging.warning("Unable to read cached deps details %r", result)
     return None
 
 

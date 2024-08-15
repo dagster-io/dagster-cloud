@@ -19,7 +19,7 @@ class DockerBuildOutput(BaseModel, extra=Extra.forbid):
 class PexBuildOutput(BaseModel, extra=Extra.forbid):
     strategy: Literal["python-executable"] = "python-executable"
     python_version: str
-    image: str
+    image: Optional[str]  # if None we determine the image from the python_version and agent version
     pex_tag: str
 
 

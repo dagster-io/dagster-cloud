@@ -74,7 +74,9 @@ def build_upload_pex(
             raise ui.error("Only one of --base-image-tag or --image can be specified.")
         os.environ["SERVERLESS_BASE_IMAGE_TAG"] = kwargs.pop("base_image_tag")
 
-    python_version = pex_builder.util.parse_python_version(kwargs.pop("python_version", "3.8"))
+    python_version = pex_builder.util.parse_python_version(
+        kwargs.setdefault("python_version", "3.8")
+    )
     ui.print(
         ui.blue(
             f"Building Python executable for {location.name} from directory {location.directory} "
@@ -100,8 +102,17 @@ def build_upload_pex(
         kwargs["pex_tag"] = build.pex_tag
         image = kwargs.get("image")
         if not image:
-            kwargs["image"] = image = pex_builder.deploy.get_base_image_for(url, api_token, build)
-        ui.print(f"Will deploy {build.location.name} on image: {image}")
+            image = pex_builder.deploy.get_user_specified_base_image_for(url, api_token, build)
+            if image:
+                kwargs["image"] = image
+        if image:
+            ui.print(f"Will deploy {build.location.name} on image: {image}")
+            del kwargs["python_version"]
+        else:
+            ui.print(
+                f"Will deploy {build.location.name} on a standard base image for Python"
+                f" {python_version}"
+            )
 
         paths = [
             filepath

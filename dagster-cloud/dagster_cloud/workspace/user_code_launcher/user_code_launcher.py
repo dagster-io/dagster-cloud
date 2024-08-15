@@ -102,7 +102,9 @@ PENDING_DELETE_SERVER_CHECK_INTERVAL = 30
 # How often to sync actual_entries with server liveness
 ACTUAL_ENTRIES_REFRESH_INTERVAL = 30
 
-CLEANUP_SERVER_GRACE_PERIOD_SECONDS = 3600
+CLEANUP_SERVER_GRACE_PERIOD_SECONDS = int(
+    os.getenv("DAGSTER_CLOUD_CLEANUP_SERVER_GRACE_PERIOD_SECONDS", "3600")
+)
 
 ServerHandle = TypeVar("ServerHandle")
 
@@ -1024,11 +1026,11 @@ class DagsterCloudUserCodeLauncher(
     ) -> bool:
         """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active)."""
         agent_id_for_server = self.get_agent_id_for_server(handle)
-        self._logger.info(
+        self._logger.debug(
             f"For server {handle}; agent_id is {agent_id_for_server} while current agent_id is"
             f" {self._instance.instance_uuid}."
         )
-        self._logger.info(f"All active agent ids: {active_agent_ids}")
+        self._logger.debug(f"All active agent ids: {active_agent_ids}")
 
         # if it's a legacy server that never set an agent ID:
         if not agent_id_for_server:
