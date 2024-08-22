@@ -83,8 +83,7 @@ from dagster_cloud.pex.grpc.types import (
     ShutdownPexServerArgs,
 )
 from dagster_cloud.util import diff_serializable_namedtuple_map
-
-from .utils import truncate_serialized_error
+from dagster_cloud.util.errors import truncate_serialized_error
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25

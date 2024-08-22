@@ -41,10 +41,10 @@ from dagster_cloud.api.dagster_cloud_api import (
     TimestampedError,
 )
 from dagster_cloud.instance import DagsterCloudAgentInstance
+from dagster_cloud.util.errors import truncate_serialized_error
 from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,
-    truncate_serialized_error,
 )
 
 from ..util import SERVER_HANDLE_TAG, compressed_namedtuple_upload_file, is_isolated_run
@@ -171,42 +171,13 @@ class DagsterCloudAgent:
     def _update_agent_resource_limits(
         self, user_code_launcher: DagsterCloudUserCodeLauncher
     ) -> None:
-        # The agent should have environment variables defining its resource requests and limits.
-        # However, the agent may be running in a container with resource limits that are different
-        # For example, on k8s there are ways to effect change on the cpu limit, like mutating admission webhooks.
-        # Since the effective cgroup limits precede actual hosts resources when it comes to actual behavior for
-        # throttling and oom kills, we attempt to obtain these and fallback on the environment variables.
-        container_utilization_metrics = self._utilization_metrics.get("container_utilization", {})
-        memory_limit = container_utilization_metrics.get("memory_limit")
-        if not memory_limit:
-            memory_limit = os.getenv("DAGSTER_CLOUD_AGENT_MEMORY_LIMIT")
-            self._logger.info(
-                "Cannot obtain cgroup memory limit, using environment value: "
-                f"DAGSTER_CLOUD_AGENT_MEMORY_LIMIT={memory_limit}"
-            )
-
-        cpu_cfs_period_us = container_utilization_metrics.get("cpu_cfs_period_us")
-        cpu_cfs_quota_us = container_utilization_metrics.get("cpu_cfs_quota_us")
-
-        cpu_limit = None
-        if cpu_cfs_quota_us and cpu_cfs_period_us:
-            cpu_limit = (
-                1000.0 * cpu_cfs_quota_us
-            ) / cpu_cfs_period_us  # cpu_limit expressed in milliseconds of cpu
-
-        if not cpu_limit:
-            cpu_limit = os.getenv("DAGSTER_CLOUD_AGENT_CPU_LIMIT")
-            self._logger.info(
-                "Cannot obtain CPU CFS values, using environment value: "
-                f"DAGSTER_CLOUD_AGENT_CPU_LIMIT={cpu_limit}"
-            )
-
+        # If the env var DAGSTER_CLOUD_AGENT_MEMORY_LIMIT is set, use that as the memory limit.
+        memory_limit = os.getenv("DAGSTER_CLOUD_AGENT_MEMORY_LIMIT")
+        # If the env var DAGSTER_CLOUD_AGENT_CPU_LIMIT is set, use that as the cpu limit.
+        cpu_limit = os.getenv("DAGSTER_CLOUD_AGENT_CPU_LIMIT")
         if not user_code_launcher.user_code_deployment_type.supports_utilization_metrics:
             self._logger.info(
-                (
-                    f"Cannot interpret resource limits for agent type {user_code_launcher.user_code_deployment_type.value}."
-                    "Skipping utilization metrics retrieval."
-                )
+                f"Cannot interpret resource limits for agent type {user_code_launcher.user_code_deployment_type.value}. Skipping utilization metrics retrieval."
             )
             return
 
@@ -214,7 +185,6 @@ class DagsterCloudAgent:
             "cpu_limit": cpu_limit,
             "memory_limit": memory_limit,
         }
-
         cpu_request = os.getenv("DAGSTER_CLOUD_AGENT_CPU_REQUEST")
         memory_request = os.getenv("DAGSTER_CLOUD_AGENT_MEMORY_REQUEST")
         if cpu_request:
@@ -222,8 +192,7 @@ class DagsterCloudAgent:
         if memory_request:
             limits["memory_request"] = memory_request
 
-        # At this point, the only agent types possible are serverless, ecs, and k8s, all of which are supported.
-        # The linter isn't smart enough to realize this, so we disable it.
+        # At this point, the only agent types possible are serverless, ecs, and k8s, all of which are supported. The linter isn't smart enough to realize this, so we disable it.
         self._utilization_metrics["resource_limits"][
             user_code_launcher.user_code_deployment_type.value
         ] = limits  # type: ignore
