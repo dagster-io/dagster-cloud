@@ -2,19 +2,20 @@ import datetime
 import io
 import os
 import pickle
-from typing import Sequence, Tuple, Union
+from typing import Any, Sequence, Tuple, Union
 
 import boto3
 import dagster._check as check
 import requests
-from dagster import InputContext, IOManager, OutputContext, io_manager
+from dagster import InputContext, OutputContext, UPathIOManager, io_manager
 from dagster._utils import PICKLE_PROTOCOL
 from dagster._vendored.dateutil import parser
+from upath import UPath
 
 ECS_AGENT_IP = "169.254.170.2"
 
 
-class PickledObjectServerlessIOManager(IOManager):
+class PickledObjectServerlessIOManager(UPathIOManager):
     def __init__(
         self,
         s3_bucket,
@@ -46,44 +47,14 @@ class PickledObjectServerlessIOManager(IOManager):
             self._boto_session, self._boto_session_expiration = self._refresh_boto_session()
         return self._boto_session.client("s3", region_name="us-west-2")
 
-    def _get_path(self, context: Union[InputContext, OutputContext]) -> str:
-        path: Sequence[str]
-        if context.has_asset_key:
-            path = context.get_asset_identifier()
-        else:
-            path = ["storage", *context.get_identifier()]
-
-        return "/".join([self._s3_prefix, *path])
-
-    def has_output(self, context):
-        key = self._get_path(context)
-        return self._has_object(key)
-
-    def _has_object(self, key):
-        check.str_param(key, "key")
-        check.param_invariant(len(key) > 0, "key")
-
-        found_object = False
-
+    def load_from_path(self, context: InputContext, path: UPath) -> Any:
         try:
-            self._s3.get_object(Bucket=self._bucket, Key=key)
-            found_object = True
+            s3_obj = self._s3.get_object(Bucket=self._bucket, Key=path.as_posix())["Body"].read()
+            return pickle.loads(s3_obj)
         except self._s3.exceptions.NoSuchKey:
-            found_object = False
+            check.failed("Input not found. It may have expired.")
 
-        return found_object
-
-    def load_input(self, context):
-        if context.dagster_type.typing_type == type(None):
-            return None
-
-        key = self._get_path(context)
-        check.invariant(self._has_object(key), "Input not found. It may have expired.")
-        obj = pickle.loads(self._s3.get_object(Bucket=self._bucket, Key=key)["Body"].read())
-
-        return obj
-
-    def handle_output(self, context, obj):
+    def dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
         if context.dagster_type.typing_type == type(None):
             check.invariant(
                 obj is None,
@@ -92,15 +63,25 @@ class PickledObjectServerlessIOManager(IOManager):
             )
             return None
 
-        key = self._get_path(context)
-
         pickled_obj = pickle.dumps(obj, PICKLE_PROTOCOL)
         pickled_obj_bytes = io.BytesIO(pickled_obj)
-        self._s3.upload_fileobj(
-            pickled_obj_bytes,
-            self._bucket,
-            key,
-        )
+        self._s3.upload_fileobj(pickled_obj_bytes, self._bucket, path.as_posix())
+
+    def path_exists(self, path: UPath) -> bool:
+        try:
+            self._s3.get_object(Bucket=self._bucket, Key=path.as_posix())
+        except self._s3.exceptions.NoSuchKey:
+            return False
+        return True
+
+    def _get_path(self, context: Union[InputContext, OutputContext]) -> UPath:
+        path: Sequence[str]
+        if context.has_asset_key:
+            path = context.get_asset_identifier()
+        else:
+            path = ["storage", *context.get_identifier()]
+
+        return UPath(self._s3_prefix, *path)
 
 
 @io_manager
