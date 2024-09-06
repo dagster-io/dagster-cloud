@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from dagster_cloud_cli import ui
 
-DAGSTER_CLOUD_BUILDER_IMAGE = "ghcr.io/dagster-io/dagster-manylinux-builder:latest"
+DAGSTER_CLOUD_BUILDER_IMAGE = "ghcr.io/dagster-io/dagster-manylinux-builder:manylinux_2_28_x86_64"
 
 
 def run_dagster_cloud(

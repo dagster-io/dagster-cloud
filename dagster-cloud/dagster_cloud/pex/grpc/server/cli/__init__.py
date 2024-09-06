@@ -1,10 +1,11 @@
 import logging
 import os
+import signal
 import subprocess
 from typing import Optional
 
 from dagster._serdes import deserialize_value
-from dagster._utils.interrupts import capture_interrupts
+from dagster._utils.interrupts import setup_interrupt_handlers
 from dagster_cloud_cli.core.workspace import PexMetadata
 from typer import Option, Typer
 
@@ -48,20 +49,31 @@ def execute_run(
         default="/tmp/pex-files", envvar="LOCAL_PEX_FILES_DIR"
     ),
 ):
-    with capture_interrupts():
-        pex_metadata = deserialize_value(pex_metadata_json, PexMetadata)
-        executable = PexS3Registry(local_pex_files_dir).get_pex_executable(pex_metadata)
+    setup_interrupt_handlers()
+    pex_metadata = deserialize_value(pex_metadata_json, PexMetadata)
+    executable = PexS3Registry(local_pex_files_dir).get_pex_executable(pex_metadata)
 
-        subprocess.run(
-            [
-                executable.source_path,
-                "-m",
-                "dagster",
-                "api",
-                "execute_run",
-                input_json,
-            ],
-            check=True,
-            env={**os.environ.copy(), **executable.environ},
-            cwd=executable.working_directory,
-        )
+    run_process = subprocess.Popen(
+        [
+            executable.source_path,
+            "-m",
+            "dagster",
+            "api",
+            "execute_run",
+            input_json,
+        ],
+        env={**os.environ.copy(), **executable.environ},
+        cwd=executable.working_directory,
+    )
+
+    logger = logging.getLogger("dagster.pex_run")
+
+    try:
+        return_code = run_process.wait()
+        if return_code != 0:
+            raise Exception(f"PEX subprocess returned with exit code {return_code}")
+    except KeyboardInterrupt:
+        logger.info("Forwarding interrupt to PEX subprocess")
+        run_process.send_signal(signal.SIGINT)
+        run_process.wait()
+        raise

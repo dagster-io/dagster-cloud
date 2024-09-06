@@ -21,7 +21,7 @@ from dagster._core.errors import (
     DagsterSnapshotDoesNotExist,
 )
 from dagster._core.events import DagsterEvent
-from dagster._core.execution.backfill import BulkActionStatus, PartitionBackfill
+from dagster._core.execution.backfill import BulkActionsFilter, BulkActionStatus, PartitionBackfill
 from dagster._core.execution.telemetry import RunTelemetryData
 from dagster._core.remote_representation.origin import RemoteJobOrigin
 from dagster._core.snap import (
@@ -104,6 +104,20 @@ def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]
         "snapshotId": filters.snapshot_id,
         "updatedAfter": filters.updated_after.timestamp() if filters.updated_after else None,
         "updatedBefore": filters.updated_before.timestamp() if filters.updated_before else None,
+        "createdAfter": filters.created_after.timestamp() if filters.created_after else None,
+        "createdBefore": filters.created_before.timestamp() if filters.created_before else None,
+    }
+
+
+def _get_bulk_actions_filters_input(
+    filters: Optional[BulkActionsFilter],
+) -> Optional[Dict[str, Any]]:
+    filters = check.opt_inst_param(filters, "filters", BulkActionsFilter)
+
+    if filters is None:
+        return None
+    return {
+        "statuses": [status.value for status in filters.statuses] if filters.statuses else None,
         "createdAfter": filters.created_after.timestamp() if filters.created_after else None,
         "createdBefore": filters.created_before.timestamp() if filters.created_before else None,
     }
@@ -200,8 +214,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return dagster_run
 
     def handle_run_event(self, run_id: str, event: DagsterEvent):
-        # no-op, handled by store_event
-        pass
+        raise NotImplementedError("Should never be called by an agent client")
 
     @property
     def supports_bucket_queries(self) -> bool:
@@ -487,9 +500,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_backfills(
         self,
-        status: Optional[BulkActionStatus] = None,
+        filters: Optional[BulkActionsFilter] = None,
         cursor: Optional[str] = None,
         limit: Optional[int] = None,
+        status: Optional[BulkActionStatus] = None,
     ):
         """Get a list of partition backfills."""
         res = self._execute_query(
@@ -498,6 +512,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "status": status.value if status else None,
                 "cursor": check.opt_str_param(cursor, "cursor"),
                 "limit": check.opt_int_param(limit, "limit"),
+                "filters": _get_bulk_actions_filters_input(filters),
             },
         )
         return [

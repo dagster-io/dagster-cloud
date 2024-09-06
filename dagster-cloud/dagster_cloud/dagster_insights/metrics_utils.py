@@ -31,7 +31,7 @@ def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str
     return f"{instance.dagit_url}graphql", instance.dagster_cloud_agent_token
 
 
-def get_post_request_params(
+def get_insights_upload_request_params(
     instance: DagsterInstance,
 ) -> Tuple[requests.Session, str, Dict[str, str], int, Optional[Dict[str, str]]]:
     if not isinstance(instance, DagsterCloudAgentInstance):
@@ -70,9 +70,9 @@ def upload_cost_information(
         )
 
         instance = context.instance
-        session, url, headers, timeout, proxies = get_post_request_params(instance)
+        session, url, headers, timeout, proxies = get_insights_upload_request_params(instance)
 
-        resp = session.post(url, headers=headers, timeout=timeout, proxies=proxies)
+        resp = session.get(url, headers=headers, timeout=timeout, proxies=proxies)
         raise_http_error(resp)
         resp_data = resp.json()
 

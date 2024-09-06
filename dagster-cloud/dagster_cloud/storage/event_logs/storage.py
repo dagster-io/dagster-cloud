@@ -1244,3 +1244,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
         partitions = res["data"]["eventLogs"]["getUpdatedDataVersionPartitions"]
         return set(partitions)
+
+    @property
+    def handles_run_events_in_store_event(self) -> bool:
+        return True

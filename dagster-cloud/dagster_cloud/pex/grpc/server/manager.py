@@ -21,6 +21,8 @@ from pydantic import BaseModel, Extra
 from ..types import PexServerHandle
 from .registry import PexS3Registry
 
+logger = logging.getLogger("dagster.multipex")
+
 
 class PexProcessEntry(BaseModel, frozen=True, extra=Extra.forbid, arbitrary_types_allowed=True):
     pex_server_handle: PexServerHandle
@@ -62,13 +64,13 @@ class MultiPexManager(AbstractContextManager):
                 daemon=True,
             )
             self._watchdog_thread.start()
-            logging.info(
+            logger.info(
                 "Created a watchdog thread %s for MultiPexManager with watchdog_run_interval=%s",
                 self._watchdog_thread.name,
                 watchdog_run_interval,
             )
         else:
-            logging.info(
+            logger.info(
                 "No watchdog thread started for MultiPexManager (watchdog_run_interval=%s)",
                 watchdog_run_interval,
             )
@@ -85,7 +87,7 @@ class MultiPexManager(AbstractContextManager):
                 returncode = server.grpc_server_process.poll()
                 if returncode is not None:
                     dead_server_returncodes.append((server, returncode))
-                    logging.error(
+                    logger.error(
                         "watchdog: pex subprocesss %s unexpectedly exited with returncode %s -"
                         " changing state to error",
                         server_id,
@@ -93,7 +95,7 @@ class MultiPexManager(AbstractContextManager):
                     )
             self._mark_servers_unexpected_termination(dead_server_returncodes)
             if dead_server_returncodes:
-                logging.warning(
+                logger.warning(
                     "watchdog: inspected %s active servers %s, of which %s were found unexpectedly"
                     " terminated",
                     len(active_servers),
@@ -209,14 +211,14 @@ class MultiPexManager(AbstractContextManager):
                 pex_executable = self._registry.get_pex_executable(
                     check.not_none(code_location_deploy_data.pex_metadata)
                 )
-                logging.info(
+                logger.info(
                     "Installed pex executable %s at %s",
                     code_location_deploy_data.pex_metadata,
                     pex_executable.source_path,
                 )
 
                 metadata = code_location_deploy_data
-                logging.info("Launching subprocess %s", pex_executable.source_path)
+                logger.info("Launching subprocess %s", pex_executable.source_path)
                 subprocess_args = [
                     pex_executable.source_path,
                     "-m",
@@ -274,7 +276,7 @@ class MultiPexManager(AbstractContextManager):
                     daemon=True,
                 )
                 heartbeat_thread.start()
-                logging.info(
+                logger.info(
                     "Created a heartbeat thread %s for %s",
                     heartbeat_thread.name,
                     server_handle.get_id(),
@@ -287,7 +289,7 @@ class MultiPexManager(AbstractContextManager):
                         error=serializable_error_info_from_exc_info(sys.exc_info()),
                     )
                     self._pending_startup_pex_servers.remove(server_handle.get_id())
-                logging.exception(
+                logger.exception(
                     "Creating new pex server for %s:%s failed",
                     server_handle.deployment_name,
                     server_handle.location_name,
@@ -307,7 +309,7 @@ class MultiPexManager(AbstractContextManager):
         with self._pex_servers_lock:
             handle_id = server_handle.get_id()
             if handle_id in self._pending_startup_pex_servers:
-                logging.info(
+                logger.info(
                     "Ignoring request to create pex server for %s - an identical server is"
                     " already pending start",
                     handle_id,
@@ -316,12 +318,12 @@ class MultiPexManager(AbstractContextManager):
             self._pending_startup_pex_servers.add(handle_id)
             if handle_id in self._pex_servers:
                 # clear any previous error state since we're attempting to start server again
-                logging.info(
+                logger.info(
                     "Clearing previous state for %s: %s", handle_id, self._pex_servers[handle_id]
                 )
                 del self._pex_servers[handle_id]
 
-        logging.info(
+        logger.info(
             "Creating new pex server for %s:%s",
             server_handle.deployment_name,
             server_handle.location_name,
@@ -332,7 +334,7 @@ class MultiPexManager(AbstractContextManager):
         handle_id = server_handle.get_id()
         with self._pex_servers_lock:
             if handle_id in self._pex_servers or handle_id in self._pending_startup_pex_servers:
-                logging.info("Server %s marked for shutdown", handle_id)
+                logger.info("Server %s marked for shutdown", handle_id)
                 self._pending_shutdown_pex_servers.add(handle_id)
 
     def cleanup_pending_shutdown_pex_servers(self) -> None:
@@ -343,14 +345,23 @@ class MultiPexManager(AbstractContextManager):
                 if handle_id not in self._pex_servers:
                     continue
                 server = self._pex_servers[handle_id]
-                if (
-                    isinstance(server, PexProcessEntry)
-                    and server.grpc_server_process.poll() is not None
-                ):
-                    to_remove.add(handle_id)
+                if isinstance(server, PexProcessEntry):
+                    if server.grpc_server_process.poll() is not None:
+                        # Server process shut down
+                        to_remove.add(handle_id)
+                    else:
+                        try:
+                            server.grpc_client.ping("")
+                        except DagsterUserCodeUnreachableError:
+                            logger.warning(
+                                "server process is still running but the server is unreachable - killing the process",
+                                exc_info=True,
+                            )
+                            server.grpc_server_process.kill()
+                            to_remove.add(handle_id)
 
             for handle_id in to_remove:
-                logging.info("Server %s completely shutdown, cleaning up", handle_id)
+                logger.info("Server %s completely shutdown, cleaning up", handle_id)
                 self._pending_shutdown_pex_servers.remove(handle_id)
                 del self._pex_servers[handle_id]
 
@@ -359,26 +370,29 @@ class MultiPexManager(AbstractContextManager):
                 pex_server = self._pex_servers.get(handle_id)
                 if not pex_server:
                     # still in _pending_startup_pex_servers
-                    logging.info("Server %s not up yet, will request shutdown later", handle_id)
+                    logger.info("Server %s not up yet, will request shutdown later", handle_id)
                     continue
 
                 if isinstance(pex_server, PexErrorEntry):
-                    logging.debug("Server %s was in an error state, no shutdown needed", handle_id)
+                    logger.debug("Server %s was in an error state, no shutdown needed", handle_id)
                     continue
 
                 if pex_server.heartbeat_shutdown_event.is_set():
                     # already requested shutdown
-                    logging.info("Already requested shutdown for server %s", handle_id)
                     continue
 
-                logging.info("Requesting shutdown for server %s", handle_id)
+                logger.info("Requesting shutdown for server %s", handle_id)
                 pex_server.heartbeat_shutdown_event.set()
                 pex_server.heartbeat_thread.join()
                 try:
                     pex_server.grpc_client.shutdown_server()
                 except DagsterUserCodeUnreachableError:
-                    # Server already shutdown
-                    pass
+                    logger.warning(
+                        "Server shutdown for %s over grpc failed, killing the process",
+                        handle_id,
+                        exc_info=True,
+                    )
+                    pex_server.grpc_server_process.kill()
 
             # Delete any registry files not in use anymore
             # - ensure that resources for servers starting up or shutting down are not removed

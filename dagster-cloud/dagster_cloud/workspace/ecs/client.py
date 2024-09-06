@@ -162,7 +162,7 @@ class Client:
             )
             logger.info(f"Created new task definition {task_definition_arn}")
         else:
-            task_definition_arn = existing_task_definition["taskDefinitionArn"]
+            task_definition_arn = check.not_none(existing_task_definition.get("taskDefinitionArn"))
             logger.info(f"Re-using existing task definition {task_definition_arn}")
 
         return task_definition_arn
@@ -622,34 +622,31 @@ class Client:
                     cluster=self.cluster_name,
                     services=[service_name],
                 )
-                if not services:
+                if not services or not services.get("services"):
                     raise Exception(
                         f"Service description not found for {self.cluster_name}/{service_name}"
                     )
 
-                service = services.get("services")[0]
+                service = services["services"][0]
                 desired_count = service.get("desiredCount")
                 running_count = service.get("runningCount")
 
                 # If the service has reached the desired count, we can start tracking the tasks
-                if desired_count == running_count:
+                if desired_count and (desired_count > 0) and (desired_count == running_count):
                     running_tasks = self.ecs.list_tasks(
                         cluster=self.cluster_name,
                         serviceName=service_name,
                         desiredStatus="RUNNING",
                     ).get("taskArns")
 
-                    if not running_tasks:
-                        raise Exception(
-                            f"Unexpected error obtaining tasks for {service_name} in {self.cluster_name}"
-                        )
+                    if running_tasks:
+                        tasks_to_track = running_tasks
 
-                    tasks_to_track = running_tasks
-                elif time.time() > start_time + STOPPED_TASK_GRACE_PERIOD:
-                    # If there are still no running_tasks tasks after a certain grace period, check for stopped tasks
-                    stopped_tasks = self._check_for_stopped_tasks(service_name)
-                    if stopped_tasks:
-                        self._raise_failed_task(stopped_tasks[0], container_name, logger)
+            if not tasks_to_track and time.time() > start_time + STOPPED_TASK_GRACE_PERIOD:
+                # If there are still no running_tasks tasks after a certain grace period, check for stopped tasks
+                stopped_tasks = self._check_for_stopped_tasks(service_name)
+                if stopped_tasks:
+                    self._raise_failed_task(stopped_tasks[0], container_name, logger)
 
             if tasks_to_track:
                 tasks = self.ecs.describe_tasks(
@@ -680,7 +677,7 @@ class Client:
             )
             if response.get("services"):
                 service = response["services"][0]
-                service_events = [event.get("message") for event in service.get("events")]
+                service_events = [str(event.get("message")) for event in service.get("events", [])]
                 service_events_str = "Service events:\n" + "\n".join(service_events)
         except:
             logger.exception(f"Error trying to get service event logs from service {service_name}")
@@ -715,9 +712,9 @@ class Client:
         ).get("taskDefinition")
 
         essential_containers = {
-            container["name"]
-            for container in task_definition["containerDefinitions"]
-            if container["essential"]
+            check.not_none(container.get("name"))
+            for container in task_definition.get("containerDefinitions", [])
+            if container.get("essential") and container.get("name")
         }
 
         # Just because the task is RUNNING doesn't mean everything has started up correctly -

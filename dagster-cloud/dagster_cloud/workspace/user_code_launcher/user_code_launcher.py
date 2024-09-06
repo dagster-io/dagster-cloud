@@ -1383,6 +1383,13 @@ class DagsterCloudUserCodeLauncher(
                             )
                             del self._actual_entries[deployment_location]
                             del self._first_unavailable_times[deployment_location]
+
+                            # redeploy the multipex server in this case as well to ensure a fresh start
+                            # (and ensure that we don't try to create the same PexServerHandle again and
+                            # delete the code location in a loop)
+                            if deployment_location in self._multipex_servers:
+                                del self._multipex_servers[deployment_location]
+
                     else:
                         self._logger.exception(
                             f"Code server for {deployment_name}:{location_name} health check failed, but the error did not indicate that the server was unavailable."
@@ -1774,6 +1781,9 @@ class DagsterCloudUserCodeLauncher(
             with self._grpc_servers_lock:
                 del self._grpc_servers[to_remove_key]
             del self._actual_entries[to_remove_key]
+
+            if to_remove_key in self._multipex_servers:
+                del self._multipex_servers[to_remove_key]
 
         # Upload any locations that were requested to be uploaded, but weren't updated
         # as part of this reconciliation loop

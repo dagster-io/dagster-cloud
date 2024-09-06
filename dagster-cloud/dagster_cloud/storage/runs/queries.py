@@ -226,9 +226,9 @@ ADD_RUN_TELEMETRY_MUTATION = """
 """
 
 GET_BACKFILLS_QUERY = """
-    query getBackfillsQuery($status: String, $cursor: String, $limit: Int) {
+    query getBackfillsQuery($status: String, $cursor: String, $limit: Int, $filters: BulkActionsFilter) {
         runs {
-            getBackfills(status: $status, cursor: $cursor, limit: $limit)
+            getBackfills(status: $status, cursor: $cursor, limit: $limit, filters: $filters)
         }
     }
 """
