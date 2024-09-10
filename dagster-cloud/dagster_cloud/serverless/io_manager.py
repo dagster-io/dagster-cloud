@@ -24,6 +24,8 @@ class PickledObjectServerlessIOManager(UPathIOManager):
         self._bucket = check.str_param(s3_bucket, "s3_bucket")
         self._s3_prefix = check.str_param(s3_prefix, "s3_prefix")
         self._boto_session, self._boto_session_expiration = self._refresh_boto_session()
+        base_path = UPath(s3_prefix) if s3_prefix else None
+        super().__init__(base_path=base_path)
 
     def _refresh_boto_session(self) -> Tuple[boto3.Session, datetime.datetime]:
         # We have to do this whacky way to get credentials to ensure that we get iam role
