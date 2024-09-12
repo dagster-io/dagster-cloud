@@ -465,6 +465,16 @@ WIPE_ASSET_MUTATION = """
     }
 """
 
+WIPE_ASSET_PARTITIONS_MUTATION = """
+    mutation WipeAssetPartitions($assetKey: String!, $partitionKeys: [String!]!) {
+        eventLogs {
+            WipeAssetPartitions(assetKey: $assetKey, partitionKeys: $partitionKeys) {
+                ok
+            }
+        }
+    }
+"""
+
 WIPE_ASSET_CACHED_STATUS_DATA_MUTATION = """
     mutation WipeAssetCachedStatusData($assetKey: String!) {
         eventLogs {

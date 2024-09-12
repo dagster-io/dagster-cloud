@@ -116,6 +116,7 @@ from .queries import (
     UPGRADE_EVENT_LOG_STORAGE_MUTATION,
     WIPE_ASSET_CACHED_STATUS_DATA_MUTATION,
     WIPE_ASSET_MUTATION,
+    WIPE_ASSET_PARTITIONS_MUTATION,
     WIPE_EVENT_LOG_STORAGE_MUTATION,
 )
 
@@ -959,11 +960,16 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
         return res
 
-    def wipe_asset_partitions(self, asset_key: AssetKey, partition_keys: Sequence[str]) -> None:
+    def wipe_asset_partitions(self, asset_key: AssetKey, partition_keys: Sequence[str]):
         """Remove asset index history from event log for given asset partitions."""
-        raise NotImplementedError(
-            "Partitioned asset wipe is not supported yet for this event log storage."
+        res = self._execute_query(
+            WIPE_ASSET_PARTITIONS_MUTATION,
+            variables={
+                "assetKey": asset_key.to_string(),
+                "partitionKeys": partition_keys,
+            },
         )
+        return res
 
     @property
     def supports_global_concurrency_limits(self) -> bool:

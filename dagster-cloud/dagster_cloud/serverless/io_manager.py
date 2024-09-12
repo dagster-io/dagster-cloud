@@ -2,7 +2,7 @@ import datetime
 import io
 import os
 import pickle
-from typing import Any, Sequence, Tuple, Union
+from typing import Any, Tuple, Union
 
 import boto3
 import dagster._check as check
@@ -54,17 +54,11 @@ class PickledObjectServerlessIOManager(UPathIOManager):
             s3_obj = self._s3.get_object(Bucket=self._bucket, Key=path.as_posix())["Body"].read()
             return pickle.loads(s3_obj)
         except self._s3.exceptions.NoSuchKey:
-            check.failed("Input not found. It may have expired.")
+            raise FileNotFoundError(
+                f"Could not find the input for '{context.name}'. It may have expired."
+            )
 
     def dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
-        if context.dagster_type.typing_type == type(None):
-            check.invariant(
-                obj is None,
-                "Output had Nothing type or 'None' annotation, but handle_output received"
-                f" value that was not None and was of type {type(obj)}.",
-            )
-            return None
-
         pickled_obj = pickle.dumps(obj, PICKLE_PROTOCOL)
         pickled_obj_bytes = io.BytesIO(pickled_obj)
         self._s3.upload_fileobj(pickled_obj_bytes, self._bucket, path.as_posix())
@@ -76,14 +70,17 @@ class PickledObjectServerlessIOManager(UPathIOManager):
             return False
         return True
 
-    def _get_path(self, context: Union[InputContext, OutputContext]) -> UPath:
-        path: Sequence[str]
-        if context.has_asset_key:
-            path = context.get_asset_identifier()
-        else:
-            path = ["storage", *context.get_identifier()]
+    def unlink(self, path: UPath) -> None:
+        self._s3.delete_object(Bucket=self._bucket, Key=path.as_posix())
 
-        return UPath(self._s3_prefix, *path)
+    def make_directory(self, path: UPath) -> None:
+        # It is not necessary to create directories in S3
+        return None
+
+    def get_op_output_relative_path(self, context: Union[InputContext, OutputContext]):
+        from upath import UPath
+
+        return UPath(*["storage", *context.get_identifier()])
 
 
 @io_manager
