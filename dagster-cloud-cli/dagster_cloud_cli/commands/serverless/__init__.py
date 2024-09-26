@@ -305,7 +305,7 @@ def upload_base_image_command(
             ui.print(f"Pushed image {published_tag} to {registry}.")
             ui.print(
                 "To use the uploaded image run: "
-                f"dagster-cloud deploy-python-executable --base-image-tag={published_tag} [ARGS]"
+                f"dagster-cloud serverless deploy-python-executable --base-image-tag={published_tag} [ARGS]"
             )
 
 

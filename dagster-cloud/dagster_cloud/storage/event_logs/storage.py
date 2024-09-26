@@ -363,8 +363,9 @@ def _asset_record_from_graphql(graphene_asset_record: Dict) -> AssetRecord:
     )
 
 
-def _asset_check_execution_record_from_graphql(data: Dict):
+def _asset_check_execution_record_from_graphql(data: Dict, key: AssetCheckKey):
     return AssetCheckExecutionRecord(
+        key=key,
         id=data["id"],
         run_id=data["runId"],
         status=AssetCheckExecutionRecordStatus(data["status"]),
@@ -377,13 +378,16 @@ def _asset_check_summary_record_from_graphql(
     graphene_asset_check_summary_record: Dict,
 ) -> AssetCheckSummaryRecord:
     check.dict_param(graphene_asset_check_summary_record, "graphene_asset_check_summary_record")
+
+    asset_check_key = AssetCheckKey.from_graphql_input(
+        graphene_asset_check_summary_record["assetCheckKey"]
+    )
     return AssetCheckSummaryRecord(
-        asset_check_key=AssetCheckKey.from_graphql_input(
-            graphene_asset_check_summary_record["assetCheckKey"]
-        ),
+        asset_check_key=asset_check_key,
         last_check_execution_record=(
             _asset_check_execution_record_from_graphql(
-                graphene_asset_check_summary_record["lastCheckExecutionRecord"]
+                graphene_asset_check_summary_record["lastCheckExecutionRecord"],
+                asset_check_key,
             )
             if graphene_asset_check_summary_record["lastCheckExecutionRecord"]
             else None
