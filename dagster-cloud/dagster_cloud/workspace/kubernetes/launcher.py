@@ -21,6 +21,7 @@ from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData
+from dagster_k8s.client import PatchedApiClient
 from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.job import UserDefinedDagsterK8sConfig
 from dagster_k8s.models import k8s_snake_case_dict
@@ -341,7 +342,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         )
 
     def _get_core_api_client(self):
-        return self._k8s_core_api_client if self._k8s_core_api_client else client.CoreV1Api()
+        return (
+            self._k8s_core_api_client
+            if self._k8s_core_api_client
+            else client.CoreV1Api(api_client=PatchedApiClient())
+        )
 
     @contextmanager
     def _get_apps_api_instance(self):
@@ -349,7 +354,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             yield self._k8s_apps_api_client
             return
 
-        with client.ApiClient() as api_client:
+        with PatchedApiClient() as api_client:
             yield client.AppsV1Api(api_client)
 
     def _resolve_container_context(self, metadata: CodeLocationDeployData) -> K8sContainerContext:

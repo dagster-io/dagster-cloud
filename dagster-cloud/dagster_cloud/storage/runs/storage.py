@@ -86,6 +86,8 @@ def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]
 
     if filters is None:
         return None
+
+    check.invariant(filters.exclude_subruns is None, "RunsFilter.exclude_subruns is not supported")
     return {
         "runIds": filters.run_ids,
         "pipelineName": filters.job_name,
@@ -113,6 +115,18 @@ def _get_bulk_actions_filters_input(
     filters: Optional[BulkActionsFilter],
 ) -> Optional[Dict[str, Any]]:
     filters = check.opt_inst_param(filters, "filters", BulkActionsFilter)
+    unsupported_filters = []
+    if filters and filters.job_name:
+        unsupported_filters.append("job_name")
+    if filters and filters.backfill_ids:
+        unsupported_filters.append("backfill_ids")
+    if filters and filters.tags:
+        unsupported_filters.append("tags")
+
+    check.invariant(
+        len(unsupported_filters) == 0,
+        f"Used the following unsupported filters: {', '.join(unsupported_filters)}.",
+    )
 
     if filters is None:
         return None
@@ -519,6 +533,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             deserialize_value(backfill, PartitionBackfill)
             for backfill in res["data"]["runs"]["getBackfills"]
         ]
+
+    def get_backfills_count(self, filters: Optional[BulkActionsFilter] = None) -> int:
+        raise NotImplementedError("get_backfills_count is not callable from user cloud.")
 
     def get_backfill(self, backfill_id: str) -> PartitionBackfill:
         """Get a single partition backfill."""
