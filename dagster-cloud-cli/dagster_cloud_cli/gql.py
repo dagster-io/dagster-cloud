@@ -283,6 +283,51 @@ def reconcile_code_locations(
         raise Exception(f"Unable to sync locations: {result}")
 
 
+DEPLOY_LOCATIONS_FROM_DOCUMENT_MUTATION = """
+mutation CliDeployLocations($document: GenericScalar!) {
+    deployLocations(document: $document) {
+        __typename
+        ... on DeployLocationsSuccess {
+            locations {
+                locationName
+            }
+        }
+        ... on PythonError {
+            message
+            stack
+        }
+        ... on InvalidLocationError {
+            errors
+        }
+    }
+}
+"""
+
+
+def deploy_code_locations(
+    client: DagsterCloudGraphQLClient,
+    locations_document: Dict[str, Any],
+) -> List[str]:
+    result = client.execute(
+        DEPLOY_LOCATIONS_FROM_DOCUMENT_MUTATION,
+        variable_values={
+            "document": locations_document,
+        },
+    )
+
+    if result["data"]["deployLocations"]["__typename"] == "DeployLocationsSuccess":
+        return sorted(
+            [
+                location["locationName"]
+                for location in result["data"]["deployLocations"]["locations"]
+            ]
+        )
+    elif result["data"]["deployLocations"] == "InvalidLocationError":
+        raise Exception("Error in workspace config:\n" + "\n".join(result["errors"]))
+    else:
+        raise Exception(f"Unable to deploy locations: {result}")
+
+
 GET_LOCATIONS_AS_DOCUMENT_QUERY = """
 query CliLocationsAsDocument {
     locationsAsDocument {

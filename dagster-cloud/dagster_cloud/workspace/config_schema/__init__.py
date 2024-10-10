@@ -139,6 +139,8 @@ K8S_CONFIG_FIELDS = {
                     ),
                     is_required=False,
                 ),
+                "deployment_metadata": Permissive(),
+                "service_metadata": Permissive(),
             }
         ),
         is_required=False,

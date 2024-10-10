@@ -84,22 +84,30 @@ def construct_code_location_service(
     instance,
     server_timestamp: float,
 ):
-    labels = container_context.labels
+    user_defined_k8s_config = container_context.server_k8s_config
+    user_defined_service_metadata = copy.deepcopy(dict(user_defined_k8s_config.service_metadata))
+    user_defined_service_labels = user_defined_service_metadata.pop("labels", {})
 
-    return client.V1Service(
-        metadata=client.V1ObjectMeta(
-            name=service_name,
-            labels={
-                **labels,
-                **_get_dagster_k8s_labels(
-                    deployment_name, location_name, instance, server_timestamp
-                ),
+    return k8s_model_from_dict(
+        client.V1Service,
+        {
+            "api_version": "v1",
+            "kind": "Service",
+            "metadata": {
+                **user_defined_service_metadata,
+                "name": service_name,
+                "labels": {
+                    **user_defined_service_labels,
+                    **_get_dagster_k8s_labels(
+                        deployment_name, location_name, instance, server_timestamp
+                    ),
+                },
             },
-        ),
-        spec=client.V1ServiceSpec(
-            selector={"user-deployment": service_name},
-            ports=[client.V1ServicePort(name="grpc", protocol="TCP", port=SERVICE_PORT)],
-        ),
+            "spec": {
+                "selector": {"user-deployment": service_name},
+                "ports": [{"name": "grpc", "protocol": "TCP", "port": SERVICE_PORT}],
+            },
+        },
     )
 
 
@@ -118,6 +126,9 @@ def construct_code_location_deployment(
     )
 
     user_defined_config = container_context.server_k8s_config
+
+    user_defined_deployment_metadata = copy.deepcopy(dict(user_defined_config.deployment_metadata))
+    user_defined_deployment_labels = user_defined_deployment_metadata.pop("labels", {})
 
     container_config = copy.deepcopy(user_defined_config.container_config)
 
@@ -148,9 +159,10 @@ def construct_code_location_deployment(
 
     deployment_dict = {
         "metadata": {
+            **user_defined_deployment_metadata,
             "name": k8s_deployment_name,
             "labels": {
-                **container_context.labels,
+                **user_defined_deployment_labels,
                 **_get_dagster_k8s_labels(
                     deployment_name, location_name, instance, server_timestamp
                 ),
@@ -162,12 +174,11 @@ def construct_code_location_deployment(
                 "metadata": {
                     **pod_template_spec_metadata,
                     "labels": {
-                        "user-deployment": k8s_deployment_name,
-                        **container_context.labels,
                         **user_defined_pod_template_labels,
                         **_get_dagster_k8s_labels(
                             deployment_name, location_name, instance, server_timestamp
                         ),
+                        "user-deployment": k8s_deployment_name,
                     },
                 },
                 "spec": pod_spec_config,

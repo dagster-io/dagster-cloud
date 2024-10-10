@@ -71,6 +71,10 @@ if TYPE_CHECKING:
     from dagster_cloud.instance import DagsterCloudAgentInstance
 
 
+# Guard against out of order event insertion issues by default
+DEFAULT_RUN_SCOPED_EVENT_TAILER_OFFSET = 10000
+
+
 from .queries import (
     ADD_DYNAMIC_PARTITIONS_MUTATION,
     CHECK_CONCURRENCY_CLAIM_QUERY,
@@ -410,16 +414,16 @@ def _event_records_result_from_graphql(graphene_event_records_result: Dict) -> E
 def _claimed_slot_from_graphql(graphene_claimed_slot_dict: Dict) -> ClaimedSlotInfo:
     check.dict_param(graphene_claimed_slot_dict, "graphene_claimed_slot_dict")
     return ClaimedSlotInfo(
-        graphene_claimed_slot_dict["runId"],
-        graphene_claimed_slot_dict["stepKey"],
+        run_id=graphene_claimed_slot_dict["runId"],
+        step_key=graphene_claimed_slot_dict["stepKey"],
     )
 
 
 def _pending_step_from_graphql(graphene_pending_step: Dict) -> PendingStepInfo:
     check.dict_param(graphene_pending_step, "graphene_pending_step")
     return PendingStepInfo(
-        graphene_pending_step["runId"],
-        graphene_pending_step["stepKey"],
+        run_id=graphene_pending_step["runId"],
+        step_key=graphene_pending_step["stepKey"],
         enqueued_timestamp=datetime_from_timestamp(graphene_pending_step["enqueuedTimestamp"]),
         assigned_timestamp=(
             datetime_from_timestamp(graphene_pending_step["assignedTimestamp"])
@@ -1258,3 +1262,6 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     @property
     def handles_run_events_in_store_event(self) -> bool:
         return True
+
+    def default_run_scoped_event_tailer_offset(self) -> int:
+        return DEFAULT_RUN_SCOPED_EVENT_TAILER_OFFSET

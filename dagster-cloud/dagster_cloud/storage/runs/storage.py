@@ -468,6 +468,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             },
         )
 
+    def supports_run_telemetry(self) -> bool:
+        return True
+
     def add_run_telemetry(
         self,
         run_telemetry: RunTelemetryData,

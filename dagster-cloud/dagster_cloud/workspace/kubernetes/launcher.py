@@ -200,7 +200,16 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             kubeconfig_file=kubeconfig_file,
             load_incluster_config=not kubeconfig_file,
             security_context=self._security_context,
-            only_allow_user_defined_k8s_config_fields=self._only_allow_user_defined_k8s_config_fields,
+            # leave out the code server specific fields from only_allow_user_defined_k8s_config_fields
+            only_allow_user_defined_k8s_config_fields=(
+                {
+                    key: val
+                    for key, val in only_allow_user_defined_k8s_config_fields.items()
+                    if key not in {"service_metadata", "deployment_metadata"}
+                }
+                if only_allow_user_defined_k8s_config_fields
+                else only_allow_user_defined_k8s_config_fields
+            ),
             only_allow_user_defined_env_vars=self._only_allow_user_defined_env_vars,
         )
 
@@ -279,6 +288,8 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                             "container_config": Permissive(),
                             "pod_spec_config": Permissive(),
                             "pod_template_spec_metadata": Permissive(),
+                            "deployment_metadata": Permissive(),
+                            "service_metadata": Permissive(),
                         }
                     ),
                     is_required=False,
@@ -300,6 +311,12 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                                 Map(key_type=str, inner_type=bool), is_required=False
                             ),
                             "job_spec_config": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "deployment_metadata": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "service_metadata": Field(
                                 Map(key_type=str, inner_type=bool), is_required=False
                             ),
                             "namespace": Field(bool, is_required=False),
@@ -360,7 +377,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
     def _resolve_container_context(self, metadata: CodeLocationDeployData) -> K8sContainerContext:
         user_defined_container_context = K8sContainerContext.create_from_config(
             metadata.container_context
-        ).validate_user_k8s_config(
+        ).validate_user_k8s_config_for_code_server(
             self._only_allow_user_defined_k8s_config_fields, self._only_allow_user_defined_env_vars
         )
         return K8sContainerContext(
@@ -428,7 +445,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         try:
             with self._get_apps_api_instance() as api_instance:
                 deployment_reponse = api_instance.create_namespaced_deployment(
-                    container_context.namespace,
+                    namespace=container_context.namespace,
                     body=construct_code_location_deployment(
                         self._instance,
                         deployment_name,

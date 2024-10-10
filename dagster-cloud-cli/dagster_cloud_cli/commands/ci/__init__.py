@@ -685,7 +685,7 @@ def deploy(
 ):
     state_store = state.FileStore(statedir=statedir)
     locations = _get_selected_locations(state_store, location_name)
-    ui.print("Going deploy the following locations:")
+    ui.print("Going to deploy the following locations:")
 
     built_locations: List[state.LocationState] = []
     for name, location_state in locations.items():
@@ -739,35 +739,42 @@ def _deploy(
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
 ):
+    locations_document = []
     for location_state in built_locations:
-        if not location_state.build_output:  # not necessary but keep type checker happy
+        build_output = location_state.build_output
+        if not build_output:  # not necessary but keep type checker happy
             continue
 
         location_args = {
-            "image": location_state.build_output.image,
+            "image": build_output.image,
             "location_file": location_state.location_file,
             "git_url": location_state.build.git_url,
             "commit_hash": location_state.build.commit_hash,
         }
-        if location_state.build_output.strategy == "python-executable":
+        if build_output.strategy == "python-executable":
             metrics.instrument_add_tags([CliEventTags.server_strategy.pex])
-            location_args["pex_tag"] = location_state.build_output.pex_tag
-            location_args["python_version"] = location_state.build_output.python_version
+            location_args["pex_tag"] = build_output.pex_tag
+            location_args["python_version"] = build_output.python_version
         else:
             metrics.instrument_add_tags([CliEventTags.server_strategy.docker])
 
-        with utils.client_from_env(location_state.url, location_state.deployment_name) as client:
-            location_document = get_location_document(location_state.location_name, location_args)
-            gql.add_or_update_code_location(client, location_document)
-            ui.print(f"Updated code location {location_state.location_name} in dagster-cloud")
+        locations_document.append(
+            get_location_document(location_state.location_name, location_args)
+        )
 
     deployment_url = built_locations[0].url + "/" + built_locations[0].deployment_name
     with utils.client_from_env(
         built_locations[0].url, deployment=built_locations[0].deployment_name
     ) as client:
+        location_names = [location_state.location_name for location_state in built_locations]
+        gql.deploy_code_locations(client, {"locations": locations_document})
+        ui.print(
+            f"Updated code location{'s' if len(location_names) > 1 else ''} {', '.join(location_names)} in dagster-cloud."
+        )
+
         wait_for_load(
             client,
-            [location.location_name for location in built_locations],
+            location_names,
             location_load_timeout=location_load_timeout,
             agent_heartbeat_timeout=agent_heartbeat_timeout,
             url=deployment_url,

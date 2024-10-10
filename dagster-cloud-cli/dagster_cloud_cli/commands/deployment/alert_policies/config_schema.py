@@ -382,7 +382,18 @@ ALERT_POLICY_SCHEMA, INSIGHTS_ALERT_POLICY_SCHEMA = [
                                 }
                             )
                         ),
-                        "email_owners": Field(config=Shape(fields={})),
+                        "email_owners": Field(
+                            config=Shape(
+                                fields={
+                                    "default_email_addresses": Field(
+                                        config=Array(str),
+                                        is_required=False,
+                                        default_value=[],
+                                        description="Default email addresses to send notifications for assets without defined owners.",
+                                    )
+                                }
+                            )
+                        ),
                         "microsoft_teams": Field(
                             config=Shape(
                                 fields={
