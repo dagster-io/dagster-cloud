@@ -667,7 +667,7 @@ class DagsterCloudUserCodeLauncher(
             external_repository_chunks = [
                 chunk
                 async for chunk in client.gen_streaming_external_repository(
-                    external_repository_origin=RemoteRepositoryOrigin(
+                    remote_repository_origin=RemoteRepositoryOrigin(
                         location_origin,
                         repository_name,
                     ),

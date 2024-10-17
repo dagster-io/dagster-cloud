@@ -7,7 +7,7 @@ import dagster._check as check
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
 from dagster._core.events.log import EventLogEntry
-from dagster._core.remote_representation import CodeLocationOrigin, ExternalRepositoryData
+from dagster._core.remote_representation import CodeLocationOrigin, RepositorySnap
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.utils import RequestUtilizationMetrics
 from dagster._serdes import whitelist_for_serdes
@@ -257,7 +257,7 @@ class DagsterCloudRepositoryData(
         [
             ("repo_name", str),
             ("code_pointer", CodePointer),
-            ("external_repository_data", ExternalRepositoryData),
+            ("external_repository_data", RepositorySnap),
         ],
     )
 ):
@@ -269,7 +269,7 @@ class DagsterCloudRepositoryData(
             check.inst_param(
                 external_repository_data,
                 "external_repository_data",
-                ExternalRepositoryData,
+                RepositorySnap,
             ),
         )
 

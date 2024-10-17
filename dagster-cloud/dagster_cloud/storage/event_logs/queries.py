@@ -105,6 +105,8 @@ ASSET_ENTRY_FRAGMENT = (
         lastObservationRecord {
             ...EventLogRecordFragment
         }
+        lastPlannedMaterializationStorageId
+        lastPlannedMaterializationRunId
     }
     """
 )
@@ -144,6 +146,14 @@ ASSET_CHECK_STATE_FRAGMENT = (
     } 
 """
 )
+
+GET_MAXIMUM_RECORD_ID = """
+    query getMaximumRecordId {
+        eventLogs {
+            getMaximumRecordId
+        }
+    } 
+    """
 
 GET_RECORDS_FOR_RUN_QUERY = (
     EVENT_RECORD_FRAGMENT
@@ -734,3 +744,16 @@ GET_UPDATED_DATA_VERSION_PARTITIONS = """
         }
     }
 """
+
+GET_ASSET_STATUS_CACHE_VALUES = (
+    CACHED_STATUS_DATA_FRAGMENT
+    + """
+    query getAssetStatusCacheValues($assetKeys: [AssetKeyInput!]!) {
+        eventLogs {
+            getAssetStatusCacheValues(assetKeys: $assetKeys) {
+                ...CachedStatusDataFragment
+            }
+        }
+    }
+"""
+)

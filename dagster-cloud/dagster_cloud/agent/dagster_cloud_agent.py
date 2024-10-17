@@ -902,7 +902,7 @@ class DagsterCloudAgent:
 
                     run_location_name = cast(
                         str,
-                        run.external_job_origin.repository_origin.code_location_origin.location_name,
+                        run.remote_job_origin.repository_origin.code_location_origin.location_name,
                     )
 
                     server = user_code_launcher.get_grpc_server(deployment_name, run_location_name)
@@ -946,7 +946,7 @@ class DagsterCloudAgent:
                     else:
                         run_location_name = cast(
                             str,
-                            run.external_job_origin.repository_origin.code_location_origin.location_name,
+                            run.remote_job_origin.repository_origin.code_location_origin.location_name,
                         )
 
                         server = user_code_launcher.get_grpc_server(

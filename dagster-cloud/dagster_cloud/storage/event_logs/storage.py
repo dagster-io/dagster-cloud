@@ -20,7 +20,7 @@ from typing import (
 from uuid import uuid4
 
 import dagster._check as check
-from dagster import AssetCheckKey, DagsterInvalidInvocationError
+from dagster import AssetCheckKey, DagsterInvalidInvocationError, PartitionsDefinition
 from dagster._core.assets import AssetDetails
 from dagster._core.definitions.events import AssetKey, ExpectationResult
 from dagster._core.event_api import (
@@ -91,6 +91,7 @@ from .queries import (
     GET_ALL_ASSET_KEYS_QUERY,
     GET_ASSET_CHECK_STATE_QUERY,
     GET_ASSET_RECORDS_QUERY,
+    GET_ASSET_STATUS_CACHE_VALUES,
     GET_CONCURRENCY_INFO_QUERY,
     GET_CONCURRENCY_KEYS_QUERY,
     GET_DYNAMIC_PARTITIONS_QUERY,
@@ -103,6 +104,7 @@ from .queries import (
     GET_LATEST_TAGS_BY_PARTITION,
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_MATERIALIZED_PARTITIONS,
+    GET_MAXIMUM_RECORD_ID,
     GET_RECORDS_FOR_RUN_QUERY,
     GET_RUN_STATUS_CHANGE_EVENTS_QUERY,
     GET_STATS_FOR_RUN_QUERY,
@@ -356,6 +358,10 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
             if graphene_asset_entry["lastObservationRecord"]
             else None
         ),
+        last_planned_materialization_storage_id=graphene_asset_entry[
+            "lastPlannedMaterializationStorageId"
+        ],
+        last_planned_materialization_run_id=graphene_asset_entry["lastPlannedMaterializationRunId"],
     )
 
 
@@ -475,6 +481,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             headers=headers,
             idempotent_mutation=idempotent_mutation,
         )
+
+    def get_maximum_record_id(self) -> Optional[int]:
+        res = self._execute_query(GET_MAXIMUM_RECORD_ID)
+        return res["data"]["eventLogs"]["getMaximumRecordId"]
 
     def get_records_for_run(
         self,
@@ -690,6 +700,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     @property
     def asset_records_have_last_observation(self) -> bool:
+        return True
+
+    @property
+    def asset_records_have_last_planned_materialization_storage_id(self) -> bool:
         return True
 
     def get_asset_check_summary_records(
@@ -1265,3 +1279,35 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def default_run_scoped_event_tailer_offset(self) -> int:
         return DEFAULT_RUN_SCOPED_EVENT_TAILER_OFFSET
+
+    def get_asset_status_cache_values(
+        self,
+        partitions_defs_by_key: Mapping[AssetKey, Optional[PartitionsDefinition]],
+    ) -> Sequence[Optional[AssetStatusCacheValue]]:
+        asset_keys = list(partitions_defs_by_key.keys())
+        res = self._execute_query(
+            GET_ASSET_STATUS_CACHE_VALUES,
+            variables={
+                "assetKeys": [asset_key.to_graphql_input() for asset_key in asset_keys],
+            },
+        )
+
+        return [
+            AssetStatusCacheValue(
+                latest_storage_id=value["latestStorageId"],
+                partitions_def_id=value["partitionsDefId"],
+                serialized_materialized_partition_subset=value[
+                    "serializedMaterializedPartitionSubset"
+                ],
+                serialized_failed_partition_subset=value["serializedFailedPartitionSubset"],
+                serialized_in_progress_partition_subset=value[
+                    "serializedInProgressPartitionSubset"
+                ],
+                earliest_in_progress_materialization_event_id=value[
+                    "earliestInProgressMaterializationEventId"
+                ],
+            )
+            if value
+            else None
+            for value in res["data"]["eventLogs"]["getAssetStatusCacheValues"]
+        ]

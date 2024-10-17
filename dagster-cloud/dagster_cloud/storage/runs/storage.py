@@ -26,7 +26,7 @@ from dagster._core.execution.telemetry import RunTelemetryData
 from dagster._core.remote_representation.origin import RemoteJobOrigin
 from dagster._core.snap import (
     ExecutionPlanSnapshot,
-    JobSnapshot,
+    JobSnap,
     create_execution_plan_snapshot_id,
     create_job_snapshot_id,
 )
@@ -380,27 +380,27 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return res["data"]["runs"]["hasPipelineSnapshot"]
 
     def add_job_snapshot(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
-        self, pipeline_snapshot: JobSnapshot, snapshot_id: Optional[str] = None
+        self, pipeline_snapshot: JobSnap, snapshot_id: Optional[str] = None
     ) -> str:
         self._execute_query(
             ADD_PIPELINE_SNAPSHOT_MUTATION,
             variables={
                 "serializedPipelineSnapshot": serialize_value(
-                    check.inst_param(pipeline_snapshot, "pipeline_snapshot", JobSnapshot)
+                    check.inst_param(pipeline_snapshot, "pipeline_snapshot", JobSnap)
                 ),
                 "snapshotId": snapshot_id,
             },
         )
         return snapshot_id if snapshot_id else create_job_snapshot_id(pipeline_snapshot)
 
-    def get_job_snapshot(self, pipeline_snapshot_id: str) -> JobSnapshot:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_job_snapshot(self, pipeline_snapshot_id: str) -> JobSnap:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         res = self._execute_query(
             GET_PIPELINE_SNAPSHOT_QUERY,
             variables={
                 "pipelineSnapshotId": check.str_param(pipeline_snapshot_id, "pipeline_snapshot_id")
             },
         )
-        return deserialize_value(res["data"]["runs"]["getPipelineSnapshot"], JobSnapshot)
+        return deserialize_value(res["data"]["runs"]["getPipelineSnapshot"], JobSnap)
 
     def has_execution_plan_snapshot(self, execution_plan_snapshot_id: str) -> bool:
         res = self._execute_query(
