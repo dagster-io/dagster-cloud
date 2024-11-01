@@ -12,6 +12,8 @@ from typer.models import OptionInfo
 
 from dagster_cloud_cli import ui
 
+DEFAULT_PYTHON_VERSION = "3.11"
+
 
 def create_stub_app(package_name: str) -> typer.Typer:
     return typer.Typer(

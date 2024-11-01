@@ -40,6 +40,7 @@ from dagster_cloud_cli.core.pex_builder import (
     parse_workspace,
 )
 from dagster_cloud_cli.types import CliEventTags, CliEventType
+from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION
 
 from .. import metrics
 from . import checks, report, state
@@ -449,7 +450,7 @@ def build(
     ),
     docker_env: List[str] = typer.Option([], help="Env vars for docker builds."),
     python_version: str = typer.Option(
-        "3.8",
+        DEFAULT_PYTHON_VERSION,
         help=(
             "Python version used to build the python-executable; or to determine the default base"
             " image for docker."

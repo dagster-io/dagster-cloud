@@ -18,7 +18,7 @@ from dagster_cloud_cli.config_utils import (
 )
 from dagster_cloud_cli.core import pex_builder
 from dagster_cloud_cli.types import CliEventTags, CliEventType
-from dagster_cloud_cli.utils import add_options
+from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION, add_options
 
 app = Typer(help="Build and deploy your code to Dagster Cloud.")
 
@@ -321,7 +321,7 @@ def _generate_published_tag_for_image(image: str):
         "python_version": (
             str,
             Option(
-                "3.8",
+                DEFAULT_PYTHON_VERSION,
                 help="Target Python version as 'major.minor'",
             ),
         ),

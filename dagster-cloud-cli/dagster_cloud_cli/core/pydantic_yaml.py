@@ -3,8 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 import yaml
-from dagster._model.pydantic_compat_layer import compat_model_validator
-from pydantic import BaseModel, Extra, Field, validator
+from pydantic import BaseModel, Extra, Field, model_validator, validator
 
 
 class CodeSource(BaseModel, extra=Extra.forbid):
@@ -12,7 +11,7 @@ class CodeSource(BaseModel, extra=Extra.forbid):
     module_name: Optional[str] = None
     python_file: Optional[str] = None
 
-    @compat_model_validator(mode="before")
+    @model_validator(mode="before")
     def exactly_one_source_defined(
         cls, values: Dict[str, Optional[str]]
     ) -> Dict[str, Optional[str]]:

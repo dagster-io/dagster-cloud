@@ -10,9 +10,10 @@ from zipfile import ZipFile
 import click
 from packaging import version
 
+from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION
+
 TARGET_PYTHON_VERSIONS = [
-    version.Version(python_version)
-    for python_version in ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+    version.Version(python_version) for python_version in ["3.9", "3.10", "3.11", "3.12"]
 ]
 
 
@@ -34,7 +35,7 @@ def run_self_module(module_name, args: List[str], env=None) -> CompletedProcess:
 
 
 def get_pex_flags(python_version: version.Version, build_sdists: bool = True) -> List[str]:
-    """python_version should includes the major and minor version only, eg Version('3.8')."""
+    """python_version should includes the major and minor version only, eg Version('3.11')."""
     if python_version not in TARGET_PYTHON_VERSIONS:
         raise ValueError(
             f"Unsupported python version {python_version}. Supported: {TARGET_PYTHON_VERSIONS}."
@@ -129,7 +130,7 @@ def build_pex_tag(filepaths: List[str]) -> str:
 
 
 def python_interpreter_for(python_version: version.Version) -> str:
-    return "python" + str(python_version)  # eg 'python3.8'
+    return "python" + str(python_version)  # eg 'python3.11'
 
 
 def python_version_option():
@@ -137,7 +138,7 @@ def python_version_option():
     return click.option(
         "--python-version",
         type=click.Choice([str(v) for v in TARGET_PYTHON_VERSIONS]),
-        default="3.8",
+        default=DEFAULT_PYTHON_VERSION,
         show_default=True,
         help="Target Python version.",
     )

@@ -83,6 +83,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         server_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
         run_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
         server_health_check: Optional[Mapping[str, Any]] = None,
+        enable_ecs_exec=False,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -146,6 +147,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self.server_health_check = check.opt_mapping_param(
             server_health_check, "server_health_check"
         )
+
+        self._enable_ecs_exec = enable_ecs_exec
 
         self.client = Client(
             cluster_name=self.cluster,
@@ -261,6 +264,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     {"enabled": Field(bool, is_required=False, default_value=False)},
                     is_required=False,
                 ),
+                "enable_ecs_exec": Field(
+                    bool,
+                    is_required=False,
+                    default_value=False,
+                ),
             },
             SHARED_ECS_CONFIG,
             SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -314,7 +322,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         return container_context.repository_credentials
 
     def _get_enable_ecs_exec(self) -> bool:
-        return False
+        return self._enable_ecs_exec
 
     def _get_additional_grpc_server_env(self) -> Dict[str, str]:
         return {}

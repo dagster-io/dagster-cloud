@@ -331,9 +331,9 @@ GET_MATERIALIZATION_COUNT_BY_PARTITION = """
     """
 
 GET_LATEST_STORAGE_ID_BY_PARTITION = """
-    query getLatestStorageIdByPartition($assetKey: String!, $eventType: String!) {
+    query getLatestStorageIdByPartition($assetKey: String!, $eventType: String!, $partitions: [String!]) {
         eventLogs {
-            getLatestStorageIdByPartition(assetKey: $assetKey, eventType: $eventType) {
+            getLatestStorageIdByPartition(assetKey: $assetKey, eventType: $eventType, partitions: $partitions) {
                 ... on StorageIdByPartition {
                     partition
                     storageId

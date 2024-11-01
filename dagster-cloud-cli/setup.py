@@ -22,8 +22,9 @@ setup(
     author_email="hello@elementl.com",
     packages=find_packages(exclude=["dagster_cloud.cli_tests*"]),
     include_package_data=True,
+    python_requires=">=3.9,<3.13",
     install_requires=[
-        "dagster==1.8.13",
+        "dagster==1.9.0",
         "packaging>=20.9",
         "questionary",
         "requests",

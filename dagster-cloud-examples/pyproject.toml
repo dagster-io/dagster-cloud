@@ -1,0 +1,44 @@
+[build-system]
+requires = [
+    "setuptools>=61.2",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dagster-cloud-examples"
+dynamic = [
+    "version",
+]
+authors = [
+    { name = "Elementl", email = "hello@elementl.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "dagster-cloud==1.9.0",
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+tests = [
+    "mypy",
+    "pylint",
+    "pytest",
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.dynamic.version]
+attr = "dagster_cloud_examples.version.__version__"
+
+[tool.setuptools.packages.find]
+exclude = [
+    "dagster_cloud_examples_tests*",
+]
+namespaces = false

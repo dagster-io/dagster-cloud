@@ -8,6 +8,7 @@ from typing import Generator, List, Optional
 import pkg_resources
 
 from dagster_cloud_cli import ui
+from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION
 
 
 def verify_docker() -> None:
@@ -21,7 +22,9 @@ def _template_dockerfile(env_vars, custom_base_image=None) -> Generator[bytes, N
         "dagster_cloud_cli", "commands/serverless/Dockerfile"
     )
     base_image_command = (
-        f"FROM {custom_base_image}" if custom_base_image else "FROM python:3.8-slim"
+        f"FROM {custom_base_image}"
+        if custom_base_image
+        else f"FROM python:{DEFAULT_PYTHON_VERSION}-slim"
     )
     with open(DOCKERFILE_TEMPLATE, "r", encoding="utf-8") as template:
         dockerfile_content = "\n".join(

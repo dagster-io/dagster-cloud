@@ -9,6 +9,11 @@ from dagster._utils.merger import merge_dicts
 
 from .agent_queue import AgentQueue
 
+# Python 3.8 is EOL and support will be removed soon.
+# Dagster 1.9 onwards there is no support for 3.8 so we use an older base image.
+# Defaults to a base image tag for  1.8.13
+_PYTHON_38_BASE_IMAGE_TAG = os.getenv("PYTHON_38_BASE_IMAGE_TAG", "1be1105a-626d7d2a")
+
 
 @whitelist_for_serdes
 class GitMetadata(
@@ -53,10 +58,11 @@ class PexMetadata(
         serverless_service_name = os.getenv("SERVERLESS_SERVICE_NAME")
         if not agent_image_tag or not serverless_service_name:
             return None
+        image_tag = agent_image_tag if self.python_version != "3.8" else _PYTHON_38_BASE_IMAGE_TAG
         if serverless_service_name in ["serverless-agents", "serverless-agents-public-demo"]:
-            return f"657821118200.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{agent_image_tag}"
+            return f"657821118200.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{image_tag}"
         else:
-            return f"878483074102.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{agent_image_tag}"
+            return f"878483074102.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{image_tag}"
 
 
 def get_instance_ref_for_user_code(instance_ref: InstanceRef) -> InstanceRef:

@@ -841,13 +841,17 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return materialization_count_by_partition
 
     def get_latest_storage_id_by_partition(
-        self, asset_key: AssetKey, event_type: DagsterEventType
+        self,
+        asset_key: AssetKey,
+        event_type: DagsterEventType,
+        partitions: Optional[Set[str]] = None,
     ) -> Mapping[str, int]:
         res = self._execute_query(
             GET_LATEST_STORAGE_ID_BY_PARTITION,
             variables={
                 "assetKey": asset_key.to_string(),
                 "eventType": event_type.value,
+                "partitions": list(partitions) if partitions else None,
             },
         )
         latest_storage_id_result = res["data"]["eventLogs"]["getLatestStorageIdByPartition"]
@@ -1283,6 +1287,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def get_asset_status_cache_values(
         self,
         partitions_defs_by_key: Mapping[AssetKey, Optional[PartitionsDefinition]],
+        context,
     ) -> Sequence[Optional[AssetStatusCacheValue]]:
         asset_keys = list(partitions_defs_by_key.keys())
         res = self._execute_query(

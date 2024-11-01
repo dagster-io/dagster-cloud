@@ -10,13 +10,13 @@ from typer import Option
 from dagster_cloud_cli import ui
 from dagster_cloud_cli.core import pex_builder
 from dagster_cloud_cli.core.pex_builder.deps import BuildMethod
-from dagster_cloud_cli.utils import get_file_size
+from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION, get_file_size
 
 DEPLOY_PEX_OPTIONS = {
     "python_version": (
         str,
         Option(
-            "3.8",
+            DEFAULT_PYTHON_VERSION,
             "--python-version",
             help="Target Python version specified as 'major.minor'.",
         ),
@@ -75,7 +75,7 @@ def build_upload_pex(
         os.environ["SERVERLESS_BASE_IMAGE_TAG"] = kwargs.pop("base_image_tag")
 
     python_version = pex_builder.util.parse_python_version(
-        kwargs.setdefault("python_version", "3.8")
+        kwargs.setdefault("python_version", DEFAULT_PYTHON_VERSION)
     )
     ui.print(
         ui.blue(
