@@ -10,6 +10,7 @@ from dagster._core.events.log import EventLogEntry
 from dagster._core.remote_representation import CodeLocationOrigin, RepositorySnap
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.utils import RequestUtilizationMetrics
+from dagster._record import record
 from dagster._serdes import whitelist_for_serdes
 from dagster._time import get_current_datetime, get_current_timestamp
 from dagster._utils.container import ContainerUtilizationMetrics
@@ -431,6 +432,12 @@ class DagsterCloudUploadApiResponse(
             request_api=check.str_param(request_api, "request_api"),
             response=check.inst_param(response, "response", DagsterCloudApiResponseTypesTuple),
         )
+
+
+@whitelist_for_serdes
+@record
+class BatchDagsterCloudUploadApiResponse:
+    batch: List[DagsterCloudUploadApiResponse]
 
 
 @whitelist_for_serdes

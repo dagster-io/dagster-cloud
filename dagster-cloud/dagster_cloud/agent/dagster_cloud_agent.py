@@ -2,11 +2,23 @@ import logging
 import os
 import sys
 import time
-from collections import deque
+from collections import defaultdict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Set, Tuple, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    DefaultDict,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+    cast,
+)
 
 import dagster._check as check
 from dagster import DagsterInstance
@@ -18,6 +30,7 @@ from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import CancelExecutionRequest
 from dagster._serdes import deserialize_value, serialize_value
 from dagster._time import get_current_datetime, get_current_timestamp
+from dagster._utils.cached_method import cached_method
 from dagster._utils.container import retrieve_containerized_utilization_metrics
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster._utils.interrupts import raise_interrupts_as
@@ -29,6 +42,7 @@ from dagster_cloud_cli.core.workspace import CodeLocationDeployData, get_instanc
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
     AgentUtilizationMetrics,
+    BatchDagsterCloudUploadApiResponse,
     DagsterCloudApi,
     DagsterCloudApiErrorResponse,
     DagsterCloudApiGrpcResponse,
@@ -40,6 +54,7 @@ from dagster_cloud.api.dagster_cloud_api import (
     DagsterCloudUploadApiResponse,
     TimestampedError,
 )
+from dagster_cloud.batching import Batcher
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.util.errors import truncate_serialized_error
 from dagster_cloud.workspace.user_code_launcher import (
@@ -73,6 +88,11 @@ DEFAULT_PENDING_REQUESTS_LIMIT = 100
 
 SLEEP_INTERVAL_SECONDS = float(os.getenv("DAGSTER_CLOUD_AGENT_SLEEP_INTERVAL_SECONDS", "0.5"))
 
+
+def UPLOAD_API_RESPONSE_BATCHING_ENABLED():
+    return os.getenv("DAGSTER_CLOUD_AGENT_UPLOAD_API_RESPONSE_BATCHING_ENABLED") == "true"
+
+
 DEPLOYMENT_INFO_QUERY = """
     query DeploymentInfo {
          deploymentInfo {
@@ -96,10 +116,22 @@ LIVENESS_CHECK_INTERVAL_SECONDS = float(
 
 
 class DagsterCloudAgent:
-    def __init__(self, pending_requests_limit: int = DEFAULT_PENDING_REQUESTS_LIMIT):
+    def __init__(
+        self,
+        instance: DagsterCloudAgentInstance,
+        pending_requests_limit: int = DEFAULT_PENDING_REQUESTS_LIMIT,
+    ):
         self._logger = logging.getLogger("dagster_cloud.agent")
+        self._instance = instance
 
-        self._logger.info("Starting Dagster Cloud agent...")
+        self._batcher: DefaultDict[
+            str, Batcher[Tuple[str, DagsterCloudUploadApiResponse], None]
+        ] = defaultdict(self._batcher_factory)
+
+        if self._logger.isEnabledFor(logging.DEBUG):
+            self._logger.info("Starting Dagster Cloud agent with debug logging...")
+        else:
+            self._logger.info("Starting Dagster Cloud agent...")
 
         self._exit_stack = ExitStack()
         self._iteration = 0
@@ -141,6 +173,14 @@ class DagsterCloudAgent:
     def __exit__(self, _exception_type, _exception_value, _traceback):
         self._exit_stack.close()
 
+    def _batcher_factory(
+        self,
+    ) -> Batcher[Tuple[str, DagsterCloudUploadApiResponse], None]:
+        return Batcher(
+            "upload_api_response",
+            self._batch_upload_api_response,
+        )
+
     @property
     def _active_deployment_names(self):
         return [deployment[0] for deployment in self._active_deployments]
@@ -149,14 +189,15 @@ class DagsterCloudAgent:
     def _active_full_deployment_names(self):
         return [deployment[0] for deployment in self._active_deployments if not deployment[1]]
 
-    def _check_initial_deployment_names(self, instance: DagsterCloudAgentInstance):
-        if instance.deployment_names:
-            result = instance.organization_scoped_graphql_client().execute(
-                DEPLOYMENTS_QUERY, variable_values={"deploymentNames": instance.deployment_names}
+    def _check_initial_deployment_names(self):
+        if self._instance.deployment_names:
+            result = self._instance.organization_scoped_graphql_client().execute(
+                DEPLOYMENTS_QUERY,
+                variable_values={"deploymentNames": self._instance.deployment_names},
             )
             deployments = result["data"]["deployments"]
             existing_deployment_names = {deployment["deploymentName"] for deployment in deployments}
-            requested_deployment_names = set(instance.deployment_names)
+            requested_deployment_names = set(self._instance.deployment_names)
             missing_deployment_names = requested_deployment_names.difference(
                 existing_deployment_names
             )
@@ -245,16 +286,15 @@ class DagsterCloudAgent:
 
     def run_loop(
         self,
-        instance: DagsterCloudAgentInstance,
         user_code_launcher,
         agent_uuid,
     ):
         heartbeat_interval_seconds = AGENT_HEARTBEAT_INTERVAL_SECONDS
 
         if (
-            not instance.includes_branch_deployments
-            and not instance.deployment_names
-            and not instance.include_all_serverless_deployments
+            not self._instance.includes_branch_deployments
+            and not self._instance.deployment_names
+            and not self._instance.include_all_serverless_deployments
         ):
             self._logger.info(
                 "Deployment name was not set - checking to see if it can be fetched from the"
@@ -262,20 +302,21 @@ class DagsterCloudAgent:
             )
             # Fetch the deployment name from the server if it isn't set (only true
             # for old agents, and only will work if there's a single deployment in the org)
-            result = instance.graphql_client.execute(DEPLOYMENT_INFO_QUERY)
+            result = self._instance.graphql_client.execute(DEPLOYMENT_INFO_QUERY)
             deployment_name = result["data"]["deploymentInfo"]["deploymentName"]
-            instance = self._exit_stack.enter_context(
-                DagsterInstance.from_ref(instance.ref_for_deployment(deployment_name))  # type: ignore  # (instance subclass)
+            self._instance = self._exit_stack.enter_context(
+                DagsterInstance.from_ref(self._instance.ref_for_deployment(deployment_name))  # type: ignore  # (instance subclass)
             )
 
-        self._check_initial_deployment_names(instance)
+        self._check_initial_deployment_names()
 
         self._check_update_workspace(
-            instance, user_code_launcher, upload_all=user_code_launcher.upload_snapshots_on_startup
+            user_code_launcher,
+            upload_all=user_code_launcher.upload_snapshots_on_startup,
         )
 
         self._logger.info(
-            f"Will start polling for requests from {instance.dagster_cloud_url} once user code has"
+            f"Will start polling for requests from {self._instance.dagster_cloud_url} once user code has"
             " been loaded."
         )
 
@@ -283,7 +324,7 @@ class DagsterCloudAgent:
 
         while True:
             try:
-                for error in self.run_iteration(instance, user_code_launcher):
+                for error in self.run_iteration(user_code_launcher):
                     if error:
                         self._logger.error(str(error))
                         self._errors.appendleft(
@@ -312,7 +353,7 @@ class DagsterCloudAgent:
 
             if user_code_launcher.ready_to_serve_requests:
                 try:
-                    self._check_add_heartbeat(instance, agent_uuid, heartbeat_interval_seconds)
+                    self._check_add_heartbeat(agent_uuid, heartbeat_interval_seconds)
                 except Exception:
                     self._logger.exception("Failed to add heartbeat")
 
@@ -321,7 +362,7 @@ class DagsterCloudAgent:
                 pass
 
             try:
-                self._check_update_workspace(instance, user_code_launcher, upload_all=False)
+                self._check_update_workspace(user_code_launcher, upload_all=False)
 
             except Exception:
                 self._logger.error(
@@ -358,7 +399,7 @@ class DagsterCloudAgent:
             self._logger.error(f"Failed to write liveness sentinel and disabling it: {e}")
             self._last_liveness_check_time = False
 
-    def _check_update_workspace(self, instance, user_code_launcher, upload_all):
+    def _check_update_workspace(self, user_code_launcher, upload_all):
         curr_time = get_current_datetime()
 
         if (
@@ -369,11 +410,10 @@ class DagsterCloudAgent:
             return
 
         self._last_workspace_check_time = curr_time
-        self._query_for_workspace_updates(instance, user_code_launcher, upload_all=upload_all)
+        self._query_for_workspace_updates(user_code_launcher, upload_all=upload_all)
 
     def _check_add_heartbeat(
         self,
-        instance: DagsterCloudAgentInstance,
         agent_uuid,
         heartbeat_interval_seconds,
     ):
@@ -391,14 +431,14 @@ class DagsterCloudAgent:
             if timestamp.timestamp() > curr_time.timestamp() - 60 * 60 * 24
         ]
 
-        run_worker_statuses_dict = instance.user_code_launcher.get_cloud_run_worker_statuses(
+        run_worker_statuses_dict = self._instance.user_code_launcher.get_cloud_run_worker_statuses(
             self._active_deployment_names
         )
 
-        code_server_heartbeats_dict = instance.user_code_launcher.get_grpc_server_heartbeats()
+        code_server_heartbeats_dict = self._instance.user_code_launcher.get_grpc_server_heartbeats()
 
         agent_image_tag = os.getenv("DAGSTER_CLOUD_AGENT_IMAGE_TAG")
-        if instance.user_code_launcher.agent_metrics_enabled:
+        if self._instance.user_code_launcher.agent_metrics_enabled:
             num_running_requests = self._utilization_metrics["request_utilization"][
                 "num_running_requests"
             ]
@@ -415,10 +455,10 @@ class DagsterCloudAgent:
             deployment_name: AgentHeartbeat(
                 timestamp=curr_time.timestamp(),
                 agent_id=agent_uuid,
-                agent_label=instance.dagster_cloud_api_agent_label,
+                agent_label=self._instance.dagster_cloud_api_agent_label,
                 agent_type=(
-                    type(instance.user_code_launcher).__name__
-                    if instance.user_code_launcher
+                    type(self._instance.user_code_launcher).__name__
+                    if self._instance.user_code_launcher
                     else None
                 ),
                 metadata=merge_dicts(
@@ -426,13 +466,13 @@ class DagsterCloudAgent:
                     {"image_tag": agent_image_tag} if agent_image_tag else {},
                     {
                         "utilization_metrics": self._utilization_metrics
-                        if instance.user_code_launcher.agent_metrics_enabled
+                        if self._instance.user_code_launcher.agent_metrics_enabled
                         else {}
                     },
                 ),
                 run_worker_statuses=run_worker_statuses_dict[deployment_name],
                 code_server_heartbeats=code_server_heartbeats_dict.get(deployment_name, []),
-                agent_queues_config=instance.agent_queues_config,
+                agent_queues_config=self._instance.agent_queues_config,
             )
             for deployment_name in self._active_deployment_names
         }
@@ -447,7 +487,7 @@ class DagsterCloudAgent:
 
         serialized_errors = [serialize_value(error) for error in errors]
         try:
-            instance.organization_scoped_graphql_client().execute(
+            self._instance.organization_scoped_graphql_client().execute(
                 ADD_AGENT_HEARTBEATS_MUTATION,
                 variable_values={
                     "serializedAgentHeartbeats": serialized_agent_heartbeats,
@@ -473,7 +513,7 @@ class DagsterCloudAgent:
                     for deployment_name, heartbeat in heartbeats.items()
                 ]
 
-                instance.organization_scoped_graphql_client().execute(
+                self._instance.organization_scoped_graphql_client().execute(
                     ADD_AGENT_HEARTBEATS_MUTATION,
                     variable_values={
                         "serializedAgentHeartbeats": serialized_agent_heartbeats,
@@ -505,17 +545,16 @@ class DagsterCloudAgent:
 
     def _upload_outdated_workspace_entries(
         self,
-        instance: DagsterCloudAgentInstance,
         deployment_name: str,
         is_branch_deployment: bool,
         user_code_launcher: DagsterCloudUserCodeLauncher,
     ):
-        result = instance.graphql_client_for_deployment(deployment_name).execute(
+        result = self._instance.graphql_client_for_deployment(deployment_name).execute(
             WORKSPACE_ENTRIES_QUERY,
             variable_values={
                 "deploymentNames": [deployment_name],
                 "includeAllServerlessDeployments": False,
-                "agentQueues": instance.agent_queues_config.queues,
+                "agentQueues": self._instance.agent_queues_config.queues,
             },
         )
         entries = result["data"]["deployments"][0]["workspaceEntries"]
@@ -545,16 +584,14 @@ class DagsterCloudAgent:
         # branch deployments always have TTLs, other deployments only if you asked for it specifically
         return is_branch_deployment or user_code_launcher.server_ttl_enabled_for_full_deployments
 
-    def _get_ttl_seconds(self, instance, is_branch_deployment):
+    def _get_ttl_seconds(self, is_branch_deployment):
         return (
-            instance.user_code_launcher.branch_deployment_ttl_seconds
+            self._instance.user_code_launcher.branch_deployment_ttl_seconds
             if is_branch_deployment
-            else instance.user_code_launcher.full_deployment_ttl_seconds
+            else self._instance.user_code_launcher.full_deployment_ttl_seconds
         )
 
-    def _get_locations_with_ttl_to_query(
-        self, instance, user_code_launcher
-    ) -> List[Tuple[str, str]]:
+    def _get_locations_with_ttl_to_query(self, user_code_launcher) -> List[Tuple[str, str]]:
         now = time.time()
 
         # For the deployments with TTLs, decide which locations to consider
@@ -568,7 +605,7 @@ class DagsterCloudAgent:
             if self._has_ttl(user_code_launcher, is_branch_deployment)
         }
 
-        num_locations_to_query = instance.user_code_launcher.server_ttl_max_servers
+        num_locations_to_query = self._instance.user_code_launcher.server_ttl_max_servers
 
         if len(location_candidates) > num_locations_to_query:
             self._logger.warning(
@@ -590,7 +627,7 @@ class DagsterCloudAgent:
 
             time_since_last_query = now - query_time
 
-            if time_since_last_query >= self._get_ttl_seconds(instance, is_branch_deployment):
+            if time_since_last_query >= self._get_ttl_seconds(is_branch_deployment):
                 continue
 
             location_candidates.add((deployment_name, location, time_since_last_query))
@@ -612,13 +649,10 @@ class DagsterCloudAgent:
 
     def _query_for_workspace_updates(
         self,
-        instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
         upload_all: bool,
     ):
-        locations_with_ttl_to_query = self._get_locations_with_ttl_to_query(
-            instance, user_code_launcher
-        )
+        locations_with_ttl_to_query = self._get_locations_with_ttl_to_query(user_code_launcher)
 
         deployments_to_query = {key[0] for key in locations_with_ttl_to_query}
 
@@ -629,8 +663,8 @@ class DagsterCloudAgent:
             self._logger.debug(f"Querying for the following locations with TTL: {locations_str}")
 
         # If you have specified a non-branch deployment and no TTL, always consider it
-        if instance.deployment_names:
-            deployments_to_query = deployments_to_query.union(set(instance.deployment_names))
+        if self._instance.deployment_names:
+            deployments_to_query = deployments_to_query.union(set(self._instance.deployment_names))
 
         # Create mapping of
         # - location name => deployment metadata
@@ -639,13 +673,13 @@ class DagsterCloudAgent:
 
         self._active_deployments = set()
 
-        if deployments_to_query or instance.include_all_serverless_deployments:
-            result = instance.organization_scoped_graphql_client().execute(
+        if deployments_to_query or self._instance.include_all_serverless_deployments:
+            result = self._instance.organization_scoped_graphql_client().execute(
                 WORKSPACE_ENTRIES_QUERY,
                 variable_values={
                     "deploymentNames": list(deployments_to_query),
-                    "includeAllServerlessDeployments": instance.include_all_serverless_deployments,
-                    "agentQueues": instance.agent_queues_config.queues,
+                    "includeAllServerlessDeployments": self._instance.include_all_serverless_deployments,
+                    "agentQueues": self._instance.agent_queues_config.queues,
                 },
             )
 
@@ -747,17 +781,15 @@ class DagsterCloudAgent:
         else:
             return None
 
-    def _get_user_code_instance_ref(
-        self, instance: DagsterCloudAgentInstance, deployment_name: str
-    ):
-        return get_instance_ref_for_user_code(instance.ref_for_deployment(deployment_name))
+    @cached_method
+    def _get_user_code_instance_ref(self, deployment_name: str):
+        return get_instance_ref_for_user_code(self._instance.ref_for_deployment(deployment_name))
 
     def _handle_api_request(
         self,
         request: DagsterCloudApiRequest,
         deployment_name: str,
         is_branch_deployment: bool,
-        instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
     ) -> Union[DagsterCloudApiSuccess, DagsterCloudApiGrpcResponse]:
         api_name = request.request_api
@@ -772,7 +804,7 @@ class DagsterCloudAgent:
             # Dagster Cloud has requested that we upload new metadata for any out of date locations in
             # the workspace
             self._upload_outdated_workspace_entries(
-                instance, deployment_name, is_branch_deployment, user_code_launcher
+                deployment_name, is_branch_deployment, user_code_launcher
             )
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.GET_EXTERNAL_EXECUTION_PLAN:
@@ -781,7 +813,7 @@ class DagsterCloudAgent:
             )
             serialized_snapshot_or_error = client.execution_plan_snapshot(
                 execution_plan_snapshot_args=request.request_args._replace(
-                    instance_ref=self._get_user_code_instance_ref(instance, deployment_name)
+                    instance_ref=self._get_user_code_instance_ref(deployment_name)
                 )
             )
             return DagsterCloudApiGrpcResponse(serialized_snapshot_or_error)
@@ -836,7 +868,7 @@ class DagsterCloudAgent:
             )
 
             args = request.request_args._replace(
-                instance_ref=self._get_user_code_instance_ref(instance, deployment_name)
+                instance_ref=self._get_user_code_instance_ref(deployment_name)
             )
 
             serialized_schedule_data_or_error = client.external_schedule_execution(
@@ -851,7 +883,7 @@ class DagsterCloudAgent:
             )
 
             args = request.request_args._replace(
-                instance_ref=self._get_user_code_instance_ref(instance, deployment_name)
+                instance_ref=self._get_user_code_instance_ref(deployment_name)
             )
 
             serialized_sensor_data_or_error = client.external_sensor_execution(
@@ -869,10 +901,10 @@ class DagsterCloudAgent:
             run = request.request_args.dagster_run
 
             with DagsterInstance.from_ref(
-                self._get_user_code_instance_ref(instance, deployment_name)
+                self._get_user_code_instance_ref(deployment_name)
             ) as scoped_instance:
                 scoped_instance.report_engine_event(
-                    f"{instance.agent_display_name} is launching run {run.run_id}",
+                    f"{self._instance.agent_display_name} is launching run {run.run_id}",
                     run,
                     cls=self.__class__,
                 )
@@ -881,11 +913,11 @@ class DagsterCloudAgent:
                     run.run_id,
                     merge_dicts(
                         (
-                            {"dagster/agent_label": instance.dagster_cloud_api_agent_label}
-                            if instance.dagster_cloud_api_agent_label
+                            {"dagster/agent_label": self._instance.dagster_cloud_api_agent_label}
+                            if self._instance.dagster_cloud_api_agent_label
                             else {}
                         ),
-                        {"dagster/agent_id": instance.instance_uuid},
+                        {"dagster/agent_id": self._instance.instance_uuid},
                     ),
                 )
 
@@ -925,18 +957,18 @@ class DagsterCloudAgent:
             run = request.request_args.dagster_run
 
             with DagsterInstance.from_ref(
-                instance.ref_for_deployment(deployment_name)
+                self._instance.ref_for_deployment(deployment_name)
             ) as scoped_instance:
-                if instance.is_using_isolated_agents:
+                if self._instance.is_using_isolated_agents:
                     scoped_instance.report_engine_event(
-                        f"{instance.agent_display_name} received request to mark run as canceling",
+                        f"{self._instance.agent_display_name} received request to mark run as canceling",
                         run,
                         cls=self.__class__,
                     )
                     scoped_instance.report_run_canceling(run)
                 else:
                     scoped_instance.report_engine_event(
-                        f"{instance.agent_display_name} received request to terminate run",
+                        f"{self._instance.agent_display_name} received request to terminate run",
                         run,
                         cls=self.__class__,
                     )
@@ -966,7 +998,6 @@ class DagsterCloudAgent:
     def _process_api_request(
         self,
         json_request: Dict,
-        instance: DagsterCloudAgentInstance,
         user_code_launcher: DagsterCloudUserCodeLauncher,
         submitted_to_executor_timestamp: float,
     ) -> Optional[SerializableErrorInfo]:
@@ -995,7 +1026,7 @@ class DagsterCloudAgent:
                 request = deserialize_value(request_body, DagsterCloudApiRequest)
                 self._logger.info(f"Received request {request}.")
                 api_result = self._handle_api_request(
-                    request, deployment_name, is_branch_deployment, instance, user_code_launcher
+                    request, deployment_name, is_branch_deployment, user_code_launcher
                 )
             except Exception:
                 error_info = serializable_error_info_from_exc_info(sys.exc_info())
@@ -1024,11 +1055,26 @@ class DagsterCloudAgent:
 
         self._logger.info(f"Uploading response for request {request}.")
 
-        upload_api_response(instance, deployment_name, upload_response)
+        if UPLOAD_API_RESPONSE_BATCHING_ENABLED():
+            self._batcher[deployment_name].submit((deployment_name, upload_response))
+        else:
+            upload_api_response(self._instance, deployment_name, upload_response)
 
         self._logger.info(f"Finished uploading response for request {request}.")
 
         return error_info
+
+    def _batch_upload_api_response(
+        self, upload_response_batch: List[Tuple[str, DagsterCloudUploadApiResponse]]
+    ) -> List[None]:
+        deployment_names = set(deployment_name for deployment_name, _ in upload_response_batch)
+        assert len(deployment_names) == 1
+        batch_upload_api_response(
+            self._instance,
+            next(iter(deployment_names)),
+            [resp for _, resp in upload_response_batch],
+        )
+        return [None for _ in upload_response_batch]
 
     def _get_location_from_request(self, json_request: Dict[str, Any]) -> Optional[str]:
         request_api = json_request["requestApi"]
@@ -1044,7 +1090,7 @@ class DagsterCloudAgent:
         return location_origin.location_name
 
     def run_iteration(
-        self, instance: DagsterCloudAgentInstance, user_code_launcher: DagsterCloudUserCodeLauncher
+        self, user_code_launcher: DagsterCloudUserCodeLauncher
     ) -> Iterator[Optional[SerializableErrorInfo]]:
         if not user_code_launcher.ready_to_serve_requests:
             return
@@ -1053,12 +1099,12 @@ class DagsterCloudAgent:
 
         if num_pending_requests < self._pending_requests_limit:
             # limit (implicit default 10) applied separately for requests to branch deployments, and for each full deployment
-            result = instance.organization_scoped_graphql_client().execute(
+            result = self._instance.organization_scoped_graphql_client().execute(
                 GET_USER_CLOUD_REQUESTS_QUERY,
                 {
-                    "forBranchDeployments": instance.includes_branch_deployments,
+                    "forBranchDeployments": self._instance.includes_branch_deployments,
                     "forFullDeployments": self._active_full_deployment_names,
-                    "agentQueues": instance.agent_queues_config.queues,
+                    "agentQueues": self._instance.agent_queues_config.queues,
                 },
             )
             json_requests = result["data"]["userCloudAgent"]["popUserCloudAgentRequests"]
@@ -1111,7 +1157,6 @@ class DagsterCloudAgent:
             future = self._executor.submit(
                 self._process_api_request,
                 json_request,
-                instance,
                 user_code_launcher,
                 submitted_to_executor_timestamp,
             )
@@ -1138,7 +1183,7 @@ class DagsterCloudAgent:
                 if response:
                     yield response
 
-        if instance.user_code_launcher.agent_metrics_enabled and (
+        if self._instance.user_code_launcher.agent_metrics_enabled and (
             self._utilization_metrics["container_utilization"]["measurement_timestamp"] is None
             or (
                 get_current_timestamp()
@@ -1150,6 +1195,22 @@ class DagsterCloudAgent:
         self._iteration += 1
 
         yield None
+
+
+def batch_upload_api_response(
+    instance: DagsterCloudAgentInstance,
+    deployment_name: str,
+    batch: List[DagsterCloudUploadApiResponse],
+):
+    with compressed_namedtuple_upload_file(BatchDagsterCloudUploadApiResponse(batch=batch)) as f:
+        resp = instance.requests_managed_retries_session.put(
+            instance.dagster_cloud_upload_api_response_url,
+            headers=instance.headers_for_deployment(deployment_name),
+            files={"api_response_batch.tmp": f},
+            timeout=instance.dagster_cloud_api_timeout,
+            proxies=instance.dagster_cloud_api_proxies,
+        )
+        raise_http_error(resp)
 
 
 def upload_api_response(

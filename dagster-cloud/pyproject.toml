@@ -1,0 +1,115 @@
+[build-system]
+requires = [
+    "setuptools>=61.2",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dagster-cloud"
+requires-python = ">=3.9,<3.13"
+dynamic = [
+    "version",
+]
+authors = [
+    { name = "Elementl", email = "support@elementl.com" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: System :: Monitoring",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "dagster==1.9.1",
+    "dagster-cloud-cli==1.9.1",
+    "pex>=2.1.132,<3",
+    "questionary",
+    "requests",
+    "typer",
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://dagster.io/cloud"
+GitHub = "https://github.com/dagster-io/dagster-cloud"
+Changelog = "https://github.com/dagster-io/dagster-cloud/blob/main/CHANGES.md"
+"Issue Tracker" = "https://github.com/dagster-io/dagster-cloud/issues"
+Twitter = "https://twitter.com/dagster"
+LinkedIn = "https://www.linkedin.com/showcase/dagster"
+YouTube = "https://www.youtube.com/channel/UCfLnv9X8jyHTe6gJ4hVBo9Q"
+Slack = "https://dagster.io/slack"
+Blog = "https://dagster.io/blog"
+Newsletter = "https://dagster.io/newsletter-signup"
+
+[project.optional-dependencies]
+tests = [
+    "docker",
+    "httpretty",
+    "isort",
+    "kubernetes",
+    "moto[all]",
+    "mypy",
+    "psutil",
+    "pylint",
+    "pytest",
+    "types-PyYAML",
+    "types-requests",
+    "dagster-cloud-test-infra",
+    "dbt-bigquery",
+    "dbt-core",
+    "dbt-snowflake",
+    "dbt-duckdb",
+    "dagster-dbt",
+    "dagster_k8s",
+]
+insights = [
+    "pyarrow",
+]
+docker = [
+    "docker",
+    "dagster_docker",
+]
+kubernetes = [
+    "kubernetes",
+    "dagster_k8s",
+]
+ecs = [
+    "dagster_aws",
+    "boto3",
+]
+sandbox = [
+    "supervisor",
+]
+pex = [
+    "boto3",
+]
+serverless = [
+    "boto3",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic.version]
+attr = "dagster_cloud.version.__version__"
+
+[tool.setuptools.packages.find]
+exclude = [
+    "dagster_cloud_tests*",
+]
+namespaces = false
