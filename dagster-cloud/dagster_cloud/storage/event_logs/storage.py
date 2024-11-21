@@ -1286,10 +1286,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_asset_status_cache_values(
         self,
-        partitions_defs_by_key: Mapping[AssetKey, Optional[PartitionsDefinition]],
+        partitions_defs_by_key: Iterable[Tuple[AssetKey, Optional[PartitionsDefinition]]],
         context,
     ) -> Sequence[Optional[AssetStatusCacheValue]]:
-        asset_keys = list(partitions_defs_by_key.keys())
+        asset_keys = [key for key, _ in partitions_defs_by_key]
         res = self._execute_query(
             GET_ASSET_STATUS_CACHE_VALUES,
             variables={

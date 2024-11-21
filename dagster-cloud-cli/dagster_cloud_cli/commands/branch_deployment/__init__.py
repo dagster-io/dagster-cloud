@@ -56,7 +56,9 @@ def create_or_update(
         ..., "--branch-name", help="The name of the version control branch."
     ),
     commit_hash: str = typer.Option(None, help="The latest commit hash."),
-    timestamp: float = typer.Option(None, help="The latest commit timestamp."),
+    timestamp: float = typer.Option(
+        None, help="The latest commit timestamp, in unix time (seconds since epoch)."
+    ),
     branch_url: str = typer.Option(None, help="The URL of the version control branch."),
     pull_request_url: str = typer.Option(
         None,

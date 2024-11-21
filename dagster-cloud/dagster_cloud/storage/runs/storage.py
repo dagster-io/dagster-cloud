@@ -24,12 +24,7 @@ from dagster._core.events import DagsterEvent
 from dagster._core.execution.backfill import BulkActionsFilter, BulkActionStatus, PartitionBackfill
 from dagster._core.execution.telemetry import RunTelemetryData
 from dagster._core.remote_representation.origin import RemoteJobOrigin
-from dagster._core.snap import (
-    ExecutionPlanSnapshot,
-    JobSnap,
-    create_execution_plan_snapshot_id,
-    create_job_snapshot_id,
-)
+from dagster._core.snap import ExecutionPlanSnapshot, JobSnap, create_execution_plan_snapshot_id
 from dagster._core.storage.dagster_run import (
     DagsterRun,
     JobBucket,
@@ -391,7 +386,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "snapshotId": snapshot_id,
             },
         )
-        return snapshot_id if snapshot_id else create_job_snapshot_id(pipeline_snapshot)
+        return snapshot_id if snapshot_id else pipeline_snapshot.snapshot_id
 
     def get_job_snapshot(self, pipeline_snapshot_id: str) -> JobSnap:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         res = self._execute_query(

@@ -29,8 +29,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.9.2",
-    "dagster-cloud-cli==1.9.2",
+    "dagster==1.9.3",
+    "dagster-cloud-cli==1.9.3",
     "pex>=2.1.132,<3",
     "questionary",
     "requests",
