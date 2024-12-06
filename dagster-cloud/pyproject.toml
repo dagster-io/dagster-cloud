@@ -29,8 +29,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.9.3",
-    "dagster-cloud-cli==1.9.3",
+    "dagster==1.9.4",
+    "dagster-cloud-cli==1.9.4",
     "pex>=2.1.132,<3",
     "questionary",
     "requests",
@@ -61,6 +61,8 @@ tests = [
     "docker",
     "httpretty",
     "isort",
+    "freezegun",
+    "wordcloud",
     "kubernetes",
     "moto[all]",
     "mypy",

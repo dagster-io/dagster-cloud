@@ -74,6 +74,27 @@ TARGET_TYPES_SCHEMA = {
             }
         )
     ),
+    "asset_selection_target": Field(
+        config=Shape(
+            fields={
+                "asset_selection": Field(
+                    config=str,
+                    is_required=True,
+                    description="The asset selection to target.",
+                ),
+                "location_name": Field(
+                    config=str,
+                    is_required=False,
+                    description=("The name of the code location to target. Optional."),
+                ),
+                "repo_name": Field(
+                    config=str,
+                    is_required=False,
+                    description=("The name of the repository to target. Optional."),
+                ),
+            }
+        )
+    ),
     "asset_key_target": Field(
         config=Shape(
             fields={

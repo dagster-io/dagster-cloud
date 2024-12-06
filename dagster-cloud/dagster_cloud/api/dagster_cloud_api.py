@@ -1,16 +1,15 @@
 import enum
 from datetime import timedelta
 from enum import Enum
-from typing import Any, List, Mapping, NamedTuple, Optional, Sequence, TypedDict, Union, cast
+from typing import Any, List, Mapping, Optional, Sequence, TypedDict, Union
 
-import dagster._check as check
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
 from dagster._core.events.log import EventLogEntry
 from dagster._core.remote_representation import CodeLocationOrigin, RepositorySnap
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.utils import RequestUtilizationMetrics
-from dagster._record import record
+from dagster._record import IHaveNew, copy, record, record_custom
 from dagster._serdes import whitelist_for_serdes
 from dagster._time import get_current_datetime, get_current_timestamp
 from dagster._utils.container import ContainerUtilizationMetrics
@@ -30,7 +29,8 @@ DEFAULT_EXPIRATION_MILLISECONDS = 10 * 60 * 1000
 
 
 @whitelist_for_serdes
-class DagsterCloudUploadRepositoryData(NamedTuple):
+@record
+class DagsterCloudUploadRepositoryData:
     """Serialized object uploaded by the Dagster Cloud agent with information pulled
     from a gRPC server about an individual repository - the data field is serialized since the
     agent may be running older code that doesn't know how to deserialize it, so it passes
@@ -43,7 +43,8 @@ class DagsterCloudUploadRepositoryData(NamedTuple):
 
 
 @whitelist_for_serdes
-class DagsterCloudUploadLocationData(NamedTuple):
+@record
+class DagsterCloudUploadLocationData:
     """Serialized object uploaded by the Dagster Cloud agent with information pulled
     about a successfully loaded repository location, including information about
     each repository as well as shared metadata like the image to use when launching
@@ -57,7 +58,8 @@ class DagsterCloudUploadLocationData(NamedTuple):
 
 
 @whitelist_for_serdes(storage_field_names={"code_location_deploy_data": "deployment_metadata"})
-class DagsterCloudUploadWorkspaceEntry(NamedTuple):
+@record
+class DagsterCloudUploadWorkspaceEntry:
     """Serialized object uploaded by the Dagster Cloud agent with information about
     a repository location - either the serialized DagsterCloudUploadLocationData
     if the location loaded succesfully, or a SerializableErrorInfo describing the
@@ -71,7 +73,8 @@ class DagsterCloudUploadWorkspaceEntry(NamedTuple):
 
 
 @whitelist_for_serdes
-class DagsterCloudUploadWorkspaceResponse(NamedTuple):
+@record
+class DagsterCloudUploadWorkspaceResponse:
     updated: bool
     message: str
     missing_job_snapshots: Optional[Sequence[JobSelector]]
@@ -107,30 +110,11 @@ class DagsterCloudApi(Enum):
 
 
 @whitelist_for_serdes
-class DagsterCloudApiThreadTelemetry(
-    NamedTuple(
-        "_DagsterCloudApiThreadTelemetry",
-        [
-            ("submitted_to_executor_timestamp", float),
-            ("thread_start_run_timestamp", float),
-            ("thread_end_handle_api_request_timestamp", float),
-        ],
-    )
-):
-    def __new__(
-        cls,
-        submitted_to_executor_timestamp: float,
-        thread_start_run_timestamp: float,
-        thread_end_handle_api_request_timestamp: float,
-    ):
-        return super(cls, DagsterCloudApiThreadTelemetry).__new__(
-            cls,
-            check.float_param(submitted_to_executor_timestamp, "submitted_to_executor_timestamp"),
-            check.float_param(thread_start_run_timestamp, "thread_start_run_timestamp"),
-            check.float_param(
-                thread_end_handle_api_request_timestamp, "thread_end_handle_api_request_timestamp"
-            ),
-        )
+@record
+class DagsterCloudApiThreadTelemetry:
+    submitted_to_executor_timestamp: float
+    thread_start_run_timestamp: float
+    thread_end_handle_api_request_timestamp: float
 
     @property
     def time_to_thread_initialization_seconds(self) -> float:
@@ -142,213 +126,101 @@ class DagsterCloudApiThreadTelemetry(
 
 
 @whitelist_for_serdes(old_storage_names={"CheckForWorkspaceUpdatesRequest"})
-class DagsterCloudApiSuccess(
-    NamedTuple(
-        "_DagsterCloudApiSuccess", [("thread_telemetry", Optional[DagsterCloudApiThreadTelemetry])]
-    )
-):
-    def __new__(cls, thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None):
-        return super(cls, DagsterCloudApiSuccess).__new__(
-            cls,
-            check.opt_inst_param(
-                thread_telemetry, "thread_telemetry", DagsterCloudApiThreadTelemetry
-            ),
-        )
+@record
+class DagsterCloudApiSuccess:
+    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
-        return self._replace(thread_telemetry=thread_telemetry)
+        return copy(self, thread_telemetry=thread_telemetry)
 
 
 @whitelist_for_serdes
-class DagsterCloudApiUnknownCommandResponse(
-    NamedTuple(
-        "_DagsterCloudApiUnknownCommandResponse",
-        [("request_api", str), ("thread_telemetry", Optional[DagsterCloudApiThreadTelemetry])],
-    )
-):
-    def __new__(
-        cls, request_api: str, thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
-    ):
-        return super(cls, DagsterCloudApiUnknownCommandResponse).__new__(
-            cls,
-            check.str_param(request_api, "request_api"),
-            check.opt_inst_param(
-                thread_telemetry, "thread_telemetry", DagsterCloudApiThreadTelemetry
-            ),
-        )
+@record
+class DagsterCloudApiUnknownCommandResponse:
+    request_api: str
+    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
-        return self._replace(thread_telemetry=thread_telemetry)
+        return copy(self, thread_telemetry=thread_telemetry)
 
 
 @whitelist_for_serdes
-class DagsterCloudApiErrorResponse(
-    NamedTuple(
-        "_DagsterCloudApiErrorResponse",
-        [
-            ("error_infos", List[SerializableErrorInfo]),
-            ("thread_telemetry", Optional[DagsterCloudApiThreadTelemetry]),
-        ],
-    )
-):
-    def __new__(
-        cls,
-        error_infos: List[SerializableErrorInfo],
-        thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None,
-    ):
-        return super(cls, DagsterCloudApiErrorResponse).__new__(
-            cls,
-            check.list_param(error_infos, "error_infos", of_type=SerializableErrorInfo),
-            check.opt_inst_param(
-                thread_telemetry, "thread_telemetry", DagsterCloudApiThreadTelemetry
-            ),
-        )
+@record
+class DagsterCloudApiErrorResponse:
+    error_infos: List[SerializableErrorInfo]
+    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
-        return self._replace(thread_telemetry=thread_telemetry)
+        return copy(self, thread_telemetry=thread_telemetry)
 
 
 @whitelist_for_serdes
-class DagsterCloudApiGrpcResponse(
-    NamedTuple(
-        "_DagsterCloudApiGrpcResponse",
-        [
-            ("serialized_response_or_error", str),
-            ("thread_telemetry", Optional[DagsterCloudApiThreadTelemetry]),
-        ],
-    )
-):
+@record
+class DagsterCloudApiGrpcResponse:
     # Class that DagsterCloudApi methods can use to pass along the result of
     # a gRPC call against the user code server. The field here is passed in
     # serialized as a string, because we can't guarantee that the agent code will
     # be up-to-date enough to know how to deserialize it (but the host cloud always
     # should, since it will always be up to date).
-    def __new__(
-        cls,
-        serialized_response_or_error: str,
-        thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None,
-    ):
-        return super(cls, DagsterCloudApiGrpcResponse).__new__(
-            cls,
-            check.str_param(serialized_response_or_error, "serialized_response_or_error"),
-            check.opt_inst_param(
-                thread_telemetry, "thread_telemetry", DagsterCloudApiThreadTelemetry
-            ),
-        )
+    serialized_response_or_error: str
+    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
-        return self._replace(thread_telemetry=thread_telemetry)
+        return copy(self, thread_telemetry=thread_telemetry)
 
 
 @whitelist_for_serdes
-class LoadRepositoriesArgs(
-    NamedTuple("_LoadRepositoryArgs", [("location_origin", CodeLocationOrigin)])
-):
-    def __new__(cls, location_origin):
-        return super(cls, LoadRepositoriesArgs).__new__(
-            cls,
-            check.inst_param(location_origin, "location_origin", CodeLocationOrigin),
-        )
+@record
+class LoadRepositoriesArgs:
+    location_origin: CodeLocationOrigin
 
 
 @whitelist_for_serdes
-class DagsterCloudRepositoryData(
-    NamedTuple(
-        "_DagsterCloudRepositoryData",
-        [
-            ("repo_name", str),
-            ("code_pointer", CodePointer),
-            ("external_repository_data", RepositorySnap),
-        ],
-    )
-):
-    def __new__(cls, repo_name, code_pointer, external_repository_data):
-        return super(cls, DagsterCloudRepositoryData).__new__(
-            cls,
-            check.str_param(repo_name, "repo_name"),
-            check.inst_param(code_pointer, "code_pointer", CodePointer),
-            check.inst_param(
-                external_repository_data,
-                "external_repository_data",
-                RepositorySnap,
-            ),
-        )
+@record
+class DagsterCloudRepositoryData:
+    repo_name: str
+    code_pointer: CodePointer
+    external_repository_data: RepositorySnap
 
 
 @whitelist_for_serdes(storage_field_names={"code_location_deploy_data": "code_deployment_metadata"})
-class LoadRepositoriesResponse(
-    NamedTuple(
-        "_LoadRepositoriesResponse",
-        [
-            ("repository_datas", Sequence[DagsterCloudRepositoryData]),
-            ("container_image", Optional[str]),
-            ("executable_path", Optional[str]),
-            ("code_location_deploy_data", Optional[CodeLocationDeployData]),
-            ("dagster_library_versions", Optional[Mapping[str, str]]),
-        ],
-    )
-):
-    def __new__(
-        cls,
-        repository_datas,
-        container_image,
-        executable_path,
-        code_location_deploy_data=None,
-        dagster_library_versions: Optional[Mapping[str, str]] = None,
-    ):
-        return super(cls, LoadRepositoriesResponse).__new__(
-            cls,
-            check.list_param(
-                repository_datas,
-                "repository_datas",
-                of_type=DagsterCloudRepositoryData,
-            ),
-            check.opt_str_param(container_image, "container_image"),
-            check.opt_str_param(executable_path, "executable_path"),
-            check.opt_inst_param(
-                code_location_deploy_data, "code_location_deploy_data", CodeLocationDeployData
-            ),
-            check.opt_nullable_mapping_param(dagster_library_versions, "dagster_library_versions"),
-        )
+@record
+class LoadRepositoriesResponse:
+    repository_datas: Sequence[DagsterCloudRepositoryData]
+    container_image: Optional[str]
+    executable_path: Optional[str]
+    code_location_deploy_data: Optional[CodeLocationDeployData] = None
+    dagster_library_versions: Optional[Mapping[str, str]] = None
 
 
 @whitelist_for_serdes
-class PingLocationArgs(NamedTuple("_PingLocationArgs", [("location_name", str)])):
-    pass
+@record
+class PingLocationArgs:
+    location_name: str
 
 
 @whitelist_for_serdes(storage_field_names={"dagster_run": "pipeline_run"})
-class LaunchRunArgs(NamedTuple("_LaunchRunArgs", [("dagster_run", DagsterRun)])):
-    def __new__(cls, dagster_run):
-        return super(cls, LaunchRunArgs).__new__(
-            cls,
-            check.inst_param(dagster_run, "dagster_run", DagsterRun),
-        )
+@record
+class LaunchRunArgs:
+    dagster_run: DagsterRun
 
 
 @whitelist_for_serdes(storage_field_names={"dagster_run": "pipeline_run"})
-class TerminateRunArgs(NamedTuple("_TerminateRunArgs", [("dagster_run", DagsterRun)])):
-    def __new__(cls, dagster_run):
-        return super(cls, TerminateRunArgs).__new__(
-            cls,
-            check.inst_param(dagster_run, "dagster_run", DagsterRun),
-        )
+@record
+class TerminateRunArgs:
+    dagster_run: DagsterRun
 
 
 @whitelist_for_serdes
-class DagsterCloudApiRequest(
-    NamedTuple(
-        "_DagsterCloudApiRequest",
-        [
-            ("request_id", str),
-            ("request_api", DagsterCloudApi),
-            ("request_args", Any),
-            ("deployment_name", str),
-            ("expire_at", float),
-            ("is_branch_deployment", bool),
-        ],
-    )
-):
+@record_custom
+class DagsterCloudApiRequest(IHaveNew):
+    request_id: str
+    request_api: DagsterCloudApi
+    request_args: Any
+    deployment_name: str
+    expire_at: float
+    is_branch_deployment: bool
+
     def __new__(
         cls,
         request_id: str,
@@ -358,20 +230,18 @@ class DagsterCloudApiRequest(
         expire_at: Optional[float] = None,
         is_branch_deployment: Optional[bool] = None,
     ):
-        return super(cls, DagsterCloudApiRequest).__new__(
+        return super().__new__(
             cls,
-            check.str_param(request_id, "request_id"),
-            check.inst_param(request_api, "request_api", DagsterCloudApi),
-            request_args,
-            check.str_param(deployment_name, "deployment_name"),
-            check.opt_float_param(
-                expire_at,
-                "expire_at",
-                default=(
-                    get_current_datetime() + timedelta(milliseconds=DEFAULT_EXPIRATION_MILLISECONDS)
-                ).timestamp(),
-            ),
-            check.opt_bool_param(is_branch_deployment, "is_branch_deployment", default=False),
+            request_id=request_id,
+            request_api=request_api,
+            request_args=request_args,
+            deployment_name=deployment_name,
+            expire_at=expire_at
+            if expire_at is not None
+            else (
+                get_current_datetime() + timedelta(milliseconds=DEFAULT_EXPIRATION_MILLISECONDS)
+            ).timestamp(),
+            is_branch_deployment=False if is_branch_deployment is None else is_branch_deployment,
         )
 
     @property
@@ -402,36 +272,17 @@ DagsterCloudApiResponseTypesTuple = (
 
 
 @whitelist_for_serdes
-class StoreEventBatchRequest(
-    NamedTuple("_StoreEventBatchRequest", [("event_log_entries", Sequence[EventLogEntry])])
-):
-    def __new__(cls, event_log_entries: Sequence[EventLogEntry]):
-        return super().__new__(cls, event_log_entries=event_log_entries)
+@record
+class StoreEventBatchRequest:
+    event_log_entries: Sequence[EventLogEntry]
 
 
 @whitelist_for_serdes
-class DagsterCloudUploadApiResponse(
-    NamedTuple(
-        "_DagsterCloudUploadApiResponse",
-        [
-            ("request_id", str),
-            ("request_api", str),
-            ("response", DagsterCloudApiResponse),
-        ],
-    )
-):
-    def __new__(
-        cls,
-        request_id: str,
-        request_api: str,
-        response: DagsterCloudApiResponse,
-    ):
-        return super().__new__(
-            cls,
-            request_id=check.str_param(request_id, "request_id"),
-            request_api=check.str_param(request_api, "request_api"),
-            response=check.inst_param(response, "response", DagsterCloudApiResponseTypesTuple),
-        )
+@record
+class DagsterCloudUploadApiResponse:
+    request_id: str
+    request_api: str
+    response: DagsterCloudApiResponse
 
 
 @whitelist_for_serdes
@@ -441,21 +292,10 @@ class BatchDagsterCloudUploadApiResponse:
 
 
 @whitelist_for_serdes
-class TimestampedError(
-    NamedTuple(
-        "_TimestampedError",
-        [
-            ("timestamp", Optional[float]),
-            ("error", SerializableErrorInfo),
-        ],
-    )
-):
-    def __new__(cls, timestamp, error):
-        return super(TimestampedError, cls).__new__(
-            cls,
-            timestamp=check.opt_float_param(timestamp, "timestamp"),
-            error=check.inst_param(error, "error", SerializableErrorInfo),
-        )
+@record
+class TimestampedError:
+    timestamp: Optional[float]
+    error: SerializableErrorInfo
 
 
 class UserCodeDeploymentType(enum.Enum):
@@ -490,22 +330,18 @@ class AgentHeartbeatMetadata(TypedDict):
 
 
 @whitelist_for_serdes
-class AgentHeartbeat(
-    NamedTuple(
-        "_AgentHeartbeat",
-        [
-            ("timestamp", float),
-            ("agent_id", str),
-            ("agent_label", Optional[str]),
-            ("agent_type", Optional[str]),
-            ("errors", Optional[Sequence[TimestampedError]]),
-            ("metadata", AgentHeartbeatMetadata),
-            ("run_worker_statuses", Optional[CloudRunWorkerStatuses]),
-            ("code_server_heartbeats", Sequence[CloudCodeServerHeartbeat]),
-            ("agent_queues_config", AgentQueuesConfig),
-        ],
-    )
-):
+@record_custom
+class AgentHeartbeat(IHaveNew):
+    timestamp: float
+    agent_id: str
+    agent_label: Optional[str]
+    agent_type: Optional[str]
+    errors: Optional[Sequence[TimestampedError]]
+    metadata: AgentHeartbeatMetadata
+    run_worker_statuses: Optional[CloudRunWorkerStatuses]
+    code_server_heartbeats: Sequence[CloudCodeServerHeartbeat]
+    agent_queues_config: AgentQueuesConfig
+
     def __new__(
         cls,
         timestamp: float,
@@ -518,30 +354,22 @@ class AgentHeartbeat(
         code_server_heartbeats: Optional[Sequence[CloudCodeServerHeartbeat]] = None,
         agent_queues_config: Optional[AgentQueuesConfig] = None,
     ):
-        return super(AgentHeartbeat, cls).__new__(
+        return super().__new__(
             cls,
-            timestamp=check.float_param(timestamp, "timestamp"),
-            agent_id=check.str_param(agent_id, "agent_id"),
-            agent_label=check.opt_str_param(agent_label, "agent_label"),
-            agent_type=check.opt_str_param(agent_type, "agent_type"),
-            errors=check.opt_list_param(errors, "errors", of_type=TimestampedError),
-            metadata=cast(
-                AgentHeartbeatMetadata, check.opt_mapping_param(metadata, "metadata", key_type=str)
-            ),
-            run_worker_statuses=check.opt_inst_param(
-                run_worker_statuses, "run_worker_statuses", CloudRunWorkerStatuses
-            ),
-            code_server_heartbeats=check.opt_list_param(
-                code_server_heartbeats, "code_server_heartbeats", of_type=CloudCodeServerHeartbeat
-            ),
-            agent_queues_config=(
-                check.opt_inst_param(agent_queues_config, "agent_queues_config", AgentQueuesConfig)
-                or AgentQueuesConfig()
-            ),
+            timestamp=timestamp,
+            agent_id=agent_id,
+            agent_label=agent_label,
+            agent_type=agent_type,
+            errors=errors,
+            metadata=metadata or {},
+            run_worker_statuses=run_worker_statuses,
+            code_server_heartbeats=code_server_heartbeats or [],
+            agent_queues_config=agent_queues_config or AgentQueuesConfig(),
         )
 
     def without_messages_and_errors(self) -> "AgentHeartbeat":
-        return self._replace(
+        return copy(
+            self,
             errors=[],
             run_worker_statuses=self.run_worker_statuses.without_messages_and_errors()
             if self.run_worker_statuses

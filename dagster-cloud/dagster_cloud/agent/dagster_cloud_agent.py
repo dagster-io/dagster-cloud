@@ -122,7 +122,7 @@ class DagsterCloudAgent:
         pending_requests_limit: int = DEFAULT_PENDING_REQUESTS_LIMIT,
     ):
         self._logger = logging.getLogger("dagster_cloud.agent")
-        self._instance = instance
+        self._instance: DagsterCloudAgentInstance = instance
 
         self._batcher: DefaultDict[
             str, Batcher[Tuple[str, DagsterCloudUploadApiResponse], None]
@@ -179,6 +179,8 @@ class DagsterCloudAgent:
         return Batcher(
             "upload_api_response",
             self._batch_upload_api_response,
+            max_wait_ms=50,
+            max_batch_size=32,
         )
 
     @property
@@ -426,7 +428,10 @@ class DagsterCloudAgent:
             return
 
         errors = [
-            TimestampedError(timestamp.timestamp(), error)
+            TimestampedError(
+                timestamp=timestamp.timestamp(),
+                error=error,
+            )
             for (error, timestamp) in self._errors
             if timestamp.timestamp() > curr_time.timestamp() - 60 * 60 * 24
         ]
@@ -520,8 +525,8 @@ class DagsterCloudAgent:
                         "serializedErrors": [
                             serialize_value(
                                 TimestampedError(
-                                    curr_time.timestamp(),
-                                    SerializableErrorInfo(
+                                    timestamp=curr_time.timestamp(),
+                                    error=SerializableErrorInfo(
                                         error_message,
                                         stack=[],
                                         cls_name=None,
@@ -816,7 +821,9 @@ class DagsterCloudAgent:
                     instance_ref=self._get_user_code_instance_ref(deployment_name)
                 )
             )
-            return DagsterCloudApiGrpcResponse(serialized_snapshot_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_snapshot_or_error
+            )
 
         elif api_name == DagsterCloudApi.GET_SUBSET_EXTERNAL_PIPELINE_RESULT:
             client = self._get_grpc_client(
@@ -827,7 +834,9 @@ class DagsterCloudAgent:
                 pipeline_subset_snapshot_args=request.request_args
             )
 
-            return DagsterCloudApiGrpcResponse(serialized_subset_result_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_subset_result_or_error
+            )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_CONFIG:
             client = self._get_grpc_client(
                 user_code_launcher, deployment_name, cast(str, location_name)
@@ -835,7 +844,9 @@ class DagsterCloudAgent:
             serialized_partition_config_or_error = client.external_partition_config(
                 partition_args=request.request_args,
             )
-            return DagsterCloudApiGrpcResponse(serialized_partition_config_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_partition_config_or_error
+            )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_TAGS:
             client = self._get_grpc_client(
                 user_code_launcher, deployment_name, cast(str, location_name)
@@ -843,7 +854,9 @@ class DagsterCloudAgent:
             serialized_partition_tags_or_error = client.external_partition_tags(
                 partition_args=request.request_args,
             )
-            return DagsterCloudApiGrpcResponse(serialized_partition_tags_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_partition_tags_or_error
+            )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_NAMES:
             client = self._get_grpc_client(
                 user_code_launcher, deployment_name, cast(str, location_name)
@@ -851,7 +864,9 @@ class DagsterCloudAgent:
             serialized_partition_names_or_error = client.external_partition_names(
                 partition_names_args=request.request_args,
             )
-            return DagsterCloudApiGrpcResponse(serialized_partition_names_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_partition_names_or_error
+            )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_SET_EXECUTION_PARAM_DATA:
             client = self._get_grpc_client(
                 user_code_launcher, deployment_name, cast(str, location_name)
@@ -861,7 +876,9 @@ class DagsterCloudAgent:
                     partition_set_execution_param_args=request.request_args
                 )
             )
-            return DagsterCloudApiGrpcResponse(serialized_partition_execution_params_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_partition_execution_params_or_error
+            )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_SCHEDULE_EXECUTION_DATA:
             client = self._get_grpc_client(
                 user_code_launcher, deployment_name, cast(str, location_name)
@@ -875,7 +892,9 @@ class DagsterCloudAgent:
                 external_schedule_execution_args=args,
             )
 
-            return DagsterCloudApiGrpcResponse(serialized_schedule_data_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_schedule_data_or_error
+            )
 
         elif api_name == DagsterCloudApi.GET_EXTERNAL_SENSOR_EXECUTION_DATA:
             client = self._get_grpc_client(
@@ -890,13 +909,15 @@ class DagsterCloudAgent:
                 sensor_execution_args=args,
             )
 
-            return DagsterCloudApiGrpcResponse(serialized_sensor_data_or_error)
+            return DagsterCloudApiGrpcResponse(
+                serialized_response_or_error=serialized_sensor_data_or_error
+            )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_NOTEBOOK_DATA:
             client = self._get_grpc_client(
                 user_code_launcher, deployment_name, cast(str, location_name)
             )
             response = client.external_notebook_data(request.request_args.notebook_path)
-            return DagsterCloudApiGrpcResponse(response.decode())
+            return DagsterCloudApiGrpcResponse(serialized_response_or_error=response.decode())
         elif api_name == DagsterCloudApi.LAUNCH_RUN:
             run = request.request_args.dagster_run
 
@@ -1016,7 +1037,7 @@ class DagsterCloudAgent:
         )
 
         if request_api not in DagsterCloudApi.__members__:
-            api_result = DagsterCloudApiUnknownCommandResponse(request_api)
+            api_result = DagsterCloudApiUnknownCommandResponse(request_api=request_api)
             self._logger.warning(
                 f"Ignoring request {json_request}: Unknown command. This is likely due to running an "
                 "older version of the agent."

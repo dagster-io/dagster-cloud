@@ -600,7 +600,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def store_event(self, event: EventLogEntry):
         check.inst_param(event, "event", EventLogEntry)
-        headers = {"Idempotency-Key": str(uuid4())}
+        headers = {"Idempotency-Key": str(uuid4()), "X-Event-Write": "true"}
 
         if os.getenv("DAGSTER_CLOUD_STORE_EVENT_OVER_HTTP"):
             self._store_events_http(headers, [event])
@@ -615,7 +615,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def store_event_batch(self, events: Sequence[EventLogEntry]):
         check.sequence_param(events, "events", of_type=EventLogEntry)
-        headers = {"Idempotency-Key": str(uuid4())}
+        headers = {"Idempotency-Key": str(uuid4()), "X-Event-Write": "true"}
 
         if os.getenv("DAGSTER_CLOUD_STORE_EVENT_OVER_HTTP"):
             self._store_events_http(headers, events)

@@ -22,7 +22,7 @@ DEFAULT_MAX_BATCH_SIZE = 100
 DEFAULT_MAX_QUEUE_SIZE = 1000
 
 
-def _get_default_for_name(setting: str, name: str) -> Optional[int]:
+def _get_override_for_name(setting: str, name: str) -> Optional[int]:
     env_name = f"DAGSTER_BATCHING__{name.upper().replace('-', '_')}__{setting.upper()}"
     value = os.getenv(env_name)
     if value is None:
@@ -43,6 +43,19 @@ def _get_default_for_name(setting: str, name: str) -> Optional[int]:
         return None
 
 
+def _get_config(
+    setting: str, name: str, passed_in_default: Optional[int], global_default: int
+) -> int:
+    override = _get_override_for_name(setting, name)
+    if override is not None:
+        return override
+
+    if passed_in_default is not None:
+        return passed_in_default
+
+    return global_default
+
+
 class Batcher(Generic[I, O]):
     """the basic algorithm is.
 
@@ -61,6 +74,12 @@ class Batcher(Generic[I, O]):
     NOTE: the max queue size is meant to cap the number of inflight requests
           in order to fail faster if the underlying function is taking too long
           (database issues).
+
+    Configuration for queue size, max wait, and batch size is specified (by priority order) by:
+
+    1. an env var override (of the form DAGSTER_BATCHING__TEST__MAX_WAIT_MS -- see _get_override_for_name)
+    2. the passed in value
+    3. the default (specified in this file)
     """
 
     def __init__(
@@ -92,19 +111,16 @@ class Batcher(Generic[I, O]):
             )
         self._name = name
         self._batcher_fn = batcher_fn
-        self._max_batch_size = (
-            max_batch_size
-            or _get_default_for_name("max_batch_size", name)
-            or DEFAULT_MAX_BATCH_SIZE
+        self._max_batch_size = _get_config(
+            "max_batch_size", name, max_batch_size, DEFAULT_MAX_BATCH_SIZE
         )
-        self._max_wait_ms: float = (
-            max_wait_ms or _get_default_for_name("max_wait_ms", name) or DEFAULT_MAX_WAIT_MS
+        self._max_wait_ms: float = _get_config(
+            "max_wait_ms", name, max_wait_ms, DEFAULT_MAX_WAIT_MS
         )
-        self._queue: Queue[QueueItem] = Queue(
-            maxsize=max_queue_size
-            or _get_default_for_name("max_queue_size", name)
-            or DEFAULT_MAX_QUEUE_SIZE
+        config_max_queue_size = _get_config(
+            "max_queue_size", name, max_queue_size, DEFAULT_MAX_QUEUE_SIZE
         )
+        self._queue: Queue[QueueItem] = Queue(maxsize=config_max_queue_size)
         self._drain_lock = Lock()
         self._instrumentation = instrumentation or NoOpInstrumentation()
 

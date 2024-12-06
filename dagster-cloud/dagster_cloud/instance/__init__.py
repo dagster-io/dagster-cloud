@@ -48,6 +48,18 @@ class DagsterCloudInstance(DagsterInstance):
     def telemetry_enabled(self) -> bool:
         return False
 
+    @property
+    def run_retries_max_retries(self) -> int:
+        raise NotImplementedError(
+            "run_retries.max_retries is a deployment setting and can only be accessed by a DeploymentScopedHostInstance"
+        )
+
+    @property
+    def run_retries_retry_on_asset_or_op_failure(self) -> bool:
+        raise NotImplementedError(
+            "run_retries.retry_on_asset_or_op_failure is a deployment setting and can only be accessed by a DeploymentScopedHostInstance"
+        )
+
 
 class DagsterCloudAgentInstance(DagsterCloudInstance):
     def __init__(
