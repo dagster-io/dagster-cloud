@@ -33,7 +33,7 @@ class MultiPexGrpcClient:
         if port:
             self._server_address = host + ":" + str(port)
         else:
-            self._server_address = "unix:" + os.path.abspath(socket)
+            self._server_address = "unix:" + os.path.abspath(socket)  # pyright: ignore[reportArgumentType,reportCallIssue]
 
     def create_pex_server(self, create_pex_server_args: CreatePexServerArgs):
         check.inst_param(create_pex_server_args, "create_pex_server_args", CreatePexServerArgs)

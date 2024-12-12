@@ -532,7 +532,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             task_logs = "Task logs:\n" + "\n".join(logs) if logs else "No logs in task."
             sections.append(task_logs)
         except:
-            self._logger.exception("Error trying to get logs for failed task", task_arn=task_arn)
+            self._logger.exception("Error trying to get logs for failed task", task_arn=task_arn)  # pyright: ignore[reportCallIssue]
 
         if self.show_debug_cluster_info:
             sections.append(get_debug_ecs_prompt(self.cluster, task_arn))

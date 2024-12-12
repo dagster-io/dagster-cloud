@@ -110,7 +110,7 @@ class Client:
             name="serviceLongArnFormat",
             effectiveSettings=True,
         )
-        return settings["settings"][0]["value"] == "enabled"
+        return settings["settings"][0]["value"] == "enabled"  # pyright: ignore[reportTypedDictNotRequiredAccess]
 
     @property
     @cached_method
@@ -155,7 +155,7 @@ class Client:
         ):
             task_definition_arn = (
                 self.ecs.register_task_definition(
-                    **desired_task_definition_config.task_definition_dict()
+                    **desired_task_definition_config.task_definition_dict()  # pyright: ignore[reportArgumentType]
                 )
                 .get("taskDefinition")
                 .get("taskDefinitionArn")
@@ -333,7 +333,7 @@ class Client:
                 service=service.name,
                 desiredCount=0,
             )
-        except botocore.exceptions.ClientError as error:
+        except botocore.exceptions.ClientError as error:  # pyright: ignore[reportAttributeAccessIssue]
             if error.response["Error"]["Code"] in [
                 "ServiceNotFoundException",
                 "ServiceNotActiveException",
@@ -416,7 +416,7 @@ class Client:
                             if resource_arn in actual_services:
                                 services.append(Service(client=self, arn=resource_arn))
 
-                except botocore.exceptions.ClientError as error:
+                except botocore.exceptions.ClientError as error:  # pyright: ignore[reportAttributeAccessIssue]
                     if error.response["Error"]["Code"] == "AccessDeniedException":
                         self._use_legacy_tag_filtering = True
                         logger.warning(
@@ -461,10 +461,10 @@ class Client:
 
         task_arn = (
             self.ecs.run_task(
-                taskDefinition=task_definition_arn,
+                taskDefinition=task_definition_arn,  # pyright: ignore[reportArgumentType]
                 cluster=self.cluster_name,
-                launchType=self.launch_type,
-                networkConfiguration=self.network_configuration,
+                launchType=self.launch_type,  # pyright: ignore[reportArgumentType]
+                networkConfiguration=self.network_configuration,  # pyright: ignore[reportArgumentType]
             )
             .get("tasks", [{}])[0]
             .get("taskArn")
@@ -472,14 +472,14 @@ class Client:
 
         self.ecs.get_waiter("tasks_stopped").wait(
             cluster=self.cluster_name,
-            tasks=[task_arn],
+            tasks=[task_arn],  # pyright: ignore[reportArgumentType]
             WaiterConfig={"Delay": 1, "MaxAttempts": self.timeout},
         )
 
         exit_code = (
             self.ecs.describe_tasks(
                 cluster=self.cluster_name,
-                tasks=[task_arn],
+                tasks=[task_arn],  # pyright: ignore[reportArgumentType]
             )
             .get("tasks", [{}])[0]
             .get("containers", [{}])[0]
@@ -487,7 +487,7 @@ class Client:
         )
 
         if exit_code:
-            raise Exception(self.get_task_logs(task_arn))
+            raise Exception(self.get_task_logs(task_arn))  # pyright: ignore[reportCallIssue]
 
         return True
 
@@ -541,7 +541,7 @@ class Client:
                 for key, value in tags.items()
             ]
 
-        arn = self.ecs.create_service(**params).get("service").get("serviceArn")
+        arn = self.ecs.create_service(**params).get("service").get("serviceArn")  # pyright: ignore[reportArgumentType]
 
         return Service(client=self, arn=arn)
 
@@ -700,7 +700,7 @@ class Client:
 
             stopped_tasks = sorted(
                 stopped_tasks,
-                key=lambda task: task["createdAt"].timestamp(),
+                key=lambda task: task["createdAt"].timestamp(),  # pyright: ignore[reportTypedDictNotRequiredAccess]
                 reverse=True,
             )
             return stopped_tasks
@@ -726,7 +726,7 @@ class Client:
         )
 
     def _get_service_discovery_id(self, hostname):
-        service_name = hostname.split("." + self.namespace)[0]
+        service_name = hostname.split("." + self.namespace)[0]  # pyright: ignore[reportOperatorIssue]
 
         paginator = self.service_discovery.get_paginator("list_services")
         for page in paginator.paginate(
@@ -764,14 +764,14 @@ class Client:
         task = self.ecs.describe_tasks(cluster=self.cluster_name, tasks=[task_arn]).get("tasks")[0]
 
         task_definition_arn = task.get("taskDefinitionArn")
-        task_definition = self.ecs.describe_task_definition(taskDefinition=task_definition_arn).get(
+        task_definition = self.ecs.describe_task_definition(taskDefinition=task_definition_arn).get(  # pyright: ignore[reportArgumentType]
             "taskDefinition"
         )
 
         matching_container_definitions = [
             container_definition
             for container_definition in task_definition.get("containerDefinitions", [])
-            if container_definition["name"] == container_name
+            if container_definition["name"] == container_name  # pyright: ignore[reportTypedDictNotRequiredAccess]
         ]
         if not matching_container_definitions:
             raise Exception(f"Could not find container with name {container_name}")
@@ -779,7 +779,7 @@ class Client:
         container_definition = matching_container_definitions[0]
 
         log_stream_prefix = (
-            container_definition.get("logConfiguration").get("options").get("awslogs-stream-prefix")
+            container_definition.get("logConfiguration").get("options").get("awslogs-stream-prefix")  # pyright: ignore[reportOptionalMemberAccess]
         )
         container_name = container_definition.get("name")
         task_id = task_arn.split("/")[-1]

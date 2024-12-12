@@ -59,7 +59,7 @@ class CloudProcessRunLauncher(RunLauncher):
                 for run_id in self._run_ids
                 if (
                     self._instance.get_run_by_id(run_id)
-                    and not self._instance.get_run_by_id(run_id).is_finished
+                    and not self._instance.get_run_by_id(run_id).is_finished  # pyright: ignore[reportOptionalMemberAccess]
                 )
             ]
 

@@ -24,7 +24,7 @@ def _template_dockerfile(env_vars, custom_base_image=None) -> Generator[bytes, N
     base_image_command = (
         f"FROM {custom_base_image}"
         if custom_base_image
-        else f"FROM python:{DEFAULT_PYTHON_VERSION}-slim"
+        else f"FROM public.ecr.aws/docker/library/python:{DEFAULT_PYTHON_VERSION}-slim"
     )
     with open(DOCKERFILE_TEMPLATE, "r", encoding="utf-8") as template:
         dockerfile_content = "\n".join(

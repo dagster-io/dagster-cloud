@@ -190,7 +190,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             env_config_maps=self._env_config_maps,
             env_secrets=self._env_secrets,
             env_vars=self._env_vars,
-            job_namespace=self._namespace,
+            job_namespace=self._namespace,  # pyright: ignore[reportArgumentType]
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
             labels=self._labels,
@@ -592,7 +592,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 for deployment in deployments:
                     handles.append(
                         K8sHandle(
-                            namespace=namespace,
+                            namespace=namespace,  # pyright: ignore[reportArgumentType]
                             name=deployment.metadata.name,
                             labels=deployment.metadata.labels,
                             creation_timestamp=deployment.metadata.creation_timestamp.timestamp()

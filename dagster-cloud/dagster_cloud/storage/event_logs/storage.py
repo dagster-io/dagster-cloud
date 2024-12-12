@@ -72,7 +72,7 @@ if TYPE_CHECKING:
 
 
 # Guard against out of order event insertion issues by default
-DEFAULT_RUN_SCOPED_EVENT_TAILER_OFFSET = 10000
+DEFAULT_RUN_SCOPED_EVENT_TAILER_OFFSET = 20000
 
 
 from .queries import (
@@ -465,7 +465,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return (
             self._override_graphql_client
             if self._override_graphql_client
-            else self._instance.graphql_client
+            else self._instance.graphql_client  # pyright: ignore[reportAttributeAccessIssue]
         )
 
     @property

@@ -273,10 +273,10 @@ def dagster_cloud_options(
 
         has_location_load_timeout_param = LOCATION_LOAD_TIMEOUT_ARGUMENT_VAR in params
         if has_location_load_timeout_param:
-            options[LOCATION_LOAD_TIMEOUT_ARGUMENT_VAR] = (int, LOCATION_LOAD_TIMEOUT_OPTION)
+            options[LOCATION_LOAD_TIMEOUT_ARGUMENT_VAR] = (int, LOCATION_LOAD_TIMEOUT_OPTION)  # pyright: ignore[reportArgumentType]
         has_agent_heartbeat_timeout_param = AGENT_HEARTBEAT_TIMEOUT_ARGUMENT_VAR in params
         if has_agent_heartbeat_timeout_param:
-            options[AGENT_HEARTBEAT_TIMEOUT_ARGUMENT_VAR] = (int, AGENT_HEARTBEAT_TIMEOUT_OPTION)
+            options[AGENT_HEARTBEAT_TIMEOUT_ARGUMENT_VAR] = (int, AGENT_HEARTBEAT_TIMEOUT_OPTION)  # pyright: ignore[reportArgumentType]
 
         with_options = add_options(options)(to_wrap)
 
@@ -291,7 +291,7 @@ def dagster_cloud_options(
                 and kwargs.get(DEPLOYMENT_CLI_ARGUMENT)
             ):
                 kwargs[URL_CLI_ARGUMENT] = gql.url_from_config(
-                    organization=kwargs.get(ORGANIZATION_CLI_ARGUMENT),
+                    organization=kwargs.get(ORGANIZATION_CLI_ARGUMENT),  # pyright: ignore[reportArgumentType]
                     deployment=kwargs.get(DEPLOYMENT_CLI_ARGUMENT),
                 )
 

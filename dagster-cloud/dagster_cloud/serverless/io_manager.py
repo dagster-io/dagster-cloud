@@ -39,7 +39,7 @@ class PickledObjectServerlessIOManager(UPathIOManager):
             aws_session_token=aws_creds["Token"],
         )
         expiration = parser.parse(aws_creds["Expiration"])
-        return session, expiration
+        return session, expiration  # pyright: ignore[reportReturnType]
 
     @property
     def _s3(self):

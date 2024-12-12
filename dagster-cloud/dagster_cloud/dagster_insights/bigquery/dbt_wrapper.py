@@ -149,7 +149,7 @@ def dbt_with_bigquery_insights(
     cost_by_asset = defaultdict(list)
     try:
         with adapter.connection_named("dagster_insights:bigquery_cost"):
-            client: "bigquery.Client" = adapter.connections.get_thread_connection().handle
+            client: "bigquery.Client" = adapter.connections.get_thread_connection().handle  # pyright: ignore[reportAssignmentType]
             if client.location and client.project:
                 # we should populate the location/project from the client, and use that to determine
                 # the correct INFORMATION_SCHEMA.JOBS table to query for cost information

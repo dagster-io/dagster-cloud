@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Mapping, Optional, cast
 
+import dagster._check as check
 import yaml
 from dagster._core.errors import DagsterHomeNotSetError
 from dagster._utils.interrupts import capture_interrupts
@@ -38,7 +39,9 @@ def agent_home_exception():
 
 def run_local_agent(agent_logging_config: Optional[Mapping[str, object]]) -> None:
     try:
-        with DagsterCloudAgentInstance.get() as instance:
+        with DagsterCloudAgentInstance.get() as inst:
+            instance = check.inst(inst, DagsterCloudAgentInstance)
+
             logging.basicConfig(
                 level=logging.INFO,
                 format=default_format_string(),

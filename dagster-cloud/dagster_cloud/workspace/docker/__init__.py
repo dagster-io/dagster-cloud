@@ -52,7 +52,7 @@ class DagsterDockerContainer(NamedTuple):
 
     container: Container
 
-    def __str__(self):
+    def __str__(self):  # pyright: ignore[reportIncompatibleMethodOverride]
         return self.container.id
 
 
@@ -359,7 +359,7 @@ class DockerUserCodeLauncher(
 
     def get_server_create_timestamp(self, handle: DagsterDockerContainer) -> Optional[float]:
         created_time_str = handle.container.attrs["Created"]
-        return parse(created_time_str).timestamp()
+        return parse(created_time_str).timestamp()  # pyright: ignore[reportAttributeAccessIssue]
 
     def _list_server_handles(self) -> List[DagsterDockerContainer]:
         client = docker.client.from_env()

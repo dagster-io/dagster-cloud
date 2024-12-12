@@ -29,8 +29,12 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.9.4",
-    "dagster-cloud-cli==1.9.4",
+    "dagster==1.9.5",
+    "dagster-cloud-cli==1.9.5",
+    "opentelemetry-api>=1.28.2,<2",
+    "opentelemetry-sdk>=1.28.2,<2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.28.2,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.28.2,<2",
     "pex>=2.1.132,<3",
     "questionary",
     "requests",
@@ -72,7 +76,7 @@ tests = [
     "types-PyYAML",
     "types-requests",
     "dagster-cloud-test-infra",
-    "dbt-bigquery",
+    "dbt-bigquery>=1.9.0",
     "dbt-core",
     "dbt-snowflake",
     "dbt-duckdb",

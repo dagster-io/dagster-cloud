@@ -91,8 +91,8 @@ def add_options(options: Dict[str, Tuple[Any, OptionInfo]]):
                 }
             return to_wrap(*args, **modified_kwargs)
 
-        wrap_function.__signature__ = sig
-        wrap_function.modified_options = True
+        wrap_function.__signature__ = sig  # pyright: ignore[reportAttributeAccessIssue]
+        wrap_function.modified_options = True  # pyright: ignore[reportAttributeAccessIssue]
         return wrap_function
 
     return decorator

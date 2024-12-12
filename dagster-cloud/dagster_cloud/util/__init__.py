@@ -2,7 +2,7 @@ import zlib
 from collections import namedtuple
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Any, Dict, List, Mapping
+from typing import Any, Callable, Dict, List, Mapping
 
 from dagster import (
     Field,
@@ -11,7 +11,6 @@ from dagster import (
 from dagster._config import BoolSourceType, IntSourceType, StringSourceType
 from dagster._serdes import serialize_value
 from dagster._serdes.serdes import PackableValue
-from dagster._serdes.utils import create_snapshot_id
 
 
 class SerializableNamedtupleMapDiff(
@@ -34,10 +33,9 @@ class SerializableNamedtupleMapDiff(
         )
 
 
-def diff_serializable_namedtuple_map(desired_map, actual_map, force_update_keys=None):
+def diff_serializable_namedtuple_map(desired_map, actual_map, update_key_fn: Callable):
     desired_keys = set(desired_map.keys())
     actual_keys = set(actual_map.keys())
-    force_update_keys = check.opt_set_param(force_update_keys, "force_update_keys", tuple)
 
     to_add = desired_keys.difference(actual_keys)
     to_remove = actual_keys.difference(desired_keys)
@@ -47,9 +45,7 @@ def diff_serializable_namedtuple_map(desired_map, actual_map, force_update_keys=
     to_update = {
         existing_key
         for existing_key in existing
-        if create_snapshot_id(desired_map[existing_key])
-        != create_snapshot_id(actual_map[existing_key])
-        or existing_key in force_update_keys
+        if update_key_fn(desired_map[existing_key]) != update_key_fn(actual_map[existing_key])
     }
 
     return SerializableNamedtupleMapDiff(to_add, to_update, to_remove)

@@ -193,7 +193,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return (
             self._override_graphql_client
             if self._override_graphql_client
-            else self._instance.graphql_client
+            else self._instance.graphql_client  # pyright: ignore[reportAttributeAccessIssue]
         )
 
     def _execute_query(self, query, variables=None, idempotent_mutation=False):
