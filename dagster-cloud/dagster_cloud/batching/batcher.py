@@ -122,7 +122,7 @@ class Batcher(Generic[I, O]):
         )
         self._queue: Queue[QueueItem] = Queue(maxsize=config_max_queue_size)
         self._drain_lock = Lock()
-        self._instrumentation = instrumentation or NoOpInstrumentation()
+        self._instrumentation = (instrumentation or NoOpInstrumentation()).tags([f"batcher:{name}"])
 
     def _submit_batch(self, batch: List[QueueItem]) -> None:
         check.invariant(len(batch) > 0, "should never submit an empty batch")
@@ -142,7 +142,7 @@ class Batcher(Generic[I, O]):
 
     def _build_batch(self) -> List[QueueItem]:
         batch = []
-        for i in range(self._max_batch_size):
+        for _ in range(self._max_batch_size):
             try:
                 batch.append(self._queue.get(block=False))
             except Empty:
@@ -150,7 +150,7 @@ class Batcher(Generic[I, O]):
         return batch
 
     @contextmanager
-    def _lock(self):
+    def _lock(self) -> Generator[None, None, None]:
         with self._time("lock_acquisition"):
             self._drain_lock.acquire()
         try:
@@ -170,7 +170,8 @@ class Batcher(Generic[I, O]):
             try:
                 self._queue.put((i, fut), block=False)
             except Full:
-                self._instrumentation.increment(f"dagster.batching.{self._name}.full")
+                self._instrumentation.increment("dagster.batching.full")
+                logger.exception(f"Batching queue for batcher {self._name} is full!")
                 raise
             else:
                 try:
@@ -179,34 +180,30 @@ class Batcher(Generic[I, O]):
                     timeout = 0 if queue_size >= self._max_batch_size else self._max_wait_ms / 1000
                     return fut.result(timeout=timeout)
                 except TimeoutError:
-                    self._instrumentation.increment(f"dagster.batching.{self._name}.timeout")
+                    self._instrumentation.increment("dagster.batching.timeout")
                     self._drain_batch(fut)
                     return fut.result()
 
     def _instrument_queue_size(self, queue_size: int) -> None:
-        self._instrumentation.histogram(f"dagster.batching.{self._name}.queue_size", queue_size)
+        self._instrumentation.histogram("dagster.batching.queue_size", queue_size)
         for bucket in [5, 10, 100]:
             if queue_size >= bucket:
-                self._instrumentation.increment(
-                    f"dagster.batching.{self._name}.queue_size.ge_{bucket}"
-                )
+                self._instrumentation.increment(f"dagster.batching.queue_size.ge_{bucket}")
             else:
                 break
 
     def _instrument_batch_size(self, batch_size: int) -> None:
-        self._instrumentation.histogram(f"dagster.batching.{self._name}.batch_size", batch_size)
+        self._instrumentation.histogram("dagster.batching.batch_size", batch_size)
         for bucket in [5, 10, 100]:
             if batch_size >= bucket:
-                self._instrumentation.increment(
-                    f"dagster.batching.{self._name}.batch_size.ge_{bucket}"
-                )
+                self._instrumentation.increment(f"dagster.batching.batch_size.ge_{bucket}")
             else:
                 break
 
     @contextmanager
     def _time(self, metric_name: str) -> Generator[None, None, None]:
         with self._instrumentation.instrument_context(
-            f"dagster.batching.{self._name}.{metric_name}",
+            f"dagster.batching.{metric_name}",
             buckets_ms=[10, 100, 500, 1000],
         ):
             yield

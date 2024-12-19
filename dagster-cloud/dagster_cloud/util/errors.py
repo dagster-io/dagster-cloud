@@ -6,6 +6,13 @@ from dagster._utils.error import SerializableErrorInfo
 ERROR_CLASS_NAME_SIZE_LIMIT = 1000
 
 
+def unwrap_user_code_error(error_info: SerializableErrorInfo) -> SerializableErrorInfo:
+    """Extracts the underlying error from the passed error, if it is a DagsterUserCodeLoadError."""
+    if error_info.cls_name == "DagsterUserCodeLoadError":
+        return unwrap_user_code_error(error_info.cause)
+    return error_info
+
+
 def truncate_serialized_error(
     error_info: SerializableErrorInfo, field_size_limit: int, max_depth: int
 ):

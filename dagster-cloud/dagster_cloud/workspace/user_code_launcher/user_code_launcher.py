@@ -1301,14 +1301,14 @@ class DagsterCloudUserCodeLauncher(
         return lambda: server_endpoint.create_client().ping("")
 
     def _refresh_actual_entries(self) -> None:
-        for deployment_location, server in self._multipex_servers.items():
+        for deployment_location, multipex_server in self._multipex_servers.items():
             if deployment_location in self._actual_entries:
                 # If a multipex server exists, we query it over gRPC
                 # to make sure the pex server is still available.
 
                 # First verify that the multipex server is running
                 try:
-                    server.server_endpoint.create_multipex_client().ping("")
+                    multipex_server.server_endpoint.create_multipex_client().ping("")
                 except:
                     # If it isn't, this is expected if ECS is currently spinning up this service
                     # after it crashed. In this case, we want to wait for it to fully come up
@@ -1320,14 +1320,20 @@ class DagsterCloudUserCodeLauncher(
                     )
                     return
                 deployment_name, location_name = deployment_location
+
+                # If we expect there to be a running code location here but there is none,
                 if not self._get_existing_pex_servers(deployment_name, location_name):
-                    self._logger.warning(
-                        "Pex servers disappeared for %s:%s. Removing actual entries to"
-                        " activate reconciliation logic.",
-                        deployment_name,
-                        location_name,
-                    )
-                    del self._actual_entries[deployment_location]
+                    with self._grpc_servers_lock:
+                        grpc_server_or_error = self._grpc_servers.get(deployment_location)
+
+                    if isinstance(grpc_server_or_error, DagsterCloudGrpcServer):
+                        self._logger.warning(
+                            "Pex servers disappeared for running code location %s:%s. Removing actual entries to"
+                            " activate reconciliation logic.",
+                            deployment_name,
+                            location_name,
+                        )
+                        del self._actual_entries[deployment_location]
 
         # Check to see if any servers have become unresponsive
         unavailable_server_timeout = int(

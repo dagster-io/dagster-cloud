@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import timezone
 from typing import (
     TYPE_CHECKING,
+    AbstractSet,
     Any,
     Callable,
     Dict,
@@ -304,6 +305,7 @@ def _fetch_run_status_changes_filter_input(records_filter) -> Dict[str, Any]:
         "afterStorageId": records_filter.after_storage_id,
         "beforeStorageId": records_filter.before_storage_id,
         "storageIds": records_filter.storage_ids,
+        "jobNames": records_filter.job_names,
     }
 
 
@@ -400,6 +402,14 @@ def _asset_check_summary_record_from_graphql(
                 asset_check_key,
             )
             if graphene_asset_check_summary_record["lastCheckExecutionRecord"]
+            else None
+        ),
+        last_completed_check_execution_record=(
+            _asset_check_execution_record_from_graphql(
+                graphene_asset_check_summary_record["lastCompletedCheckExecutionRecord"],
+                asset_check_key,
+            )
+            if graphene_asset_check_summary_record["lastCompletedCheckExecutionRecord"]
             else None
         ),
         last_run_id=graphene_asset_check_summary_record["lastRunId"],
@@ -1159,6 +1169,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         check_key: AssetCheckKey,
         limit: int,
         cursor: Optional[int] = None,
+        status: Optional[AbstractSet[AssetCheckExecutionRecordStatus]] = None,
     ) -> Sequence[AssetCheckExecutionRecord]:
         raise NotImplementedError("Not callable from user cloud")
 
@@ -1222,6 +1233,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return _event_records_result_from_graphql(
             res["data"]["eventLogs"]["fetchPlannedMaterializations"]
         )
+
+    @property
+    def supports_run_status_change_job_name_filter(self):
+        return True
 
     def fetch_run_status_changes(
         self,

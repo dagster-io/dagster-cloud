@@ -142,6 +142,15 @@ ASSET_CHECK_STATE_FRAGMENT = (
             }
             createTimestamp
         }
+        lastCompletedCheckExecutionRecord {
+            id
+            runId
+            status
+            event {
+                ...EventLogEntryFragment
+            }
+            createTimestamp
+        }
         lastRunId 
     } 
 """

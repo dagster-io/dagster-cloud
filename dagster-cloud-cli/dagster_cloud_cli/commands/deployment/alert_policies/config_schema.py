@@ -47,6 +47,32 @@ def process_alert_policies_config(alert_policies_config, schema: Any):
             )
 
 
+TAGS_FIELD = Field(
+    config=Array(
+        Shape(
+            fields={
+                "key": Field(
+                    config=str,
+                    is_required=True,
+                    description="Specify a tag key.",
+                ),
+                "value": Field(
+                    config=str,
+                    is_required=True,
+                    description="Specify a tag value.",
+                ),
+            },
+            description="A tag key-value pair.",
+        )
+    ),
+    description=(
+        "The alert policy will apply to code artifacts that have all the specified tags."
+        " When tags are explicitly omitted, this alert policy will apply to all code"
+        " artifacts."
+    ),
+    is_required=False,
+)
+
 TARGET_TYPES_SCHEMA = {
     "asset_group_target": Field(
         config=Shape(
@@ -114,6 +140,14 @@ TARGET_TYPES_SCHEMA = {
                     is_required=True,
                     description="The threshold value to alert if exceeded.",
                 ),
+                "tags": TAGS_FIELD,
+            }
+        )
+    ),
+    "run_result_target": Field(
+        config=Shape(
+            fields={
+                "tags": TAGS_FIELD,
             }
         )
     ),
@@ -334,31 +368,7 @@ ALERT_POLICY_SCHEMA, INSIGHTS_ALERT_POLICY_SCHEMA = [
                 default_value="",
                 description="Description of alert policy",
             ),
-            "tags": Field(
-                config=Array(
-                    Shape(
-                        fields={
-                            "key": Field(
-                                config=str,
-                                is_required=True,
-                                description="Specify a tag key.",
-                            ),
-                            "value": Field(
-                                config=str,
-                                is_required=True,
-                                description="Specify a tag value.",
-                            ),
-                        },
-                        description="A tag key-value pair.",
-                    )
-                ),
-                description=(
-                    "The alert policy will apply to code artifacts that have all the specified tags."
-                    " When tags are explicitly omitted, this alert policy will apply to all code"
-                    " artifacts."
-                ),
-                is_required=False,
-            ),
+            "tags": TAGS_FIELD,
             "event_types": Field(
                 config=Array(
                     Enum(

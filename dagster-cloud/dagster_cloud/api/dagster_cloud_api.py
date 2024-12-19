@@ -387,3 +387,47 @@ class AgentHeartbeat(IHaveNew):
         if metrics and keys_not_none(["container_utilization", "request_utilization"], metrics):
             return metrics
         return None
+
+
+class FileFormat:
+    JSON = "json"
+    GZIPPED_JSON = "json.gz"
+
+
+class SnapshotType:
+    ERROR = "error"
+    JOB = "job"
+    REPOSITORY = "repository"
+
+
+@whitelist_for_serdes
+@record
+class StoredSnapshot:
+    sha1: str
+    format: str
+    uri: str
+    decompressed_size: int
+
+
+@whitelist_for_serdes
+@record
+class SnapshotUploadData:
+    sha1: str
+    format: str
+    uri: str
+    presigned_post: dict
+    id: str
+    type: str
+
+
+@whitelist_for_serdes
+@record
+class CheckSnapshotResult:
+    stored_snapshot: Optional[StoredSnapshot]
+    upload_data: Optional[SnapshotUploadData]
+
+
+@whitelist_for_serdes
+@record
+class ConfirmUploadResult:
+    stored_snapshot: StoredSnapshot

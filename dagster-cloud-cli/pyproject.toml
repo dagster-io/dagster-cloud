@@ -22,7 +22,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.9.5",
+    "dagster==1.9.6",
     "packaging>=20.9",
     "questionary",
     "requests",
@@ -37,6 +37,8 @@ text = "Apache-2.0"
 [project.optional-dependencies]
 tests = [
     "freezegun",
+    "dagster[test]",
+    "dagster-pipes",
 ]
 
 [project.scripts]

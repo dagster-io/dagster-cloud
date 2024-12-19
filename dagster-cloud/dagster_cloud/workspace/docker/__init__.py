@@ -10,12 +10,16 @@ from dagster import (
     IntSource,
     _check as check,
 )
+from dagster._core.launcher.base import LaunchRunContext
 from dagster._core.utils import parse_env_var
+from dagster._grpc.types import ExecuteRunArgs
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
+from dagster._serdes.serdes import deserialize_value, serialize_value
 from dagster._utils import find_free_port
 from dagster._utils.merger import merge_dicts
 from dagster._vendored.dateutil.parser import parse
+from dagster_cloud_cli.core.workspace import PexMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
 from docker.models.containers import Container
@@ -23,6 +27,7 @@ from typing_extensions import Self
 
 from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
+from dagster_cloud.storage.tags import PEX_METADATA_TAG
 from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
 
 from ..config_schema.docker import SHARED_DOCKER_CONFIG
@@ -374,7 +379,7 @@ class DockerUserCodeLauncher(
         ]
 
     def run_launcher(self):
-        launcher = DockerRunLauncher(
+        launcher = CloudDockerRunLauncher(
             image=None,
             env_vars=self.env_vars,
             networks=self._networks,
@@ -383,3 +388,32 @@ class DockerUserCodeLauncher(
         launcher.register_instance(self._instance)
 
         return launcher
+
+
+class CloudDockerRunLauncher(DockerRunLauncher):
+    def launch_run(self, context: LaunchRunContext) -> None:
+        serialized_pex_metadata = context.dagster_run.tags.get(PEX_METADATA_TAG)
+
+        if serialized_pex_metadata:
+            run = context.dagster_run
+            job_origin = check.not_none(run.job_code_origin)
+
+            docker_image = self._get_docker_image(job_origin)
+
+            run_args = ExecuteRunArgs(
+                job_origin=job_origin,
+                run_id=run.run_id,
+                instance_ref=self._instance.get_ref(),
+            )
+
+            deserialize_value(serialized_pex_metadata, PexMetadata)
+            command = [
+                "dagster-cloud",
+                "pex",
+                "execute-run",
+                serialize_value(run_args),
+                serialized_pex_metadata,
+            ]
+            self._launch_container_with_command(run, docker_image, command)
+        else:
+            return super().launch_run(context)
