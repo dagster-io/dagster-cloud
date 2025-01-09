@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any, Dict, List, NamedTuple, Optional
 
@@ -193,6 +194,11 @@ class CodeLocationDeployData(
                 "DAGSTER_INJECT_ENV_VARS_FROM_INSTANCE": "1",
                 "DAGSTER_CLI_API_GRPC_LAZY_LOAD_USER_CODE": "1",
                 "DAGSTER_CLI_API_GRPC_HOST": "0.0.0.0",
+                # include the container context on the code server to ensure that it is uploaded
+                # to the server and included in the workspace snapshot, which ensures that while a
+                # code location is still being updated, existing code will use the snapshotted
+                # version rather than the newly updated version
+                "DAGSTER_CONTAINER_CONTEXT": json.dumps(self.container_context),
             },
             (
                 {

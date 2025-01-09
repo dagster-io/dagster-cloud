@@ -125,7 +125,7 @@ class DagsterCloudApiThreadTelemetry:
         return self.thread_end_handle_api_request_timestamp - self.thread_start_run_timestamp
 
 
-@whitelist_for_serdes(old_storage_names={"CheckForWorkspaceUpdatesRequest"})
+@whitelist_for_serdes(old_storage_names={"CheckForCodeLocationUpdatesRequest"})
 @record
 class DagsterCloudApiSuccess:
     thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
@@ -415,7 +415,7 @@ class SnapshotUploadData:
     sha1: str
     format: str
     uri: str
-    presigned_post: dict
+    presigned_put_url: str
     id: str
     type: str
 
@@ -431,3 +431,37 @@ class CheckSnapshotResult:
 @record
 class ConfirmUploadResult:
     stored_snapshot: StoredSnapshot
+
+
+@whitelist_for_serdes
+@record
+class DagsterCloudRepositoryManifest:
+    name: str
+    code_pointer: CodePointer
+    stored_snapshot: StoredSnapshot
+
+
+@whitelist_for_serdes
+@record
+class DagsterCloudCodeLocationManifest:
+    repositories: Sequence[DagsterCloudRepositoryManifest]
+    container_image: Optional[str]
+    executable_path: Optional[str]
+    dagster_library_versions: Optional[Mapping[str, str]]
+    code_location_deploy_data: CodeLocationDeployData
+
+
+@whitelist_for_serdes
+@record
+class DagsterCloudCodeLocationUpdateResult:
+    location_name: str
+    manifest: Optional[DagsterCloudCodeLocationManifest]
+    error_snapshot: Optional[StoredSnapshot]
+
+
+@whitelist_for_serdes
+@record
+class DagsterCloudCodeLocationUpdateResponse:
+    updated: bool
+    message: str
+    missing_job_snapshots: Optional[Sequence[JobSelector]]

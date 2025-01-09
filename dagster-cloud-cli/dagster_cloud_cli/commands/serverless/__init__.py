@@ -436,6 +436,16 @@ def deploy_python_executable_command(
             "No location name provided. You must specify the location name as an argument."
         )
 
+    if (
+        not kwargs.get("location_file")
+        and not kwargs.get("python_file")
+        and not kwargs.get("module_name")
+        and not kwargs.get("package_name")
+    ):
+        raise ui.error(
+            "Must specify --location-file, --package-name, --module-name, or --python-file."
+        )
+
     if not source_directory:
         raise ui.error("No source directory provided.")
     source_directory = source_directory.absolute()

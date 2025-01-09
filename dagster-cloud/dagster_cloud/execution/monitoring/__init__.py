@@ -281,7 +281,14 @@ def get_cloud_run_worker_statuses(
                 if is_isolated_run(run):
                     launcher = scoped_instance.run_launcher
 
-                    run_worker_health = launcher.check_run_worker_health(run)
+                    try:
+                        run_worker_health = launcher.check_run_worker_health(run)
+                    except Exception:
+                        logger.exception(
+                            f"An exception occurred while checking run worker health for run '{run.run_id}'"
+                        )
+                        continue
+
                     run_worker_debug_info = None
 
                     if run_worker_health.status == WorkerStatus.FAILED:

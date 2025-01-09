@@ -12,7 +12,7 @@ from dagster._core.definitions.metadata.source_code import FilePathMapping
 from dagster._core.types.loadable_target_origin import LoadableTargetOrigin
 
 if TYPE_CHECKING:
-    from dagster import AssetsDefinition, SourceAsset
+    from dagster import AssetsDefinition, AssetSpec, SourceAsset
     from dagster._core.definitions.cacheable_assets import CacheableAssetsDefinition
 
 import sys
@@ -44,11 +44,13 @@ def _locate_git_root() -> Optional[Path]:
 
 @experimental
 def link_code_references_to_git_if_cloud(
-    assets_defs: Sequence[Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition"]],
+    assets_defs: Sequence[
+        Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition", "AssetSpec"]
+    ],
     git_url: Optional[str] = None,
     git_branch: Optional[str] = None,
     file_path_mapping: Optional[FilePathMapping] = None,
-) -> Sequence[Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition"]]:
+) -> Sequence[Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition", "AssetSpec"]]:
     """Wrapper function which converts local file path code references to hosted git URLs
     if running in a Dagster Plus cloud environment. This is determined by the presence of
     the `DAGSTER_CLOUD_DEPLOYMENT_NAME` environment variable. When running in any other context,

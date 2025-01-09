@@ -825,7 +825,7 @@ def manage_state_command(
         )
         return
     from dagster._core.code_pointer import load_python_file
-    from dagster._core.definitions.load_assets_from_modules import find_objects_in_module_of_types
+    from dagster._core.definitions.module_loaders.utils import find_objects_in_module_of_types
 
     state_store = state.FileStore(statedir=statedir)
     locations = state_store.list_locations()

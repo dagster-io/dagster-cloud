@@ -345,7 +345,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             f"Getting resource limits for {deployment_name}:{location_name}. resources: {self.server_resources}"
         )
         metadata = self._actual_entries[(deployment_name, location_name)].code_location_deploy_data
-        resources = metadata.container_context.get("ecs", {}).get("server_resources")
+        resources = metadata.container_context.get("ecs", {}).get("server_resources", {})
         return {
             "ecs": {
                 "cpu_limit": resources.get("cpu"),

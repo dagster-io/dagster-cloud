@@ -129,7 +129,6 @@ from .queries import (
 
 
 def _input_for_event(event: EventLogEntry):
-    event = truncate_event(event)
     return {
         "errorInfo": _input_for_serializable_error_info(event.error_info),
         "level": event.level,
@@ -611,6 +610,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def store_event(self, event: EventLogEntry):
         check.inst_param(event, "event", EventLogEntry)
         headers = {"Idempotency-Key": str(uuid4()), "X-Event-Write": "true"}
+
+        event = truncate_event(event)
 
         if os.getenv("DAGSTER_CLOUD_STORE_EVENT_OVER_HTTP"):
             self._store_events_http(headers, [event])

@@ -382,6 +382,18 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     def dagster_cloud_upload_api_response_url(self):
         return f"{self.dagster_cloud_url}/upload_api_response"
 
+    @property
+    def dagster_cloud_check_snapshot_url(self):
+        return f"{self.dagster_cloud_url}/check_snapshot"
+
+    @property
+    def dagster_cloud_confirm_upload_url(self):
+        return f"{self.dagster_cloud_url}/confirm_upload"
+
+    @property
+    def dagster_cloud_code_location_update_result_url(self):
+        return f"{self.dagster_cloud_url}/code_location_update_result"
+
     def dagster_cloud_api_headers(self, scope: DagsterCloudInstanceScope):
         return get_agent_headers(self._dagster_cloud_api_config, scope=scope)  # pyright: ignore[reportArgumentType]
 

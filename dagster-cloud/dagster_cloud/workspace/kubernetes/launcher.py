@@ -645,7 +645,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 server_handle.name, server_handle.namespace
             )
         except ApiException as e:
-            if e.reason == "Not found":
+            if e.status == 404:
                 self._logger.exception(
                     f"Tried to delete service {server_handle.name} but it was not found"
                 )
@@ -658,7 +658,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     server_handle.name, server_handle.namespace
                 )
             except ApiException as e:
-                if e.reason == "Not found":
+                if e.status == 404:
                     self._logger.exception(
                         f"Tried to delete deployment {server_handle.name} but it was not found"
                     )
