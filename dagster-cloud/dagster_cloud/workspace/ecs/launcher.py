@@ -84,6 +84,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         run_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
         server_health_check: Optional[Mapping[str, Any]] = None,
         enable_ecs_exec=False,
+        server_task_definition_prefix: str = "server",
+        run_task_definition_prefix: str = "run",
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -139,6 +141,22 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
         self.run_sidecar_containers = check.opt_sequence_param(
             run_sidecar_containers, "run_sidecar_containers"
+        )
+
+        self.server_task_definition_prefix = check.str_param(
+            server_task_definition_prefix, "server_task_definition_prefix"
+        )
+        check.invariant(
+            len(self.server_task_definition_prefix) <= 16,
+            "server_task_definition_prefix must be at most 16 characters",
+        )
+        self.run_task_definition_prefix = check.str_param(
+            run_task_definition_prefix, "run_task_definition_prefix"
+        )
+
+        check.invariant(
+            len(self.run_task_definition_prefix) <= 16,
+            "run_task_definition_prefix must be at most 16 characters",
         )
 
         self.server_ecs_tags = check.opt_sequence_param(server_ecs_tags, "server_ecs_tags")
@@ -268,6 +286,12 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                     bool,
                     is_required=False,
                     default_value=False,
+                ),
+                "server_task_definition_prefix": Field(
+                    str, is_required=False, default_value="server"
+                ),
+                "run_task_definition_prefix": Field(
+                    str, is_required=False, default_value="dagsterrun"
                 ),
             },
             SHARED_ECS_CONFIG,
@@ -428,7 +452,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         self._logger.info(f"Creating a new service for {deployment_name}:{location_name}...")
 
         family = get_server_task_definition_family(
-            self._instance.organization_name, deployment_name, location_name
+            self.server_task_definition_prefix,
+            self._instance.organization_name,
+            deployment_name,
+            location_name,
         )
 
         system_tags = {**self._get_dagster_tags(deployment_name, location_name), **tags}
@@ -696,6 +723,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             run_ecs_tags=self.run_ecs_tags,
             container_name=CONTAINER_NAME,
             run_resources=self.run_resources,
+            task_definition_prefix=self.run_task_definition_prefix,
         )
 
     def run_launcher(self) -> CloudEcsRunLauncher:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!

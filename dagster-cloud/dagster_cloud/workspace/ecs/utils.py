@@ -33,6 +33,7 @@ def _get_family_hash(name, max_length=32, hash_size=8):
 
 
 def get_server_task_definition_family(
+    task_definition_prefix: str,
     organization_name: Optional[str],
     deployment_name: str,
     location_name: str,
@@ -43,9 +44,12 @@ def get_server_task_definition_family(
     m = hashlib.sha1()
     m.update(location_name.encode("utf-8"))
 
+    # '{16}_{64}_{64}_{64}': max 211 characters
     truncated_location_name = _get_family_hash(location_name, max_length=64)
 
-    final_family = f"server_{organization_name}_{deployment_name}_{truncated_location_name}"
+    final_family: str = (
+        f"{task_definition_prefix}_{organization_name}_{deployment_name}_{truncated_location_name}"
+    )
 
     assert len(final_family) <= 255
 
@@ -53,6 +57,7 @@ def get_server_task_definition_family(
 
 
 def get_run_task_definition_family(
+    task_definition_prefix: str,
     organization_name: Optional[str],
     deployment_name: str,
     job_origin: RemoteJobOrigin,
@@ -64,12 +69,13 @@ def get_run_task_definition_family(
     repo_name = job_origin.repository_origin.repository_name
     location_name = job_origin.repository_origin.code_location_origin.location_name
 
+    assert len(task_definition_prefix) <= 16
     assert len(str(organization_name)) <= 64
     assert len(deployment_name) <= 64
 
     # '{16}_{64}_{64}_{32}_{32}_{32}': max 245 characters
 
-    final_family = f"run_{organization_name}_{deployment_name}_{_get_family_hash(location_name)}_{_get_family_hash(repo_name)}_{_get_family_hash(job_name)}"
+    final_family = f"{task_definition_prefix}_{organization_name}_{deployment_name}_{_get_family_hash(location_name)}_{_get_family_hash(repo_name)}_{_get_family_hash(job_name)}"
 
     assert len(final_family) <= 255
 

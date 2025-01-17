@@ -655,7 +655,7 @@ class DagsterCloudUserCodeLauncher(
             file = _file_for_format(object_bytes, upload_data.format)
             response = self._instance.requests_managed_retries_session.put(
                 url=upload_data.presigned_put_url,
-                files={"file": file},
+                data=file,
             )
             raise_http_error(response)
 

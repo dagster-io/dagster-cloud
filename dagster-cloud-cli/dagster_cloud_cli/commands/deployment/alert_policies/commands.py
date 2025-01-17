@@ -6,7 +6,6 @@ from typer import Option, Typer
 
 from .... import gql, ui
 from ....config_utils import dagster_cloud_options
-from .config_schema import INSIGHTS_ALERT_POLICIES_SCHEMA, process_alert_policies_config
 
 DEFAULT_ALERT_POLICIES_YAML_FILENAME = "alert_policies.yaml"
 
@@ -47,8 +46,6 @@ def sync_command(
             config = yaml.load(f.read(), Loader=yaml.SafeLoader)
 
         try:
-            process_alert_policies_config(config, INSIGHTS_ALERT_POLICIES_SCHEMA)
-
             alert_policies = gql.reconcile_alert_policies(client, config)
 
             ui.print(f"Synced alert policies: {', '.join(alert_policies)}")
