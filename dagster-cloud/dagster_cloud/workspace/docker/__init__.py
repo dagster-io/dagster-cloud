@@ -45,6 +45,7 @@ GRPC_SERVER_LABEL = "dagster_grpc_server"
 MULTIPEX_SERVER_LABEL = "dagster_multipex_server"
 AGENT_LABEL = "dagster_agent_id"
 SERVER_TIMESTAMP_LABEL = "dagster_server_timestamp"
+STOP_TIMEOUT_LABEL = "dagster_stop_timeout"
 
 
 IMAGE_PULL_LOG_INTERVAL = 15
@@ -135,6 +136,13 @@ class DockerUserCodeLauncher(
         command,
         labels,
     ):
+        container_kwargs = {**container_context.container_kwargs}
+
+        if "stop_timeout" in container_kwargs:
+            # This should work, but does not due to https://github.com/docker/docker-py/issues/3168
+            # Pull it out and apply it in the terminate() method instead
+            del container_kwargs["stop_timeout"]
+
         return client.containers.create(
             image,
             detach=True,
@@ -145,7 +153,7 @@ class DockerUserCodeLauncher(
             labels=labels,
             command=command,
             ports=ports,
-            **container_context.container_kwargs,
+            **container_kwargs,
         )
 
     def _get_standalone_dagster_server_handles_for_location(
@@ -319,6 +327,9 @@ class DockerUserCodeLauncher(
                 SERVER_TIMESTAMP_LABEL: str(desired_entry.update_timestamp),
             }
 
+        if "stop_timeout" in container_context.container_kwargs:
+            labels[STOP_TIMEOUT_LABEL] = str(container_context.container_kwargs["stop_timeout"])
+
         container, server_endpoint = self._launch_container(
             deployment_name,
             location_name,
@@ -352,8 +363,12 @@ class DockerUserCodeLauncher(
 
     def _remove_server_handle(self, server_handle: DagsterDockerContainer) -> None:
         container = server_handle.container
+
+        stop_timeout_str = server_handle.container.labels.get(STOP_TIMEOUT_LABEL)
+        stop_timeout = int(stop_timeout_str) if stop_timeout_str else None
+
         try:
-            container.stop()
+            container.stop(timeout=stop_timeout)
         except Exception:
             self._logger.error(f"Failure stopping container {container.id}: {sys.exc_info()}")
         container.remove(force=True)

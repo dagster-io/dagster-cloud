@@ -568,7 +568,6 @@ class DagsterCloudAgent:
             },
         )
         entries = result["data"]["deployments"][0]["workspaceEntries"]
-        now = time.time()
 
         upload_metadata = {}
 
@@ -579,10 +578,11 @@ class DagsterCloudAgent:
             )
             if entry["hasOutdatedData"]:
                 # Spin up a server for this location and upload its metadata to Cloud
-                # (Bump the TTL counter as well to leave the server up)
+                # (Bump the TTL counter as well to leave the server up - ensure that a slighty
+                # different timestamp is chosen for each location to break ties)
                 self._location_query_times[
                     (deployment_name, location_name, is_branch_deployment)
-                ] = now
+                ] = time.time()
                 upload_metadata[(deployment_name, location_name)] = UserCodeLauncherEntry(
                     code_location_deploy_data=code_location_deploy_data,
                     update_timestamp=float(entry["metadataTimestamp"]),
