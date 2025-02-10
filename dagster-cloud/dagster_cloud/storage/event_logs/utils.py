@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import List, Optional
 
 from dagster import DagsterEvent
 from dagster._core.events import (
@@ -26,23 +26,36 @@ def _get_maximum_event_message_characters() -> int:
 
 def _truncate_dagster_event_error(
     error_info: Optional[SerializableErrorInfo],
+    truncations: List[str],
 ) -> Optional[SerializableErrorInfo]:
     if not error_info:
         return error_info
 
-    return truncate_serialized_error(error_info, _get_error_character_size_limit(), max_depth=5)
+    return truncate_serialized_error(
+        error_info,
+        _get_error_character_size_limit(),
+        max_depth=5,
+        truncations=truncations,
+    )
 
 
-def _truncate_dagster_event(dagster_event: Optional[DagsterEvent]) -> Optional[DagsterEvent]:
+def _truncate_dagster_event(
+    dagster_event: Optional[DagsterEvent],
+    truncations: List[str],
+) -> Optional[DagsterEvent]:
     if not dagster_event:
         return dagster_event
     event_specific_data = dagster_event.event_specific_data
 
     if isinstance(event_specific_data, JobFailureData):
         event_specific_data = event_specific_data._replace(
-            error=_truncate_dagster_event_error(event_specific_data.error),
+            error=_truncate_dagster_event_error(
+                event_specific_data.error,
+                truncations,
+            ),
             first_step_failure_event=_truncate_dagster_event(
-                event_specific_data.first_step_failure_event
+                event_specific_data.first_step_failure_event,
+                truncations,
             ),
         )
     elif isinstance(
@@ -50,24 +63,40 @@ def _truncate_dagster_event(dagster_event: Optional[DagsterEvent]) -> Optional[D
         (JobCanceledData, EngineEventData, HookErroredData, StepFailureData, StepRetryData),
     ):
         event_specific_data = event_specific_data._replace(
-            error=_truncate_dagster_event_error(event_specific_data.error),
+            error=_truncate_dagster_event_error(
+                event_specific_data.error,
+                truncations,
+            ),
         )
 
     return dagster_event._replace(event_specific_data=event_specific_data)
 
 
-def truncate_event(event: EventLogEntry, maximum_length=None) -> EventLogEntry:
+def truncate_event(
+    event: EventLogEntry,
+    maximum_length=None,
+    truncations: Optional[List[str]] = None,
+) -> EventLogEntry:
+    truncations = [] if truncations is None else truncations
+
     if event.dagster_event:
-        event = event._replace(dagster_event=_truncate_dagster_event(event.dagster_event))
+        event = event._replace(
+            dagster_event=_truncate_dagster_event(
+                event.dagster_event,
+                truncations,
+            )
+        )
 
     maximum_length = (
         maximum_length if maximum_length is not None else _get_maximum_event_message_characters()
     )
 
-    if len(event.user_message) > maximum_length:
+    len_usr_msg = len(event.user_message)
+    if len_usr_msg > maximum_length:
+        truncations.append(f"user_message {len_usr_msg} to {maximum_length}")
         return event._replace(
             user_message=(
-                f"[TRUNCATED from {len(event.user_message)} characters to"
+                f"[TRUNCATED from {len_usr_msg} characters to"
                 f" {maximum_length}]"
                 f" {event.user_message[:maximum_length]} [TRUNCATED]"
             ),

@@ -35,6 +35,7 @@ from dagster._core.event_api import (
 from dagster._core.events import DagsterEvent, DagsterEventType
 from dagster._core.events.log import EventLogEntry
 from dagster._core.execution.stats import RunStepKeyStatsSnapshot, RunStepMarker, StepEventStatus
+from dagster._core.instance.config import PoolConfig, PoolGranularity
 from dagster._core.storage.asset_check_execution_record import (
     AssetCheckExecutionRecord,
     AssetCheckExecutionRecordStatus,
@@ -47,6 +48,7 @@ from dagster._core.storage.event_log.base import (
     EventLogConnection,
     EventLogStorage,
     PlannedMaterializationInfo,
+    PoolLimit,
 )
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
 from dagster._serdes import ConfigurableClass, ConfigurableClassData, serialize_value
@@ -106,6 +108,8 @@ from .queries import (
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_MATERIALIZED_PARTITIONS,
     GET_MAXIMUM_RECORD_ID,
+    GET_POOL_CONFIG_QUERY,
+    GET_POOL_LIMITS_QUERY,
     GET_RECORDS_FOR_RUN_QUERY,
     GET_RUN_STATUS_CHANGE_EVENTS_QUERY,
     GET_STATS_FOR_RUN_QUERY,
@@ -1331,4 +1335,28 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             if value
             else None
             for value in res["data"]["eventLogs"]["getAssetStatusCacheValues"]
+        ]
+
+    def get_pool_config(self):
+        res = self._execute_query(GET_POOL_CONFIG_QUERY)
+        pool_config = res["data"]["eventLogs"]["getPoolConfig"]
+        granularity_str = pool_config.get("poolGranularity")
+
+        return PoolConfig(
+            pool_granularity=PoolGranularity(granularity_str) if granularity_str else None,
+            default_pool_limit=pool_config.get("defaultPoolLimit"),
+            op_granularity_run_buffer=pool_config.get("opGranularityRunBuffer"),
+        )
+
+    def get_pool_limits(self) -> Sequence[PoolLimit]:
+        """Get the set of concurrency limited keys and limits."""
+        res = self._execute_query(GET_POOL_LIMITS_QUERY)
+        limits = res["data"]["eventLogs"]["getPoolLimits"]
+        return [
+            PoolLimit(
+                name=limit.get("name"),
+                limit=limit.get("limit"),
+                from_default=limit.get("from_default"),
+            )
+            for limit in limits
         ]

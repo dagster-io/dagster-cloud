@@ -612,7 +612,6 @@ instance_class:
     def opentelemetry(self) -> OpenTelemetryController:
         if not self._opentelemetry_controller:
             self._opentelemetry_controller = OpenTelemetryController(
-                service_name=self.agent_display_name,
                 instance_id=self.instance_uuid,
                 version=__version__,
                 config=self._opentelemetry_config,

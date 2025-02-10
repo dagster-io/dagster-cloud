@@ -9,8 +9,8 @@ from typing import Optional, cast
 import dagster._check as check
 import grpc
 from dagster._core.errors import DagsterUserCodeUnreachableError
-from dagster._grpc.__generated__ import api_pb2
-from dagster._grpc.__generated__.api_pb2_grpc import (
+from dagster._grpc.__generated__ import dagster_api_pb2
+from dagster._grpc.__generated__.dagster_api_pb2_grpc import (
     DagsterApiServicer,
     add_DagsterApiServicer_to_server,
 )
@@ -186,7 +186,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             self._get_handle_from_metadata(context)
         )
         if isinstance(client_or_error, SerializableErrorInfo):
-            return api_pb2.ListRepositoriesReply(
+            return dagster_api_pb2.ListRepositoriesReply(
                 serialized_list_repositories_response_or_error=serialize_value(client_or_error)
             )
         return client_or_error._get_response("ListRepositories", request)  # noqa: SLF001
@@ -337,7 +337,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
                     f"Active server hit error:\n{e}",
                 )
 
-        return api_pb2.GetCurrentRunsReply(
+        return dagster_api_pb2.GetCurrentRunsReply(
             serialized_current_runs=serialize_value(
                 GetCurrentRunsResult(current_runs=all_run_ids, serializable_error_info=None)
             )

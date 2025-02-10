@@ -1,4 +1,4 @@
-from dagster import BoolSource, Field, Shape
+from dagster import BoolSource, Field, Shape, StringSource
 
 from dagster_cloud.opentelemetry.config.exporter import exporter_config_schema
 from dagster_cloud.opentelemetry.config.log_record_processor import log_record_processor_schema
@@ -14,6 +14,12 @@ def opentelemetry_config_schema():
             description="Enables OpenTelemetry instrumentation.",
             is_required=False,
             default_value=True,
+        ),
+        "service_name": Field(
+            StringSource,
+            description="Name of the service to which to send telemetry",
+            is_required=False,
+            default_value="dagster-cloud-agent",
         ),
         "logging": Field(
             description="The logging configuration.",

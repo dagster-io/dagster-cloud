@@ -66,7 +66,6 @@ class OpenTelemetryController:
 
                 logger.info("OpenTelemetry is not started. This log will not be captured by OpenTelemetry.")
                 opentelemetry = OpenTelemetryController(
-                    service_name="my_service",
                     instance_id="my_instance",
                     version="0.0.1",
                     config=otel_config,
@@ -95,7 +94,6 @@ class OpenTelemetryController:
 
     def __init__(
         self,
-        service_name: str,
         instance_id: str,
         version: str,
         config: Optional[Mapping[str, Any]] = None,
@@ -103,7 +101,6 @@ class OpenTelemetryController:
     ):
         """Initialize the telemetry instance.
         params:
-            service_name: str: The name of the service.
             instance_id: str: The unique identifier of the service instance.
             version: str: The version of the service.
             config: dict: The configuration for the telemetry components.
@@ -122,6 +119,9 @@ class OpenTelemetryController:
         self._meters: dict[str, Meter] = {}
 
         self._config = config or {}
+
+        service_name = self._config["service_name"]
+
         self._logger = logger or logging.getLogger()
         self._resource_attributes = {
             "service.name": service_name,

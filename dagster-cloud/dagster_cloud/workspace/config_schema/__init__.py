@@ -90,10 +90,12 @@ def process_workspace_config(workspace_config) -> Dict[str, Any]:
         check.is_list(workspace_config.get("locations"))
 
         validation = validate_config(WORKSPACE_CONFIG_SCHEMA, workspace_config)
-        check.invariant(
-            validation.success,
-            ", ".join([error.message for error in cast(List[EvaluationError], validation.errors)]),
-        )
+        if not validation.success:
+            check.failed(
+                ", ".join(
+                    [error.message for error in cast(List[EvaluationError], validation.errors)]
+                ),
+            )
         return workspace_config
 
 

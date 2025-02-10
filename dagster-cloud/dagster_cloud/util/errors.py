@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import List, Optional, Sequence
 
 from dagster._serdes import serialize_value
 from dagster._utils.error import SerializableErrorInfo
@@ -14,10 +14,16 @@ def unwrap_user_code_error(error_info: SerializableErrorInfo) -> SerializableErr
 
 
 def truncate_serialized_error(
-    error_info: SerializableErrorInfo, field_size_limit: int, max_depth: int
+    error_info: SerializableErrorInfo,
+    field_size_limit: int,
+    max_depth: int,
+    truncations: Optional[List[str]] = None,
 ):
+    truncations = [] if truncations is None else truncations
+
     if error_info.cause:
         if max_depth == 0:
+            truncations.append("cause")
             new_cause = (
                 error_info.cause
                 if len(serialize_value(error_info.cause)) <= field_size_limit
@@ -29,12 +35,16 @@ def truncate_serialized_error(
             )
         else:
             new_cause = truncate_serialized_error(
-                error_info.cause, field_size_limit, max_depth=max_depth - 1
+                error_info.cause,
+                field_size_limit,
+                max_depth=max_depth - 1,
+                truncations=truncations,
             )
         error_info = error_info._replace(cause=new_cause)
 
     if error_info.context:
         if max_depth == 0:
+            truncations.append("context")
             new_context = (
                 error_info.context
                 if len(serialize_value(error_info.context)) <= field_size_limit
@@ -46,7 +56,10 @@ def truncate_serialized_error(
             )
         else:
             new_context = truncate_serialized_error(
-                error_info.context, field_size_limit, max_depth=max_depth - 1
+                error_info.context,
+                field_size_limit,
+                max_depth=max_depth - 1,
+                truncations=truncations,
             )
         error_info = error_info._replace(context=new_context)
 
@@ -55,6 +68,7 @@ def truncate_serialized_error(
     for stack_elem in error_info.stack:
         stack_size_so_far += len(stack_elem)
         if stack_size_so_far > field_size_limit:
+            truncations.append("stack")
             truncated_stack.append("(TRUNCATED)")
             break
 
@@ -62,12 +76,15 @@ def truncate_serialized_error(
 
     error_info = error_info._replace(stack=truncated_stack)
 
-    if len(error_info.message) > field_size_limit:
+    msg_len = len(error_info.message)
+    if msg_len > field_size_limit:
+        truncations.append(f"message from {msg_len} to {field_size_limit}")
         error_info = error_info._replace(
             message=error_info.message[:field_size_limit] + " (TRUNCATED)"
         )
 
     if error_info.cls_name and len(error_info.cls_name) > ERROR_CLASS_NAME_SIZE_LIMIT:
+        truncations.append("cls_name")
         error_info = error_info._replace(
             cls_name=error_info.cls_name[:ERROR_CLASS_NAME_SIZE_LIMIT] + " (TRUNCATED)"
         )

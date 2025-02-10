@@ -595,6 +595,30 @@ query getConcurrencyKeys {
 }
 """
 
+GET_POOL_LIMITS_QUERY = """
+query getPoolLimits {
+    eventLogs {
+        getPoolLimits {
+            name
+            limit
+            fromDefault
+        }
+    }
+}
+"""
+
+GET_POOL_CONFIG_QUERY = """
+query getPoolConfig {
+    eventLogs {
+        getPoolConfig {
+            poolGranularity
+            defaultPoolLimit
+            opGranularityRunBuffer
+        }
+    }
+}
+"""
+
 GET_CONCURRENCY_INFO_QUERY = """
 query getConcurrencyInfo($concurrencyKey: String!) {
     eventLogs {
