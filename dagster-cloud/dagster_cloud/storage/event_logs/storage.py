@@ -1356,7 +1356,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             PoolLimit(
                 name=limit.get("name"),
                 limit=limit.get("limit"),
-                from_default=limit.get("from_default"),
+                from_default=limit.get("fromDefault"),
             )
             for limit in limits
         ]
