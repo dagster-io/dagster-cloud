@@ -51,7 +51,7 @@ from dagster._core.remote_representation.origin import (
     RegisteredCodeLocationOrigin,
 )
 from dagster._grpc.client import DagsterGrpcClient
-from dagster._grpc.types import GetCurrentImageResult
+from dagster._grpc.types import GetCurrentImageResult, ListRepositoriesResponse
 from dagster._serdes import (
     deserialize_value,
     pack_value,
@@ -873,6 +873,15 @@ class DagsterCloudUserCodeLauncher(
                 f" {deployment_name}:{workspace_entry.location_name} {response.message}"
             )
 
+    async def gen_list_repositories_response(
+        self,
+        client: DagsterGrpcClient,
+    ) -> "ListRepositoriesResponse":
+        return await gen_list_repositories_grpc(
+            client,
+            timeout=int(os.getenv("DAGSTER_CLOUD_LIST_REPOSITORIES_GRPC_TIMEOUT", "180")),
+        )
+
     async def _get_upload_location_data(
         self,
         deployment_name: str,
@@ -882,7 +891,7 @@ class DagsterCloudUserCodeLauncher(
         location_origin = self._get_code_location_origin(location_name)
         client = server.server_endpoint.create_client()
 
-        list_repositories_response = await gen_list_repositories_grpc(client)
+        list_repositories_response = await self.gen_list_repositories_response(client)
 
         upload_repo_datas: List[DagsterCloudUploadRepositoryData] = []
 
@@ -2324,7 +2333,7 @@ class DagsterCloudUserCodeLauncher(
             client, timeout, additional_check, get_timeout_debug_info=get_timeout_debug_info
         )
         # Call a method that raises an exception if there was an error importing the code
-        await gen_list_repositories_grpc(client)
+        await self.gen_list_repositories_response(client)
 
     async def _wait_for_server_process(
         self,
@@ -2383,6 +2392,7 @@ class DagsterCloudUserCodeLauncher(
             response = client.external_job(
                 RemoteRepositoryOrigin(location_origin, job_selector.repository_name),
                 job_selector.job_name,
+                timeout=int(os.getenv("DAGSTER_CLOUD_EXTERNAL_JOB_GRPC_TIMEOUT", "180")),
             )
             if not response.serialized_job_data:
                 error = (

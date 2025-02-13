@@ -2,7 +2,7 @@ from contextlib import contextmanager, nullcontext
 from typing import Iterator, List
 
 from dagster import AssetObservation
-from dagster._annotations import experimental
+from dagster._annotations import beta
 from dagster_gcp import BigQueryResource
 from dagster_gcp.bigquery.utils import setup_gcp_creds
 from google.cloud import bigquery
@@ -41,7 +41,7 @@ class WrappedBigQueryClient(bigquery.Client):
         return sum([x for x in self._query_slots_ms])
 
 
-@experimental
+@beta
 class InsightsBigQueryResource(BigQueryResource):
     """A wrapper around :py:class:`BigQueryResource` which automatically collects metadata about
     BigQuery costs which can be attributed to Dagster jobs and assets.

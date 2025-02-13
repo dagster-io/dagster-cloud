@@ -23,7 +23,7 @@ from dagster import (
     OpExecutionContext,
     get_dagster_logger,
 )
-from dagster._annotations import experimental, public
+from dagster._annotations import beta, public
 from dagster._check import CheckError
 from dagster._core.errors import DagsterInvalidPropertyError
 from dagster._core.storage.event_log.sql_event_log import SqlDbConnection
@@ -110,7 +110,7 @@ class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
         return cursor
 
 
-@experimental
+@beta
 class InsightsSnowflakeResource(SnowflakeResource):
     """A wrapper around :py:class:`SnowflakeResource` which automatically tags
     Snowflake queries with comments which can be used to attribute Snowflake

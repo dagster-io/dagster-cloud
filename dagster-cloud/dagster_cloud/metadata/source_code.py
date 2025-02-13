@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 from dagster import DagsterInvariantViolationError
-from dagster._annotations import experimental
+from dagster._annotations import beta
 from dagster._core.definitions.metadata import (
     AnchorBasedFilePathMapping,
     link_code_references_to_git,
@@ -42,7 +42,7 @@ def _locate_git_root() -> Optional[Path]:
     return None
 
 
-@experimental
+@beta
 def link_code_references_to_git_if_cloud(
     assets_defs: Sequence[
         Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition", "AssetSpec"]

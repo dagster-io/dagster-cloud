@@ -13,7 +13,7 @@ from botocore.exceptions import ClientError
 from dagster._utils.backoff import backoff
 from dagster._utils.cached_method import cached_method
 from dagster_aws.ecs.tasks import DagsterEcsTaskDefinitionConfig
-from dagster_aws.ecs.utils import task_definitions_match
+from dagster_aws.ecs.utils import is_transient_task_stopped_reason, task_definitions_match
 
 from dagster_cloud.workspace.ecs.service import Service
 
@@ -646,7 +646,15 @@ class Client:
                 # If there are still no running_tasks tasks after a certain grace period, check for stopped tasks
                 stopped_tasks = self._check_for_stopped_tasks(service_name)
                 if stopped_tasks:
-                    self._raise_failed_task(stopped_tasks[0], container_name, logger)
+                    latest_stopped_task = stopped_tasks[0]
+                    stopped_reason = latest_stopped_task.get("stoppedReason", "")
+
+                    if is_transient_task_stopped_reason(stopped_reason):
+                        logger.warning(
+                            f"Task stopped with a transient stoppedReason: {stopped_reason} - waiting for the service to launch a new task"
+                        )
+                    else:
+                        self._raise_failed_task(stopped_tasks[0], container_name, logger)
 
             if tasks_to_track:
                 tasks = self.ecs.describe_tasks(
@@ -660,7 +668,15 @@ class Client:
                         if not self._check_all_essential_containers_are_running(task):
                             all_tasks_running = False
                     elif task.get("lastStatus") == "STOPPED":
-                        self._raise_failed_task(task, container_name, logger)
+                        stopped_reason = task.get("stoppedReason", "")
+                        if is_transient_task_stopped_reason(stopped_reason):
+                            logger.warning(
+                                f"Running task stopped with a transient stoppedReason: {stopped_reason} - waiting for the service to launch a new task"
+                            )
+                            tasks_to_track = []
+                            all_tasks_running = False
+                        else:
+                            self._raise_failed_task(task, container_name, logger)
 
                 if all_tasks_running:
                     return tasks_to_track

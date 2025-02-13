@@ -4,16 +4,16 @@ from typing import Dict, List, NamedTuple, Optional, Tuple, Union
 
 import requests
 from dagster import AssetExecutionContext, DagsterInstance, OpExecutionContext
-from dagster._annotations import experimental
+from dagster._annotations import beta
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 
 from dagster_cloud.instance import DagsterCloudAgentInstance
 
 
-@experimental
+@beta
 class DagsterMetric(NamedTuple):
-    """Experimental: This class gives information about a Metric.
+    """Beta: This class gives information about a Metric.
 
     Args:
         metric_name (str): name of the metric
@@ -86,7 +86,7 @@ def upload_cost_information(
             )
 
 
-@experimental
+@beta
 def put_cost_information(
     context: Union[OpExecutionContext, AssetExecutionContext],
     metric_name: str,

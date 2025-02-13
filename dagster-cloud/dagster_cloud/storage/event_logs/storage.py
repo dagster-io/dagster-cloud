@@ -1,6 +1,7 @@
 import json
 import os
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import timezone
 from typing import (
     TYPE_CHECKING,
@@ -67,6 +68,7 @@ from dagster_cloud_cli.core.errors import DagsterCloudAgentServerError
 from typing_extensions import Self
 
 from dagster_cloud.api.dagster_cloud_api import StoreEventBatchRequest
+from dagster_cloud.metrics.tracer import Tracer
 from dagster_cloud.storage.event_logs.utils import truncate_event
 from dagster_cloud.util import compressed_namedtuple_upload_file
 
@@ -460,6 +462,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         """
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
         self._override_graphql_client = override_graphql_client
+        self._tracer = Tracer()
 
     @property
     def inst_data(self):
@@ -611,22 +614,50 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 files={"store_events.tmp": f},
             )
 
+    def _add_metric_header(self, headers: Dict[str, str]):
+        if os.getenv("DAGSTER_CLOUD_STORE_EVENT_SEND_METRICS") != "1":
+            return
+
+        try:
+            span_metric = self._tracer.pop_serialized_span()
+            if span_metric:
+                headers["Dagster-Cloud-Metric"] = span_metric
+        except:
+            pass
+
+    @contextmanager
+    def _event_span(self, event: EventLogEntry):
+        if os.getenv("DAGSTER_CLOUD_STORE_EVENT_SEND_METRICS") != "1":
+            yield
+        else:
+            with self._tracer.start_span("store-event") as event_span:
+                event_span.set_attribute(
+                    "event_type",
+                    event.dagster_event.event_type_value
+                    if event.dagster_event is not None
+                    else "user",
+                )
+                yield
+
     def store_event(self, event: EventLogEntry):
         check.inst_param(event, "event", EventLogEntry)
         headers = {"Idempotency-Key": str(uuid4()), "X-Event-Write": "true"}
 
+        self._add_metric_header(headers)
+
         event = truncate_event(event)
 
-        if os.getenv("DAGSTER_CLOUD_STORE_EVENT_OVER_HTTP"):
-            self._store_events_http(headers, [event])
-        else:
-            self._execute_query(
-                STORE_EVENT_MUTATION,
-                variables={
-                    "eventRecord": _input_for_event(event),
-                },
-                headers=headers,
-            )
+        with self._event_span(event):
+            if os.getenv("DAGSTER_CLOUD_STORE_EVENT_OVER_HTTP"):
+                self._store_events_http(headers, [event])
+            else:
+                self._execute_query(
+                    STORE_EVENT_MUTATION,
+                    variables={
+                        "eventRecord": _input_for_event(event),
+                    },
+                    headers=headers,
+                )
 
     def store_event_batch(self, events: Sequence[EventLogEntry]):
         check.sequence_param(events, "events", of_type=EventLogEntry)
