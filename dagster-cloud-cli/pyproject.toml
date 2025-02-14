@@ -22,7 +22,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.10.0",
+    "dagster==1.10.1",
     "packaging>=20.9",
     "questionary",
     "requests",

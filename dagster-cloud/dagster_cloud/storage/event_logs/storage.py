@@ -1111,6 +1111,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             slot_count=info["slotCount"],
             claimed_slots=[_claimed_slot_from_graphql(slot) for slot in info["claimedSlots"]],
             pending_steps=[_pending_step_from_graphql(step) for step in info["pendingSteps"]],
+            limit=info["limit"],
+            using_default_limit=bool(info["usingDefaultLimit"]),
         )
 
     def claim_concurrency_slot(

@@ -636,6 +636,8 @@ query getConcurrencyInfo($concurrencyKey: String!) {
                 assignedTimestamp
                 priority
             }
+            limit
+            usingDefaultLimit
         }
     }
 }
