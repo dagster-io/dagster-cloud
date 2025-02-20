@@ -1,3 +1,5 @@
+from typing import Mapping
+
 from dagster._core.storage.tags import (
     AUTO_MATERIALIZE_TAG,
     AUTO_OBSERVE_TAG,
@@ -34,6 +36,8 @@ DID_ALERT_TAG = f"{CLOUD_SYSTEM_TAG_PREFIX}triggered_alert"
 TRIGGERED_ALERT_POLICY_TAG_PREFIX = f"{HIDDEN_TAG_PREFIX}triggered_alert_policy/"
 TRIGGERED_ALERT_ID_TAG_PREFIX = f"{HIDDEN_TAG_PREFIX}triggered_alert/"
 
+TRIGGERED_NOTIFICATION_TAG_PREFIX = f"{HIDDEN_TAG_PREFIX}triggered_notification/"
+
 
 def get_triggered_alert_policy_key(alert_policy_id: str) -> str:
     return f"{TRIGGERED_ALERT_POLICY_TAG_PREFIX}{alert_policy_id}"
@@ -41,6 +45,14 @@ def get_triggered_alert_policy_key(alert_policy_id: str) -> str:
 
 def get_triggered_alert_id_key(alert_id: str) -> str:
     return f"{TRIGGERED_ALERT_ID_TAG_PREFIX}{alert_id}"
+
+
+def get_triggered_notification_key(notification_id: str) -> str:
+    return f"{TRIGGERED_NOTIFICATION_TAG_PREFIX}{notification_id}"
+
+
+def get_triggered_notification_key_value(notification_id: str) -> Mapping[str, str]:
+    return {f"{TRIGGERED_NOTIFICATION_TAG_PREFIX}{notification_id}": "true"}
 
 
 def get_policy_names_from_tag_value(policies_str):

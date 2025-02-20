@@ -150,13 +150,15 @@ def dbt_with_bigquery_insights(
     try:
         with adapter.connection_named("dagster_insights:bigquery_cost"):
             client: "bigquery.Client" = adapter.connections.get_thread_connection().handle  # pyright: ignore[reportAssignmentType]
-            if client.location and client.project:
+
+            if (client.location or adapter.config.credentials.location) and client.project:
                 # we should populate the location/project from the client, and use that to determine
                 # the correct INFORMATION_SCHEMA.JOBS table to query for cost information
-                location = client.location
+                # If the client doesn't have a location, fall back to the location provided
+                # in the dbt profile config
+                location = client.location or adapter.config.credentials.location
                 project = client.project
             else:
-                # try fetching the default dataset from the schema, if it exists
                 dataset = client.get_dataset(adapter.config.credentials.schema)
                 location = dataset.location if dataset else None
                 project = client.project or dataset.project
