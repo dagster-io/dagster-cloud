@@ -3,7 +3,7 @@
 import logging
 import os
 import tempfile
-from typing import Any, Dict
+from typing import Any
 
 from typer import Option
 
@@ -64,8 +64,8 @@ def build_upload_pex(
     api_token: str,
     location: pex_builder.parse_workspace.Location,
     build_method: BuildMethod,
-    kwargs: Dict[str, Any],
-) -> Dict[str, Any]:
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
     # build and upload the python executable, return the modified kwargs with pex_tag and image
     kwargs = kwargs.copy()
 

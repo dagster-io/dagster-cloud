@@ -1,8 +1,8 @@
 from pathlib import Path
+from typing import Annotated
 
 import yaml
 from typer import Argument, Typer
-from typing_extensions import Annotated
 
 from ... import gql, ui
 from ...config_utils import dagster_cloud_options
@@ -42,7 +42,7 @@ def set_from_filecommand(
     if not url:
         url = gql.url_from_config(organization=organization)
 
-    with open(file_path, "r", encoding="utf8") as f:
+    with open(file_path, encoding="utf8") as f:
         settings = {"settings": yaml.safe_load(f) or {}}
     with gql.graphql_client_from_url(url, api_token) as client:
         gql.set_organization_settings(client, settings)

@@ -42,7 +42,7 @@ def sync_command(
 ):
     """Sync your YAML configured alert policies to Dagster Cloud."""
     with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
-        with open(str(alert_policies_file), "r", encoding="utf8") as f:
+        with open(str(alert_policies_file), encoding="utf8") as f:
             config = yaml.load(f.read(), Loader=yaml.SafeLoader)
 
         try:

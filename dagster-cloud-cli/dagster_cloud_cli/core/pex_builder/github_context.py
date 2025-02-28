@@ -5,7 +5,7 @@ import pathlib
 import pprint
 import subprocess
 from contextlib import contextmanager
-from typing import Dict, Optional
+from typing import Optional
 
 from . import util
 
@@ -105,7 +105,7 @@ class GithubEvent:
             logging.exception("Ignoring error when updating PR comment")
 
 
-def get_git_commit_metadata(project_dir: str) -> Dict[str, str]:
+def get_git_commit_metadata(project_dir: str) -> dict[str, str]:
     commands = {
         "timestamp": f"git -C {project_dir} log -1 --format=%cd --date=unix".split(),
         "message": f"git -C {project_dir} log -1 --format=%s".split(),

@@ -4,7 +4,8 @@ import subprocess
 import sys
 import threading
 from collections import defaultdict
-from typing import Any, Collection, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple, Union
+from collections.abc import Collection, Mapping
+from typing import Any, NamedTuple, Optional, Union
 
 import dagster._seven as seven
 from dagster import (
@@ -56,7 +57,7 @@ class ProcessUserCodeEntry(
         heartbeat_shutdown_event: threading.Event,
         heartbeat_thread: threading.Thread,
     ):
-        return super(ProcessUserCodeEntry, cls).__new__(
+        return super().__new__(
             cls,
             check.inst_param(grpc_server_process, "grpc_server_process", subprocess.Popen),
             check.inst_param(grpc_client, "grpc_client", DagsterGrpcClient),
@@ -79,7 +80,7 @@ class MultipexUserCodeEntry(
         grpc_server_process: subprocess.Popen,
         grpc_client: MultiPexGrpcClient,
     ):
-        return super(MultipexUserCodeEntry, cls).__new__(
+        return super().__new__(
             cls,
             check.inst_param(grpc_server_process, "grpc_server_process", subprocess.Popen),
             check.inst_param(grpc_client, "grpc_client", MultiPexGrpcClient),
@@ -98,14 +99,14 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         # map from pid to server being spun up
         # (including old servers in the process of being shut down)
-        self._process_entries: Dict[int, Union[ProcessUserCodeEntry, MultipexUserCodeEntry]] = {}
+        self._process_entries: dict[int, Union[ProcessUserCodeEntry, MultipexUserCodeEntry]] = {}
 
         # map from locationname to the pid(s) for that location-metadata combination.
         # Generally there should be only one pid per location unless an exception was raised partway
         # through an update
-        self._active_pids: Dict[Tuple[str, str], Set[int]] = defaultdict(set)
+        self._active_pids: dict[tuple[str, str], set[int]] = defaultdict(set)
 
-        self._active_multipex_pids: Dict[Tuple[str, str], Set[int]] = defaultdict(set)
+        self._active_multipex_pids: dict[tuple[str, str], set[int]] = defaultdict(set)
 
         self._heartbeat_ttl = 60
         self._wait_for_processes = wait_for_processes
@@ -115,7 +116,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         self._run_launcher: Optional[CloudProcessRunLauncher] = None
 
-        super(ProcessUserCodeLauncher, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     @property
     def requires_images(self) -> bool:
@@ -174,7 +175,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         return self._inst_data
 
     @classmethod
-    def config_type(cls) -> Dict:
+    def config_type(cls) -> dict:
         return merge_dicts(
             {
                 "server_process_startup_timeout": Field(
@@ -384,7 +385,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         return self._run_launcher
 
-    def _list_server_handles(self) -> List[int]:
+    def _list_server_handles(self) -> list[int]:
         return list(self._process_entries.keys())
 
     def get_agent_id_for_server(self, handle: int) -> Optional[str]:

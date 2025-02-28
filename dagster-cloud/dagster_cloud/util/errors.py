@@ -1,4 +1,5 @@
-from typing import List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 from dagster._serdes import serialize_value
 from dagster._utils.error import SerializableErrorInfo
@@ -17,7 +18,7 @@ def truncate_serialized_error(
     error_info: SerializableErrorInfo,
     field_size_limit: int,
     max_depth: int,
-    truncations: Optional[List[str]] = None,
+    truncations: Optional[list[str]] = None,
 ):
     truncations = [] if truncations is None else truncations
 

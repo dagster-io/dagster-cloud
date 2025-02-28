@@ -1,7 +1,10 @@
 import subprocess
+from typing import Optional
 
 import typer
 from typer import Typer
+
+from dagster_cloud_cli.types import SnapshotBaseDeploymentCondition
 
 from ... import gql, ui
 from ...config_utils import dagster_cloud_options
@@ -88,6 +91,18 @@ def create_or_update(
         None,
         help="The name of the deployment to use as the base deployment for the branch deployment.",
     ),
+    snapshot_base_condition: Optional[SnapshotBaseDeploymentCondition] = typer.Option(
+        None,
+        help="""
+If and when to snapshot the definitions in the base deployment for highlighting changes in the branch:
+
+\b
+* None (default): No snapshots, branch is always compared to the live base deployment.
+* on-create: Compare against a snapshot of the base deployment taken when the branch is first created.
+* on-update: Compare against a snapshot that is updated every time the branch deployment is updated.
+""",
+        show_default=False,
+    ),
 ) -> None:
     """Sets up or updates the branch deployment for the given git branch."""
     if not url and not organization:
@@ -128,6 +143,7 @@ def create_or_update(
                 author_email=author_email,
                 author_avatar_url=author_avatar_url,
                 base_deployment_name=base_deployment_name,
+                snapshot_base_condition=snapshot_base_condition,
             )
         )
 

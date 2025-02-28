@@ -1,8 +1,9 @@
 import logging
 from collections import defaultdict
+from collections.abc import Collection, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Collection, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple
+from typing import Any, NamedTuple, Optional
 
 import kubernetes
 import kubernetes.client as client
@@ -177,7 +178,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self._only_allow_user_defined_k8s_config_fields = only_allow_user_defined_k8s_config_fields
         self._only_allow_user_defined_env_vars = only_allow_user_defined_env_vars
 
-        super(K8sUserCodeLauncher, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self._launcher = CloudK8sRunLauncher(
             dagster_home=self._dagster_home,
@@ -214,7 +215,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         )
 
         # mutable set of observed namespaces to assist with cleanup
-        self._used_namespaces: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
+        self._used_namespaces: dict[tuple[str, str], set[str]] = defaultdict(set)
 
     @property
     def requires_images(self):
@@ -462,7 +463,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             )
         except ApiException as e:
             self._logger.error(
-                "Exception when calling AppsV1Api->create_namespaced_deployment: %s\n" % e
+                f"Exception when calling AppsV1Api->create_namespaced_deployment: {e}\n"
             )
             raise e
 
@@ -487,7 +488,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             )
         except ApiException as e:
             self._logger.error(
-                "Exception when calling AppsV1Api->create_namespaced_service: %s\n" % e
+                f"Exception when calling AppsV1Api->create_namespaced_service: {e}\n"
             )
             raise e
 
@@ -603,14 +604,14 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
         return handles
 
-    def _list_server_handles(self) -> List[K8sHandle]:
-        namespaces: Set[str] = set()
+    def _list_server_handles(self) -> list[K8sHandle]:
+        namespaces: set[str] = set()
         if self._namespace:
             namespaces.add(self._namespace)
         for namespace_items in self._used_namespaces.values():
             for namespace in namespace_items:
                 namespaces.add(namespace)
-        handles: List[K8sHandle] = []
+        handles: list[K8sHandle] = []
         with self._get_apps_api_instance() as api_instance:
             for namespace in namespaces:
                 deployments = api_instance.list_namespaced_deployment(

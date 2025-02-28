@@ -1,4 +1,4 @@
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 from dagster._serdes import whitelist_for_serdes
 from dagster_cloud_cli.core.agent_queue import AgentQueue
@@ -7,14 +7,14 @@ from dagster_cloud_cli.core.agent_queue import AgentQueue
 @whitelist_for_serdes
 class AgentQueuesConfig(NamedTuple):
     include_default_queue: bool = True
-    additional_queues: Optional[List[AgentQueue]] = None
+    additional_queues: Optional[list[AgentQueue]] = None
 
     @staticmethod
-    def default_queues() -> List[AgentQueue]:
+    def default_queues() -> list[AgentQueue]:
         return [None]
 
     @property
-    def queues(self) -> List[AgentQueue]:
+    def queues(self) -> list[AgentQueue]:
         if self.additional_queues:
             queues = self.additional_queues.copy()
         else:

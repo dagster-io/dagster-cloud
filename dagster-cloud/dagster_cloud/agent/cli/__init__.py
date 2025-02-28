@@ -2,9 +2,10 @@ import json
 import logging
 import logging.config
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Mapping, Optional, cast
+from typing import Optional, cast
 
 import dagster._check as check
 import yaml

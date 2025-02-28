@@ -5,7 +5,7 @@ import inspect
 import math
 import os
 import socket
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import typer
 from typer.models import OptionInfo
@@ -38,7 +38,7 @@ def find_free_port():
 
 
 def with_added_params(
-    signature: inspect.Signature, to_add: Dict[str, inspect.Parameter]
+    signature: inspect.Signature, to_add: dict[str, inspect.Parameter]
 ) -> inspect.Signature:
     """Returns a new signature based on the provided one, with the provided parameters added."""
     params = collections.OrderedDict(signature.parameters)
@@ -47,7 +47,7 @@ def with_added_params(
     return signature.replace(parameters=list(params.values()))
 
 
-def without_params(signature: inspect.Signature, to_remove: List[str]) -> inspect.Signature:
+def without_params(signature: inspect.Signature, to_remove: list[str]) -> inspect.Signature:
     """Returns a new signature based on the provided one with the given parameters removed by name.
     Does nothing if the parameter is not found.
     """
@@ -58,7 +58,7 @@ def without_params(signature: inspect.Signature, to_remove: List[str]) -> inspec
     return signature.replace(parameters=list(params.values()))
 
 
-def add_options(options: Dict[str, Tuple[Any, OptionInfo]]):
+def add_options(options: dict[str, tuple[Any, OptionInfo]]):
     """Decorator to add Options to a particular command."""
 
     def decorator(to_wrap):
@@ -86,7 +86,7 @@ def add_options(options: Dict[str, Tuple[Any, OptionInfo]]):
         def wrap_function(*args, **kwargs):
             modified_kwargs = kwargs
             if not has_kwargs and not hasattr(to_wrap, "modified_options"):
-                modified_kwargs: Dict[Any, Any] = {
+                modified_kwargs: dict[Any, Any] = {
                     k: v for k, v in kwargs.items() if k in to_wrap_sig.parameters
                 }
             return to_wrap(*args, **modified_kwargs)

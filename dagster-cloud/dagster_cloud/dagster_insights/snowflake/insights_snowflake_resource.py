@@ -1,19 +1,8 @@
 import warnings
+from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from io import StringIO
-from typing import (
-    Any,
-    Generator,
-    Iterable,
-    Iterator,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
-    cast,
-)
+from typing import Any, Optional, Union, cast
 
 import snowflake.connector
 from dagster import (
@@ -36,7 +25,7 @@ from .snowflake_utils import meter_snowflake_query
 
 
 def get_current_context_and_asset_key_or_warn() -> (
-    Tuple[Union[OpExecutionContext, AssetExecutionContext, None], Optional[AssetKey]]
+    tuple[Union[OpExecutionContext, AssetExecutionContext, None], Optional[AssetKey]]
 ):
     try:
         return get_current_context_and_asset_key()
@@ -80,7 +69,7 @@ class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
         sql_text: str,
         remove_comments: bool = False,
         return_cursors: bool = True,
-        cursor_class: Type[SnowflakeCursor] = InsightsSnowflakeCursor,
+        cursor_class: type[SnowflakeCursor] = InsightsSnowflakeCursor,
         **kwargs,
     ) -> Iterable[SnowflakeCursor]:
         return super().execute_string(
@@ -95,7 +84,7 @@ class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
         self,
         stream: StringIO,
         remove_comments: bool = False,
-        cursor_class: Type[SnowflakeCursor] = InsightsSnowflakeCursor,
+        cursor_class: type[SnowflakeCursor] = InsightsSnowflakeCursor,
         **kwargs,
     ) -> Generator[SnowflakeCursor, None, None]:
         return super().execute_stream(stream, remove_comments, cursor_class, **kwargs)  # type: ignore  # (bad stubs)

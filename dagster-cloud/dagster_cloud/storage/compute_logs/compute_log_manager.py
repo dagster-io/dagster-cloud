@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Optional
 
 import dagster._seven as _seven
 import requests
@@ -92,7 +93,7 @@ class CloudComputeLogManager(
     ):
         path = self.local_manager.get_captured_local_path(log_key, IO_TYPE_EXTENSION[io_type])
         ensure_file(path)
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "log_key": log_key,
             "io_type": io_type.value,
             # for back-compat

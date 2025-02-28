@@ -1,6 +1,6 @@
 import os
 import tempfile
-from typing import Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import NamedTuple, Optional, Union
 
 import requests
 from dagster import AssetExecutionContext, DagsterInstance, OpExecutionContext
@@ -24,7 +24,7 @@ class DagsterMetric(NamedTuple):
     metric_value: float
 
 
-def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str]:
+def get_url_and_token_from_instance(instance: DagsterInstance) -> tuple[str, str]:
     if not isinstance(instance, DagsterCloudAgentInstance):
         raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
 
@@ -33,7 +33,7 @@ def get_url_and_token_from_instance(instance: DagsterInstance) -> Tuple[str, str
 
 def get_insights_upload_request_params(
     instance: DagsterInstance,
-) -> Tuple[requests.Session, str, Dict[str, str], int, Optional[Dict[str, str]]]:
+) -> tuple[requests.Session, str, dict[str, str], int, Optional[dict[str, str]]]:
     if not isinstance(instance, DagsterCloudAgentInstance):
         raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
 
@@ -49,7 +49,7 @@ def get_insights_upload_request_params(
 def upload_cost_information(
     context: Union[OpExecutionContext, AssetExecutionContext],
     metric_name: str,
-    cost_information: List[Tuple[str, float, str]],
+    cost_information: list[tuple[str, float, str]],
 ):
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -90,7 +90,7 @@ def upload_cost_information(
 def put_cost_information(
     context: Union[OpExecutionContext, AssetExecutionContext],
     metric_name: str,
-    cost_information: List[Tuple[str, float, str]],
+    cost_information: list[tuple[str, float, str]],
     start: float,
     end: float,
 ) -> None:

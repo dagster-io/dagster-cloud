@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 from dagster import (
     Enum as DagsterEnum,
@@ -21,7 +21,7 @@ from .ecs import (
 from .kubernetes import SHARED_K8S_CONFIG
 
 
-def validate_workspace_location(workspace_location) -> Optional[List[str]]:
+def validate_workspace_location(workspace_location) -> Optional[list[str]]:
     """Processes a single workspace location config. Returns a list of error
     messages if any.
     """
@@ -29,7 +29,7 @@ def validate_workspace_location(workspace_location) -> Optional[List[str]]:
     return [error.message for error in validation.errors or []]
 
 
-def validate_workspace_config(workspace_config) -> Optional[List[str]]:
+def validate_workspace_config(workspace_config) -> Optional[list[str]]:
     """Processes an entire workspace location config. Returns a list of
     error messages, if any.
     """
@@ -37,7 +37,7 @@ def validate_workspace_config(workspace_config) -> Optional[List[str]]:
     return [error.message for error in validation.errors or []]
 
 
-def process_workspace_config(workspace_config) -> Dict[str, Any]:
+def process_workspace_config(workspace_config) -> dict[str, Any]:
     """Checks a workspace config, erroring if any mismatches with config
     and migrating an input in the legacy workspace config format to the
     modern format, returning the validated input.
@@ -93,7 +93,7 @@ def process_workspace_config(workspace_config) -> Dict[str, Any]:
         if not validation.success:
             check.failed(
                 ", ".join(
-                    [error.message for error in cast(List[EvaluationError], validation.errors)]
+                    [error.message for error in cast(list[EvaluationError], validation.errors)]
                 ),
             )
         return workspace_config

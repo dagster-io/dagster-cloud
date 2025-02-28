@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 from contextlib import AbstractContextManager
-from typing import Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Optional, Union, cast
 
 import dagster._seven as seven
 from dagster import _check as check
@@ -45,11 +45,11 @@ class MultiPexManager(AbstractContextManager):
         enable_metrics: bool = False,
     ):
         # Keyed by hash of PexServerHandle
-        self._pex_servers: Dict[str, Union[PexProcessEntry, PexErrorEntry]] = {}
-        self._pending_startup_pex_servers: Set[str] = set()
-        self._pending_shutdown_pex_servers: Set[str] = set()
+        self._pex_servers: dict[str, Union[PexProcessEntry, PexErrorEntry]] = {}
+        self._pending_startup_pex_servers: set[str] = set()
+        self._pending_shutdown_pex_servers: set[str] = set()
         self._pex_servers_lock = threading.RLock()
-        self._pex_metadata_for_handle: Dict[
+        self._pex_metadata_for_handle: dict[
             str, Optional[PexMetadata]
         ] = {}  # maps handle id to the pex tag
         self._heartbeat_ttl = 60
@@ -104,7 +104,7 @@ class MultiPexManager(AbstractContextManager):
                 )
 
     def _mark_servers_unexpected_termination(
-        self, dead_server_returncodes: List[Tuple[PexProcessEntry, int]]
+        self, dead_server_returncodes: list[tuple[PexProcessEntry, int]]
     ) -> None:
         with self._pex_servers_lock:
             for server, returncode in dead_server_returncodes:
@@ -141,7 +141,7 @@ class MultiPexManager(AbstractContextManager):
 
             return cast(PexProcessEntry, self._pex_servers[handle_id]).grpc_client
 
-    def get_active_pex_servers(self) -> List[PexProcessEntry]:
+    def get_active_pex_servers(self) -> list[PexProcessEntry]:
         with self._pex_servers_lock:
             return [
                 server
@@ -149,7 +149,7 @@ class MultiPexManager(AbstractContextManager):
                 if self.is_server_active(server_id) and isinstance(server, PexProcessEntry)
             ]
 
-    def get_error_pex_servers(self) -> List[PexErrorEntry]:
+    def get_error_pex_servers(self) -> list[PexErrorEntry]:
         with self._pex_servers_lock:
             return [
                 server
@@ -159,7 +159,7 @@ class MultiPexManager(AbstractContextManager):
 
     def get_active_pex_server_handles(
         self, deployment_name, location_name: str
-    ) -> List[PexServerHandle]:
+    ) -> list[PexServerHandle]:
         return [
             server.pex_server_handle
             for server in self.get_active_pex_servers()
@@ -169,7 +169,7 @@ class MultiPexManager(AbstractContextManager):
 
     def get_error_pex_server_handles(
         self, deployment_name, location_name: str
-    ) -> List[PexServerHandle]:
+    ) -> list[PexServerHandle]:
         return [
             server.pex_server_handle
             for server in self.get_error_pex_servers()
@@ -177,7 +177,7 @@ class MultiPexManager(AbstractContextManager):
             and server.pex_server_handle.location_name == location_name
         ]
 
-    def get_all_pex_grpc_clients_map(self) -> Dict[str, DagsterGrpcClient]:
+    def get_all_pex_grpc_clients_map(self) -> dict[str, DagsterGrpcClient]:
         with self._pex_servers_lock:
             return {
                 server.pex_server_handle.get_id(): server.grpc_client

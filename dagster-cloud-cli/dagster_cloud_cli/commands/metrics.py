@@ -3,7 +3,7 @@ import time
 from contextvars import ContextVar
 from enum import Enum
 from functools import wraps
-from typing import List, Optional
+from typing import Optional
 
 from dagster_cloud_cli import gql
 from dagster_cloud_cli.types import CliEventTags, CliEventType
@@ -49,10 +49,10 @@ def get_source() -> CliEventTags.source:
         return default
 
 
-mark_cli_event_context_tags: ContextVar[List[str]] = ContextVar("mark_cli_event_context_tags")
+mark_cli_event_context_tags: ContextVar[list[str]] = ContextVar("mark_cli_event_context_tags")
 
 
-def instrument_add_tags(tags: List[Enum]):
+def instrument_add_tags(tags: list[Enum]):
     """Add tags to the instrumentation within the current context.
     If this is not wrapped in an @instrument decorator, this call has no effect.
     """
@@ -61,7 +61,7 @@ def instrument_add_tags(tags: List[Enum]):
     mark_cli_event_context_tags.set(context_tags + new_tags)
 
 
-def instrument(event_type: CliEventType, tags: Optional[List[Enum]] = None):
+def instrument(event_type: CliEventType, tags: Optional[list[Enum]] = None):
     str_tags = [str(tag.value) for tag in tags or []]
     str_tags.append(str(get_source().value))
 

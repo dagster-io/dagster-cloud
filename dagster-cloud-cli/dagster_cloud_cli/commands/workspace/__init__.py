@@ -1,6 +1,7 @@
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Optional
 
 import dagster._check as check
 import yaml
@@ -24,7 +25,7 @@ DEFAULT_LOCATIONS_YAML_FILENAME = "locations.yaml"
 app = Typer(help="Manage your Dagster Cloud workspace.")
 
 
-def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCodeLocation:
+def _get_location_input(location: str, kwargs: dict[str, Any]) -> gql.CliInputCodeLocation:
     python_file = kwargs.get("python_file")
 
     return gql.CliInputCodeLocation(
@@ -45,7 +46,7 @@ def _get_location_input(location: str, kwargs: Dict[str, Any]) -> gql.CliInputCo
 
 def _add_or_update_location(
     client: DagsterCloudGraphQLClient,
-    location_document: Dict[str, Any],
+    location_document: dict[str, Any],
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
     url: Optional[str] = None,
@@ -89,7 +90,7 @@ def add_command(
         )
 
 
-def list_locations(location_names: List[str]) -> str:
+def list_locations(location_names: list[str]) -> str:
     if len(location_names) == 0:
         return ""
     elif len(location_names) == 1:
@@ -320,7 +321,7 @@ def sync_command(
         )
 
 
-def format_workspace_config(workspace_config) -> Dict[str, Any]:
+def format_workspace_config(workspace_config) -> dict[str, Any]:
     """Ensures the input workspace config is in the modern format, migrating an input
     in the old format if need be.
     """
@@ -354,7 +355,7 @@ def format_workspace_config(workspace_config) -> Dict[str, Any]:
 def execute_sync_command(
     client, workspace, location_load_timeout, agent_heartbeat_timeout, url: Optional[str] = None
 ):
-    with open(str(workspace), "r", encoding="utf8") as f:
+    with open(str(workspace), encoding="utf8") as f:
         config = yaml.load(f.read(), Loader=yaml.SafeLoader)
         processed_config = format_workspace_config(config)
 

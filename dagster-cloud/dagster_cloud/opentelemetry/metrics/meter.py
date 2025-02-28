@@ -1,4 +1,5 @@
-from typing import Callable, Dict, Generator, Iterable, Optional, Sequence, Tuple, Union, cast
+from collections.abc import Generator, Iterable, Sequence
+from typing import Callable, Optional, Union, cast
 
 # (Gauge is only exposed as a private class)
 from opentelemetry.metrics import (
@@ -14,7 +15,7 @@ from opentelemetry.metrics import (
 )
 from opentelemetry.metrics._internal import Meter as SDKMeter
 
-InstrumentKeyType = Tuple[str, str, str]
+InstrumentKeyType = tuple[str, str, str]
 ObservableCallback = Callable[[CallbackOptions], Iterable[Observation]]
 ObservableGenerator = Generator[Iterable[Observation], CallbackOptions, None]
 ObserverType = Union[ObservableCallback, ObservableGenerator]
@@ -23,7 +24,7 @@ ObserverType = Union[ObservableCallback, ObservableGenerator]
 class Meter:
     def __init__(self, meter: SDKMeter):
         self._meter = meter
-        self._instruments: Dict[InstrumentKeyType, Instrument] = {}
+        self._instruments: dict[InstrumentKeyType, Instrument] = {}
 
     @property
     def name(self) -> str:

@@ -3,7 +3,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from dagster import _seven as seven
 from typer import Argument, Option, Typer
@@ -38,7 +38,7 @@ _BUILD_OPTIONS = {
         Option(None, "--base-image", exists=False),
     ),
     "env": (
-        List[str],
+        list[str],
         Option(
             [],
             "--env",
@@ -64,7 +64,7 @@ DEPLOY_DOCKER_OPTIONS = {
         Option(None, "--base-image", exists=False, help="Custom base image"),
     ),
     "env": (
-        List[str],
+        list[str],
         Option(
             [],
             "--env",

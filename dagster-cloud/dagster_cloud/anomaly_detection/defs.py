@@ -1,5 +1,6 @@
 import datetime
-from typing import Iterable, Optional, Sequence, Union, cast
+from collections.abc import Iterable, Sequence
+from typing import Optional, Union, cast
 
 from dagster import (
     AssetCheckExecutionContext,

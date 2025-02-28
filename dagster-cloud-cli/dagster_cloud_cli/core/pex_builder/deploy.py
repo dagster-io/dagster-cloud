@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Optional
 
 import click
 from packaging import version
@@ -46,13 +46,13 @@ class DepsCacheTags:
 def build_locations(
     dagster_cloud_url: str,
     dagster_cloud_api_token: str,
-    locations: List[parse_workspace.Location],
+    locations: list[parse_workspace.Location],
     output_directory: str,
     upload_pex: bool,
     deps_cache_tags: DepsCacheTags,
     python_version: version.Version,
     build_method: deps.BuildMethod = deps.BuildMethod.DOCKER_FALLBACK,
-) -> List[LocationBuild]:
+) -> list[LocationBuild]:
     location_builds = []
     for location in locations:
         local_packages, deps_requirements = deps.get_deps_requirements(
@@ -68,7 +68,7 @@ def build_locations(
         )
 
     # dedup requirements so each is only built once
-    builds_for_requirements_hash: Dict[str, List[LocationBuild]] = {}
+    builds_for_requirements_hash: dict[str, list[LocationBuild]] = {}
     for location_build in location_builds:
         requirements_hash = location_build.deps_requirements.hash
         builds_for_requirements_hash.setdefault(requirements_hash, []).append(location_build)

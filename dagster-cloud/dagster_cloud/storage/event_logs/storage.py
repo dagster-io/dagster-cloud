@@ -1,24 +1,10 @@
 import json
 import os
 from collections import defaultdict
+from collections.abc import Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import timezone
-from typing import (
-    TYPE_CHECKING,
-    AbstractSet,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-    cast,
-)
+from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Optional, Union, cast  # noqa: UP035
 from uuid import uuid4
 
 import dagster._check as check
@@ -185,7 +171,7 @@ def _input_for_dagster_event(dagster_event: Optional[DagsterEvent]):
     }
 
 
-def _event_log_entry_from_graphql(graphene_event_log_entry: Dict) -> EventLogEntry:
+def _event_log_entry_from_graphql(graphene_event_log_entry: dict) -> EventLogEntry:
     check.dict_param(graphene_event_log_entry, "graphene_event_log_entry")
 
     return EventLogEntry(
@@ -215,7 +201,7 @@ def _event_log_entry_from_graphql(graphene_event_log_entry: Dict) -> EventLogEnt
 
 def _get_event_records_filter_input(
     event_records_filter,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[dict[str, Any]]:
     check.opt_inst_param(event_records_filter, "event_records_filter", EventRecordsFilter)
 
     if event_records_filter is None:
@@ -267,7 +253,7 @@ def _get_event_records_filter_input(
 
 def _get_asset_records_filter_input(
     records_filter: Union[AssetKey, AssetRecordsFilter],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     check.opt_inst_param(records_filter, "records_filter", (AssetKey, AssetRecordsFilter))
 
     if isinstance(records_filter, AssetKey):
@@ -295,7 +281,7 @@ def _get_asset_records_filter_input(
     }
 
 
-def _fetch_run_status_changes_filter_input(records_filter) -> Dict[str, Any]:
+def _fetch_run_status_changes_filter_input(records_filter) -> dict[str, Any]:
     check.inst_param(
         records_filter, "records_filter", (DagsterEventType, RunStatusChangeRecordsFilter)
     )
@@ -314,7 +300,7 @@ def _fetch_run_status_changes_filter_input(records_filter) -> Dict[str, Any]:
     }
 
 
-def _event_record_from_graphql(graphene_event_record: Dict) -> EventLogRecord:
+def _event_record_from_graphql(graphene_event_record: dict) -> EventLogRecord:
     check.dict_param(graphene_event_record, "graphene_event_record")
 
     return EventLogRecord(
@@ -323,7 +309,7 @@ def _event_record_from_graphql(graphene_event_record: Dict) -> EventLogRecord:
     )
 
 
-def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
+def _asset_entry_from_graphql(graphene_asset_entry: dict) -> AssetEntry:
     check.dict_param(graphene_asset_entry, "graphene_asset_entry")
     return AssetEntry(
         asset_key=AssetKey(graphene_asset_entry["assetKey"]["path"]),
@@ -372,7 +358,7 @@ def _asset_entry_from_graphql(graphene_asset_entry: Dict) -> AssetEntry:
     )
 
 
-def _asset_record_from_graphql(graphene_asset_record: Dict) -> AssetRecord:
+def _asset_record_from_graphql(graphene_asset_record: dict) -> AssetRecord:
     check.dict_param(graphene_asset_record, "graphene_asset_record")
     return AssetRecord(
         storage_id=graphene_asset_record["storageId"],
@@ -380,7 +366,7 @@ def _asset_record_from_graphql(graphene_asset_record: Dict) -> AssetRecord:
     )
 
 
-def _asset_check_execution_record_from_graphql(data: Dict, key: AssetCheckKey):
+def _asset_check_execution_record_from_graphql(data: dict, key: AssetCheckKey):
     return AssetCheckExecutionRecord(
         key=key,
         id=data["id"],
@@ -392,7 +378,7 @@ def _asset_check_execution_record_from_graphql(data: Dict, key: AssetCheckKey):
 
 
 def _asset_check_summary_record_from_graphql(
-    graphene_asset_check_summary_record: Dict,
+    graphene_asset_check_summary_record: dict,
 ) -> AssetCheckSummaryRecord:
     check.dict_param(graphene_asset_check_summary_record, "graphene_asset_check_summary_record")
 
@@ -421,7 +407,7 @@ def _asset_check_summary_record_from_graphql(
     )
 
 
-def _event_records_result_from_graphql(graphene_event_records_result: Dict) -> EventRecordsResult:
+def _event_records_result_from_graphql(graphene_event_records_result: dict) -> EventRecordsResult:
     return EventRecordsResult(
         records=[
             _event_record_from_graphql(record)
@@ -432,7 +418,7 @@ def _event_records_result_from_graphql(graphene_event_records_result: Dict) -> E
     )
 
 
-def _claimed_slot_from_graphql(graphene_claimed_slot_dict: Dict) -> ClaimedSlotInfo:
+def _claimed_slot_from_graphql(graphene_claimed_slot_dict: dict) -> ClaimedSlotInfo:
     check.dict_param(graphene_claimed_slot_dict, "graphene_claimed_slot_dict")
     return ClaimedSlotInfo(
         run_id=graphene_claimed_slot_dict["runId"],
@@ -440,7 +426,7 @@ def _claimed_slot_from_graphql(graphene_claimed_slot_dict: Dict) -> ClaimedSlotI
     )
 
 
-def _pending_step_from_graphql(graphene_pending_step: Dict) -> PendingStepInfo:
+def _pending_step_from_graphql(graphene_pending_step: dict) -> PendingStepInfo:
     check.dict_param(graphene_pending_step, "graphene_pending_step")
     return PendingStepInfo(
         run_id=graphene_pending_step["runId"],
@@ -506,7 +492,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         self,
         run_id: str,
         cursor: Optional[str] = None,
-        of_type: Optional[Union[DagsterEventType, Set[DagsterEventType]]] = None,
+        of_type: Optional[Union[DagsterEventType, set[DagsterEventType]]] = None,
         limit: Optional[int] = None,
         ascending: bool = True,
     ) -> EventLogConnection:
@@ -559,8 +545,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
 
     def get_step_stats_for_run(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
-        self, run_id: str, step_keys: Optional[List[str]] = None
-    ) -> List[RunStepKeyStatsSnapshot]:
+        self, run_id: str, step_keys: Optional[list[str]] = None
+    ) -> list[RunStepKeyStatsSnapshot]:
         res = self._execute_query(
             GET_STEP_STATS_FOR_RUN_QUERY,
             variables={
@@ -614,7 +600,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 files={"store_events.tmp": f},
             )
 
-    def _add_metric_header(self, headers: Dict[str, str]):
+    def _add_metric_header(self, headers: dict[str, str]):
         if os.getenv("DAGSTER_CLOUD_STORE_EVENT_SEND_METRICS") != "1":
             return
 
@@ -839,7 +825,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         asset_key: AssetKey,
         before_cursor: Optional[int] = None,
         after_cursor: Optional[int] = None,
-    ) -> Set[str]:
+    ) -> set[str]:
         check.inst_param(asset_key, "asset_key", AssetKey)
         check.opt_int_param(before_cursor, "before_cursor")
         check.opt_int_param(after_cursor, "after_cursor")
@@ -874,7 +860,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             "getMaterializationCountByPartition"
         ]
 
-        materialization_count_by_partition: Dict[AssetKey, Dict[str, int]] = {
+        materialization_count_by_partition: dict[AssetKey, dict[str, int]] = {
             asset_key: {} for asset_key in asset_keys
         }
         for asset_count in materialization_count_result:
@@ -890,7 +876,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         self,
         asset_key: AssetKey,
         event_type: DagsterEventType,
-        partitions: Optional[Set[str]] = None,
+        partitions: Optional[set[str]] = None,
     ) -> Mapping[str, int]:
         res = self._execute_query(
             GET_LATEST_STORAGE_ID_BY_PARTITION,
@@ -901,7 +887,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             },
         )
         latest_storage_id_result = res["data"]["eventLogs"]["getLatestStorageIdByPartition"]
-        latest_storage_id_by_partition: Dict[str, int] = {}
+        latest_storage_id_by_partition: dict[str, int] = {}
 
         for graphene_latest_storage_id in latest_storage_id_result:
             latest_storage_id_by_partition[graphene_latest_storage_id["partition"]] = (
@@ -931,7 +917,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             },
         )
         latest_tags_by_partition_result = res["data"]["eventLogs"]["getLatestTagsByPartition"]
-        latest_tags_by_partition: Dict[str, Dict[str, str]] = defaultdict(dict)
+        latest_tags_by_partition: dict[str, dict[str, str]] = defaultdict(dict)
         for tag_by_partition in latest_tags_by_partition_result:
             latest_tags_by_partition[tag_by_partition["partition"]][tag_by_partition["key"]] = (
                 tag_by_partition["value"]
@@ -942,7 +928,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_latest_asset_partition_materialization_attempts_without_materializations(
         self, asset_key: AssetKey, after_storage_id: Optional[int] = None
-    ) -> Mapping[str, Tuple[str, int]]:
+    ) -> Mapping[str, tuple[str, int]]:
         res = self._execute_query(
             GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
             variables={
@@ -1095,7 +1081,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             else:
                 raise DagsterCloudAgentServerError(res)
 
-    def get_concurrency_keys(self) -> Set[str]:
+    def get_concurrency_keys(self) -> set[str]:
         res = self._execute_query(GET_CONCURRENCY_KEYS_QUERY)
         return set(res["data"]["eventLogs"]["getConcurrencyKeys"])
 
@@ -1180,7 +1166,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             ),
         )
 
-    def get_concurrency_run_ids(self) -> Set[str]:
+    def get_concurrency_run_ids(self) -> set[str]:
         raise NotImplementedError("Not callable from user cloud")
 
     def free_concurrency_slots_for_run(self, run_id: str) -> None:
@@ -1318,7 +1304,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_updated_data_version_partitions(
         self, asset_key: AssetKey, partitions: Iterable[str], since_storage_id: int
-    ) -> Set[str]:
+    ) -> set[str]:
         res = self._execute_query(
             GET_UPDATED_DATA_VERSION_PARTITIONS,
             variables={
@@ -1339,7 +1325,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_asset_status_cache_values(
         self,
-        partitions_defs_by_key: Iterable[Tuple[AssetKey, Optional[PartitionsDefinition]]],
+        partitions_defs_by_key: Iterable[tuple[AssetKey, Optional[PartitionsDefinition]]],
         context,
     ) -> Sequence[Optional[AssetStatusCacheValue]]:
         asset_keys = [key for key, _ in partitions_defs_by_key]

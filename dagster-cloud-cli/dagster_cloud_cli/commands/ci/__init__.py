@@ -8,7 +8,7 @@ import shutil
 import sys
 from collections import Counter
 from enum import Enum
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Optional, cast
 
 import typer
 from typer import Typer
@@ -39,7 +39,7 @@ from dagster_cloud_cli.core.pex_builder import (
     gitlab_context,
     parse_workspace,
 )
-from dagster_cloud_cli.types import CliEventTags, CliEventType
+from dagster_cloud_cli.types import CliEventTags, CliEventType, SnapshotBaseDeploymentCondition
 from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION
 
 from .. import metrics
@@ -70,7 +70,7 @@ def inspect(project_dir: str):
     print(json.dumps(info))
 
 
-def load_github_info(project_dir: str) -> Dict[str, Any]:
+def load_github_info(project_dir: str) -> dict[str, Any]:
     event = github_context.get_github_event(project_dir)
     return {
         "git-url": event.commit_url,
@@ -92,6 +92,7 @@ def branch_deployment(
     mark_closed: bool = False,
     read_only: bool = False,
     base_deployment_name: Optional[str] = None,
+    snapshot_base_condition: Optional[SnapshotBaseDeploymentCondition] = None,
 ):
     try:
         if organization:
@@ -105,7 +106,11 @@ def branch_deployment(
 
         print(
             create_or_update_deployment_from_context(
-                url, project_dir, mark_closed, base_deployment_name=base_deployment_name
+                url,
+                project_dir,
+                mark_closed,
+                base_deployment_name=base_deployment_name,
+                snapshot_base_condition=snapshot_base_condition,
             )
         )
 
@@ -119,15 +124,21 @@ def branch_deployment(
 def create_or_update_deployment_from_context(
     url,
     project_dir: str,
-    mark_closed=False,
-    base_deployment_name: Optional[str] = None,
+    mark_closed: bool,
+    base_deployment_name: Optional[str],
+    snapshot_base_condition: Optional[SnapshotBaseDeploymentCondition],
 ) -> str:
     source = metrics.get_source()
     if source == CliEventTags.source.github:
         event = github_context.get_github_event(project_dir)
         api_token = os.environ[TOKEN_ENV_VAR_NAME]
         deployment_name = code_location.create_or_update_branch_deployment_from_github_context(
-            url, api_token, event, mark_closed, base_deployment_name=base_deployment_name
+            url,
+            api_token,
+            event,
+            mark_closed,
+            base_deployment_name=base_deployment_name,
+            snapshot_base_condition=snapshot_base_condition,
         )
         if not deployment_name:
             raise ValueError(
@@ -154,6 +165,7 @@ def create_or_update_deployment_from_context(
                 author_email=event.git_metadata.email,
                 commit_message=event.git_metadata.message,
                 base_deployment_name=base_deployment_name,
+                snapshot_base_condition=snapshot_base_condition,
             )
             logging.info(
                 "Got branch deployment %r for branch %r",
@@ -258,10 +270,11 @@ def init(
     dagster_cloud_yaml_path: str = "dagster_cloud.yaml",
     statedir: str = STATEDIR_OPTION,
     clean_statedir: bool = typer.Option(True, help="Delete any existing files in statedir"),
-    location_name: List[str] = typer.Option([]),
+    location_name: list[str] = typer.Option([]),
     git_url: Optional[str] = None,
     commit_hash: Optional[str] = None,
     status_url: Optional[str] = None,
+    snapshot_base_condition: Optional[SnapshotBaseDeploymentCondition] = None,
 ):
     yaml_path = pathlib.Path(project_dir) / dagster_cloud_yaml_path
     if not yaml_path.exists():
@@ -284,7 +297,11 @@ def init(
 
     try:
         branch_deployment = create_or_update_deployment_from_context(
-            url, project_dir, base_deployment_name=deployment
+            url,
+            project_dir,
+            mark_closed=False,
+            base_deployment_name=deployment,
+            snapshot_base_condition=snapshot_base_condition,
         )
         if deployment:
             ui.print(
@@ -385,7 +402,7 @@ def locations_list(
 
 @app.command(help="Mark the specified locations as excluded from the current build session")
 def locations_deselect(
-    location_names: List[str],
+    location_names: list[str],
     statedir: str = STATEDIR_OPTION,
 ):
     state_store = state.FileStore(statedir=statedir)
@@ -395,7 +412,7 @@ def locations_deselect(
 
 @app.command(help="Mark the specified locations as included in the current build session")
 def locations_select(
-    location_names: List[str],
+    location_names: list[str],
     statedir: str = STATEDIR_OPTION,
 ):
     state_store = state.FileStore(statedir=statedir)
@@ -404,8 +421,8 @@ def locations_select(
 
 
 def _get_selected_locations(
-    state_store: state.Store, location_name: List[str]
-) -> Dict[str, state.LocationState]:
+    state_store: state.Store, location_name: list[str]
+) -> dict[str, state.LocationState]:
     requested_locations = set(location_name)
     selected = {
         location.location_name: location
@@ -426,7 +443,7 @@ class BuildStrategy(Enum):
 @app.command(help="Build selected or requested locations")
 def build(
     statedir: str = STATEDIR_OPTION,
-    location_name: List[str] = typer.Option([]),
+    location_name: list[str] = typer.Option([]),
     build_directory: Optional[str] = typer.Option(
         None,
         help=(
@@ -448,7 +465,7 @@ def build(
         None,
         help="Base image used to build the docker image for --build-strategy=docker.",
     ),
-    docker_env: List[str] = typer.Option([], help="Env vars for docker builds."),
+    docker_env: list[str] = typer.Option([], help="Env vars for docker builds."),
     python_version: str = typer.Option(
         DEFAULT_PYTHON_VERSION,
         help=(
@@ -557,7 +574,7 @@ def _build_docker(
     name: str,
     location_build_dir: str,
     docker_base_image: str,
-    docker_env: List[str],
+    docker_env: list[str],
     location_state: state.LocationState,
 ) -> state.DockerBuildOutput:
     name = location_state.location_name
@@ -635,7 +652,7 @@ def _build_pex(
 @app.command(help="Update the current build session for an externally built docker image.")
 def set_build_output(
     statedir: str = STATEDIR_OPTION,
-    location_name: List[str] = typer.Option([]),
+    location_name: list[str] = typer.Option([]),
     image_tag: str = typer.Option(
         ...,
         help=(
@@ -680,7 +697,7 @@ def set_build_output(
 @app.command(help="Deploy built code locations to dagster cloud.")
 def deploy(
     statedir: str = STATEDIR_OPTION,
-    location_name: List[str] = typer.Option([]),
+    location_name: list[str] = typer.Option([]),
     location_load_timeout: int = LOCATION_LOAD_TIMEOUT_OPTION,
     agent_heartbeat_timeout: int = AGENT_HEARTBEAT_TIMEOUT_OPTION,
 ):
@@ -688,7 +705,7 @@ def deploy(
     locations = _get_selected_locations(state_store, location_name)
     ui.print("Going to deploy the following locations:")
 
-    built_locations: List[state.LocationState] = []
+    built_locations: list[state.LocationState] = []
     for name, location_state in locations.items():
         if location_state.build_output:
             status = "Ready to deploy"
@@ -736,7 +753,7 @@ def _deploy(
     *,
     url: str,
     api_token: str,
-    built_locations: List[state.LocationState],
+    built_locations: list[state.LocationState],
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
 ):

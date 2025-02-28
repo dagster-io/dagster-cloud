@@ -1,5 +1,5 @@
 from dataclasses import replace
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import dagster._check as check
 from dagster import (
@@ -16,7 +16,7 @@ from dagster._core.errors import DagsterInvalidPropertyError
 
 
 def get_current_context_and_asset_key() -> (
-    Tuple[Union[OpExecutionContext, AssetExecutionContext], Optional[AssetKey]]
+    tuple[Union[OpExecutionContext, AssetExecutionContext], Optional[AssetKey]]
 ):
     asset_key = None
     try:

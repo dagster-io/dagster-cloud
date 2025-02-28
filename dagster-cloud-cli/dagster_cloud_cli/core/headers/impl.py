@@ -1,5 +1,5 @@
 import platform
-from typing import Dict, Optional
+from typing import Optional
 
 from ...version import __version__
 from .auth import (
@@ -15,8 +15,8 @@ def get_dagster_cloud_api_headers(
     agent_token: str,
     scope: DagsterCloudInstanceScope,
     deployment_name: Optional[str] = None,
-    additional_headers: Optional[Dict[str, str]] = None,
-) -> Dict[str, str]:
+    additional_headers: Optional[dict[str, str]] = None,
+) -> dict[str, str]:
     return {
         **{
             API_TOKEN_HEADER: agent_token,

@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from subprocess import CompletedProcess
-from typing import List, Optional
+from typing import Optional
 from zipfile import ZipFile
 
 import click
@@ -17,7 +17,7 @@ TARGET_PYTHON_VERSIONS = [
 ]
 
 
-def run_python_subprocess(args: List[str], env=None) -> CompletedProcess:
+def run_python_subprocess(args: list[str], env=None) -> CompletedProcess:
     """Invoke python with given args, using an environment identical to current environment."""
     # If running a pex file directly, we invoke the executable pex file again.
     # Otherwise we assume we're running in a pex generated venv and use the python executable.
@@ -29,12 +29,12 @@ def run_python_subprocess(args: List[str], env=None) -> CompletedProcess:
     return proc
 
 
-def run_self_module(module_name, args: List[str], env=None) -> CompletedProcess:
+def run_self_module(module_name, args: list[str], env=None) -> CompletedProcess:
     """Invoke this executable again with -m {module}."""
     return run_python_subprocess(["-m", module_name, *args], env=env)
 
 
-def get_pex_flags(python_version: version.Version, build_sdists: bool = True) -> List[str]:
+def get_pex_flags(python_version: version.Version, build_sdists: bool = True) -> list[str]:
     """python_version should includes the major and minor version only, eg Version('3.11')."""
     if python_version not in TARGET_PYTHON_VERSIONS:
         raise ValueError(
@@ -69,9 +69,9 @@ def get_pex_flags(python_version: version.Version, build_sdists: bool = True) ->
 
 
 def build_pex(
-    sources_directories: List[str],
-    requirements_filepaths: List[str],
-    pex_flags: List[str],
+    sources_directories: list[str],
+    requirements_filepaths: list[str],
+    pex_flags: list[str],
     output_pex_path: str,
     pex_root: Optional[str] = None,
 ) -> CompletedProcess:
@@ -105,18 +105,18 @@ def build_pex(
     return run_pex_command(pex_args)
 
 
-def run_pex_command(args: List[str]) -> CompletedProcess:
+def run_pex_command(args: list[str]) -> CompletedProcess:
     # https://github.com/pantsbuild/pex/issues/1969#issuecomment-1336105021
     env = {**os.environ, "_PEX_FILE_LOCK_STYLE": "bsd"}
 
     return run_self_module("pex", args, env=env)
 
 
-def run_dagster_cloud_cli_command(args: List[str]) -> CompletedProcess:
+def run_dagster_cloud_cli_command(args: list[str]) -> CompletedProcess:
     return run_self_module("dagster_cloud_cli.entrypoint", args)
 
 
-def run_dagster_command(args: List[str]) -> CompletedProcess:
+def run_dagster_command(args: list[str]) -> CompletedProcess:
     return run_self_module("dagster", args)
 
 
@@ -125,7 +125,7 @@ def get_pex_info(pex_filepath):
         return json.load(pex_zip.open("PEX-INFO"))
 
 
-def build_pex_tag(filepaths: List[str]) -> str:
+def build_pex_tag(filepaths: list[str]) -> str:
     return "files=" + ":".join(sorted(os.path.basename(filepath) for filepath in filepaths))
 
 

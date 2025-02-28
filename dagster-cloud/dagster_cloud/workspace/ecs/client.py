@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import time
-from typing import List, Optional
+from typing import Optional
 
 import boto3
 import botocore
@@ -57,8 +57,8 @@ class Client:
         cluster_name: str,
         service_discovery_namespace_id: str,
         log_group: str,
-        subnet_ids: Optional[List[str]] = None,
-        security_group_ids: Optional[List[str]] = None,
+        subnet_ids: Optional[list[str]] = None,
+        security_group_ids: Optional[list[str]] = None,
         ecs_client=None,
         timeout: int = DEFAULT_ECS_TIMEOUT,
         grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
@@ -608,7 +608,7 @@ class Client:
 
     async def check_service_has_running_tasks(
         self, service_name, container_name, logger=None
-    ) -> List[str]:
+    ) -> list[str]:
         # return the ARN of the task if it starts
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
         start_time = time.time()

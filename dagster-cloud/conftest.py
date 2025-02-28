@@ -6,5 +6,5 @@ def pytest_addoption(parser):
 
 
 pytest_plugins = [
-    "dagster_cloud_test_infra.storage_fixtures",
+    "dagster_cloud_test_infra.instance_fixtures",
 ]

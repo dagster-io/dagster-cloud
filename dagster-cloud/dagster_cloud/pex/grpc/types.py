@@ -1,4 +1,4 @@
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import dagster._check as check
 from dagster._core.instance.ref import InstanceRef
@@ -21,7 +21,7 @@ class PexServerHandle(
     )
 ):
     def __new__(cls, deployment_name: str, location_name: str, metadata_update_timestamp: int):
-        return super(PexServerHandle, cls).__new__(
+        return super().__new__(
             cls,
             check.str_param(deployment_name, "deployment_name"),
             check.str_param(location_name, "location_name"),
@@ -49,7 +49,7 @@ class CreatePexServerArgs(
         code_location_deploy_data: CodeLocationDeployData,
         instance_ref: Optional[InstanceRef] = None,
     ):
-        return super(CreatePexServerArgs, cls).__new__(
+        return super().__new__(
             cls,
             check.inst_param(server_handle, "server_handle", PexServerHandle),
             check.inst_param(
@@ -100,7 +100,7 @@ class GetPexServersResponse(
     NamedTuple(
         "_GetPexServersResponse",
         [
-            ("server_handles", List[PexServerHandle]),
+            ("server_handles", list[PexServerHandle]),
         ],
     )
 ):
@@ -112,7 +112,7 @@ class GetCrashedPexServersResponse(
     NamedTuple(
         "_GetCrashedPexServersResponse",
         [
-            ("server_handles", List[PexServerHandle]),
+            ("server_handles", list[PexServerHandle]),
         ],
     )
 ):

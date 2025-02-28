@@ -2,7 +2,7 @@ import base64
 import json
 import time
 from contextlib import contextmanager
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 # A minimal copy of the standard OTEL API
 
@@ -39,7 +39,7 @@ class Span:
 
 class Tracer:
     def __init__(self):
-        self._spans: List[Span] = []
+        self._spans: list[Span] = []
 
     @contextmanager
     def start_span(self, name: str):

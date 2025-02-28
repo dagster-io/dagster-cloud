@@ -1,5 +1,5 @@
+from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
-from typing import Iterator, List
 
 from dagster import AssetObservation
 from dagster._annotations import beta
@@ -29,7 +29,7 @@ class WrappedBigQueryClient(bigquery.Client):
         return bq_job
 
     @property
-    def job_ids(self) -> List[str]:
+    def job_ids(self) -> list[str]:
         return self._job_ids
 
     @property

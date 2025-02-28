@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional
 
 import dagster._check as check
 import yaml
@@ -24,7 +24,7 @@ class GitMetadata(
     )
 ):
     def __new__(cls, commit_hash=None, url=None):
-        return super(GitMetadata, cls).__new__(
+        return super().__new__(
             cls,
             check.opt_str_param(commit_hash, "commit_hash"),
             check.opt_str_param(url, "url"),
@@ -46,7 +46,7 @@ class PexMetadata(
     )
 ):
     def __new__(cls, pex_tag, python_version=None):
-        return super(PexMetadata, cls).__new__(
+        return super().__new__(
             cls,
             check.str_param(pex_tag, "pex_tag"),
             check.opt_str_param(python_version, "python_version"),
@@ -108,8 +108,8 @@ class CodeLocationDeployData(
             ("executable_path", Optional[str]),
             ("attribute", Optional[str]),
             ("git_metadata", Optional[GitMetadata]),
-            ("container_context", Dict[str, Any]),
-            ("cloud_context_env", Dict[str, Any]),
+            ("container_context", dict[str, Any]),
+            ("cloud_context_env", dict[str, Any]),
             ("pex_metadata", Optional[PexMetadata]),
             ("agent_queue", Optional[AgentQueue]),
         ],
@@ -135,7 +135,7 @@ class CodeLocationDeployData(
             "Must supply exactly one of a file name, a package name, or a module name",
         )
 
-        return super(CodeLocationDeployData, cls).__new__(
+        return super().__new__(
             cls,
             check.opt_str_param(image, "image"),
             check.opt_str_param(python_file, "python_file"),
@@ -151,7 +151,7 @@ class CodeLocationDeployData(
             check.opt_str_param(agent_queue, "agent_queue"),
         )
 
-    def with_cloud_context_env(self, cloud_context_env: Dict[str, Any]) -> "CodeLocationDeployData":
+    def with_cloud_context_env(self, cloud_context_env: dict[str, Any]) -> "CodeLocationDeployData":
         return self._replace(cloud_context_env=cloud_context_env)
 
     def get_multipex_server_command(
@@ -159,7 +159,7 @@ class CodeLocationDeployData(
         port: Optional[int],
         socket: Optional[str] = None,
         metrics_enabled: bool = False,
-    ) -> List[str]:
+    ) -> list[str]:
         return (
             ["dagster-cloud", "pex", "grpc", "--host", "0.0.0.0"]
             + (["--port", str(port)] if port else [])
@@ -167,10 +167,10 @@ class CodeLocationDeployData(
             + (["--enable-metrics"] if metrics_enabled else [])
         )
 
-    def get_multipex_server_env(self) -> Dict[str, str]:
+    def get_multipex_server_env(self) -> dict[str, str]:
         return {"DAGSTER_CURRENT_IMAGE": self.image} if self.image else {}
 
-    def get_grpc_server_command(self, metrics_enabled: bool = False) -> List[str]:
+    def get_grpc_server_command(self, metrics_enabled: bool = False) -> list[str]:
         return (
             ([self.executable_path, "-m"] if self.executable_path else [])
             + [
@@ -187,7 +187,7 @@ class CodeLocationDeployData(
         location_name: str,
         instance_ref: Optional[InstanceRef],
         socket: Optional[str] = None,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         return merge_dicts(
             {
                 "DAGSTER_LOCATION_NAME": location_name,

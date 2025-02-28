@@ -2,22 +2,9 @@ import logging
 import os
 import sys
 import threading
+from collections.abc import Iterable, Mapping, Sequence
 from enum import Enum
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    NamedTuple,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    TypedDict,
-    Union,
-    cast,
-)
+from typing import Any, NamedTuple, Optional, TypedDict, Union, cast
 
 import dagster._check as check
 import grpc
@@ -96,7 +83,7 @@ class CloudCodeServerHeartbeat(
         error: Optional[SerializableErrorInfo] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ):
-        return super(CloudCodeServerHeartbeat, cls).__new__(
+        return super().__new__(
             cls,
             location_name=check.str_param(location_name, "location_name"),
             server_status=check.inst_param(server_status, "server_status", CloudCodeServerStatus),
@@ -148,7 +135,7 @@ class CloudRunWorkerStatus(
         transient: Optional[bool] = None,
         run_worker_id: Optional[str] = None,
     ):
-        return super(CloudRunWorkerStatus, cls).__new__(
+        return super().__new__(
             cls,
             run_id=check.str_param(run_id, "run_id"),
             status_type=check.inst_param(status_type, "status_type", WorkerStatus),
@@ -180,7 +167,7 @@ class CloudRunWorkerStatuses(
     NamedTuple(
         "_CloudRunWorkerStatuses",
         [
-            ("statuses", List[CloudRunWorkerStatus]),
+            ("statuses", list[CloudRunWorkerStatus]),
             ("run_worker_monitoring_supported", bool),
             ("run_worker_monitoring_thread_alive", Optional[bool]),
         ],
@@ -188,11 +175,11 @@ class CloudRunWorkerStatuses(
 ):
     def __new__(
         cls,
-        statuses: Optional[List[CloudRunWorkerStatus]],
+        statuses: Optional[list[CloudRunWorkerStatus]],
         run_worker_monitoring_supported: bool,
         run_worker_monitoring_thread_alive: Optional[bool],
     ):
-        return super(CloudRunWorkerStatuses, cls).__new__(
+        return super().__new__(
             cls,
             statuses=check.opt_list_param(statuses, "statuses", of_type=CloudRunWorkerStatus),
             run_worker_monitoring_supported=check.bool_param(
@@ -229,13 +216,13 @@ def _is_grpc_unknown_error(error: Exception) -> bool:
 def get_cloud_run_worker_statuses(
     instance: DagsterCloudAgentInstance, deployment_names: Iterable[str], logger: logging.Logger
 ) -> Mapping[str, Sequence[CloudRunWorkerStatus]]:
-    statuses: Dict[str, Sequence[CloudRunWorkerStatus]] = {}
+    statuses: dict[str, Sequence[CloudRunWorkerStatus]] = {}
 
     # protected with a lock inside the method
     active_grpc_server_handles = instance.user_code_launcher.get_active_grpc_server_handles()
     active_grpc_server_handle_strings = [str(s) for s in active_grpc_server_handles]
 
-    active_non_isolated_run_ids_by_server_handle: Dict[
+    active_non_isolated_run_ids_by_server_handle: dict[
         str, Union[Sequence[str], _GetCurrentRunsError]
     ] = {}
     if instance.user_code_launcher.supports_get_current_runs_for_server_handle:
@@ -276,7 +263,7 @@ def get_cloud_run_worker_statuses(
             instance.ref_for_deployment(deployment_name)
         ) as scoped_instance:
             runs = scoped_instance.get_runs(RunsFilter(statuses=IN_PROGRESS_RUN_STATUSES))
-            statuses_for_deployment: List[CloudRunWorkerStatus] = []
+            statuses_for_deployment: list[CloudRunWorkerStatus] = []
             for run in runs:
                 if is_isolated_run(run):
                     launcher = scoped_instance.run_launcher
@@ -392,8 +379,8 @@ def get_cloud_run_worker_statuses(
 
 def run_worker_monitoring_thread(
     instance: DagsterCloudAgentInstance,
-    deployments_to_check: Set[str],
-    statuses_dict: Dict[str, Sequence[CloudRunWorkerStatus]],
+    deployments_to_check: set[str],
+    statuses_dict: dict[str, Sequence[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
     shutdown_event: threading.Event,
     monitoring_interval: Optional[int] = None,
@@ -416,8 +403,8 @@ def run_worker_monitoring_thread(
 
 def run_worker_monitoring_thread_iteration(
     instance: DagsterCloudAgentInstance,
-    deployments_to_check: Set[str],
-    statuses_dict: Dict[str, Sequence[CloudRunWorkerStatus]],
+    deployments_to_check: set[str],
+    statuses_dict: dict[str, Sequence[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
     logger: logging.Logger,
 ) -> None:
@@ -439,11 +426,11 @@ def run_worker_monitoring_thread_iteration(
 
 def start_run_worker_monitoring_thread(
     instance: DagsterCloudAgentInstance,
-    deployments_to_check: Set[str],
-    statuses_dict: Dict[str, List[CloudRunWorkerStatus]],
+    deployments_to_check: set[str],
+    statuses_dict: dict[str, list[CloudRunWorkerStatus]],
     run_worker_monitoring_lock: threading.Lock,
     monitoring_interval: Optional[int] = None,
-) -> Tuple[threading.Thread, threading.Event]:
+) -> tuple[threading.Thread, threading.Event]:
     shutdown_event = threading.Event()
     thread = threading.Thread(
         target=run_worker_monitoring_thread,

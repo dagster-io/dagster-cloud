@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import typer
 from dagster._core.definitions.repository_definition import SINGLETON_REPOSITORY_NAME
@@ -32,7 +32,7 @@ def launch(
     config: str = typer.Option(
         None, "--config-json", help="JSON string of run config to use for this job run"
     ),
-    asset_keys: Optional[List[str]] = typer.Option(
+    asset_keys: Optional[list[str]] = typer.Option(
         None,
         "--asset-key",
         help=(
@@ -42,8 +42,8 @@ def launch(
     ),
 ):
     """Launch a run for a job."""
-    loaded_tags: Dict[str, Any] = json.loads(tags) if tags else {}
-    loaded_config: Dict[str, Any] = json.loads(config) if config else {}
+    loaded_tags: dict[str, Any] = json.loads(tags) if tags else {}
+    loaded_config: dict[str, Any] = json.loads(config) if config else {}
 
     repository = repository or SINGLETON_REPOSITORY_NAME
     with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:

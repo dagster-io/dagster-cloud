@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Optional
 
 from opentelemetry.metrics import MeterProvider as APIMeterProvider
 from opentelemetry.sdk.metrics.export import MetricExporter, MetricReader
@@ -84,8 +84,8 @@ def build_metric_reader(
 
 
 def build_meter_provider(
-    metric_readers: List[MetricReader],
-    resource_attributes: Optional[Dict[str, str]] = None,
+    metric_readers: list[MetricReader],
+    resource_attributes: Optional[dict[str, str]] = None,
 ) -> APIMeterProvider:
     """Build an OpenTelemetry meter provider.
     params:

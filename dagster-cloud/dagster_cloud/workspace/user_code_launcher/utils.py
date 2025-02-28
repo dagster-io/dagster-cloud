@@ -25,7 +25,7 @@ def deterministic_label_for_location(deployment_name: str, location_name: str) -
     search for existing deployments on update and remove them. Does not need to be human-readable.
     """
     m = hashlib.sha1()  # Creates a 40-byte hash
-    m.update(f"{deployment_name}-{location_name}".encode("utf-8"))
+    m.update(f"{deployment_name}-{location_name}".encode())
 
     unique_label = m.hexdigest()
     return unique_label

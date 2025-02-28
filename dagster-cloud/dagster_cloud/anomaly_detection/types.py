@@ -1,6 +1,6 @@
 from abc import abstractproperty
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 from dagster import DagsterError
 from pydantic import BaseModel
@@ -60,7 +60,7 @@ class AnomalyDetectionModelParams(BaseModel):
         raise NotImplementedError("Subclasses must implement this method")
 
     @abstractproperty
-    def as_metadata(self) -> Dict[str, Any]:
+    def as_metadata(self) -> dict[str, Any]:
         raise NotImplementedError("Subclasses must implement this method")
 
 
@@ -72,7 +72,7 @@ class BetaFreshnessAnomalyDetectionParams(AnomalyDetectionModelParams):
         return AnomalyDetectionModelVersion.FRESHNESS_BETA
 
     @property
-    def as_metadata(self) -> Dict[str, Any]:
+    def as_metadata(self) -> dict[str, Any]:
         return {
             "sensitivity": self.sensitivity,
         }

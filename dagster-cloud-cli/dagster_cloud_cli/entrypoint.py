@@ -4,8 +4,9 @@ import importlib.util
 import json
 import logging
 import time
+from collections.abc import Mapping
 from enum import Enum
-from typing import Callable, Mapping, Optional
+from typing import Callable, Optional
 
 import typer
 from typer.models import CommandInfo
@@ -100,11 +101,11 @@ class LogFormat(Enum):
 
 class FluentbitJsonFormatter(logging.Formatter):
     def __init__(self, fmt: str, json_fields: Mapping[str, str]):
-        super(FluentbitJsonFormatter, self).__init__(fmt=fmt)
+        super().__init__(fmt=fmt)
         self.json_fields = dict(json_fields)
 
     def format(self, record: logging.LogRecord) -> str:
-        log = super(FluentbitJsonFormatter, self).format(record)
+        log = super().format(record)
         output = {
             # Time format specified here: https://github.com/fluent/fluent-bit/blob/master/conf/parsers.conf#L35-L39
             "time": time.strftime("%d/%b/%Y:%H:%M:%S %z", time.localtime(record.created)),

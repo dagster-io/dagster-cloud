@@ -1,4 +1,4 @@
-from typing import Mapping
+from collections.abc import Mapping
 
 from dagster._core.storage.tags import (
     AUTO_MATERIALIZE_TAG,

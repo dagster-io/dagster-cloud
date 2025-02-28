@@ -1,4 +1,5 @@
-from typing import Any, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 from dagster import AssetKey, JobDefinition
 
@@ -15,7 +16,7 @@ def marker_asset_key_for_job(
 
 
 def build_bigquery_cost_metadata(
-    job_ids: Optional[List[str]], bytes_billed: int, slots_ms: int
+    job_ids: Optional[list[str]], bytes_billed: int, slots_ms: int
 ) -> Mapping[str, Any]:
     metadata: Mapping[str, Any] = {
         BIGQUERY_METADATA_BYTES_BILLED: bytes_billed,

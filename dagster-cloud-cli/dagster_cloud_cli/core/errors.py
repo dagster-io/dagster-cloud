@@ -13,7 +13,7 @@ class DagsterCloudMaintenanceException(Exception):
     def __init__(self, message, timeout, retry_interval):
         self.timeout = timeout or DEFAULT_MAINTENANCE_TIMEOUT
         self.retry_interval = retry_interval or DEFAULT_MAINTENANCE_RETRY_INTERVAL
-        super(DagsterCloudMaintenanceException, self).__init__(message)
+        super().__init__(message)
 
 
 class DagsterCloudHTTPError(Exception):
@@ -22,9 +22,7 @@ class DagsterCloudHTTPError(Exception):
     def __init__(self, http_error: HTTPError):
         self.response = http_error.response
         error_content = http_error.response.content.decode("utf-8", errors="ignore")
-        super(DagsterCloudHTTPError, self).__init__(
-            http_error.__str__() + ": " + str(error_content)
-        )
+        super().__init__(http_error.__str__() + ": " + str(error_content))
 
 
 def raise_http_error(response):

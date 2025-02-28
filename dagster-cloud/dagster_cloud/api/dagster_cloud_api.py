@@ -1,7 +1,8 @@
 import enum
+from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from enum import Enum
-from typing import Any, List, Mapping, Optional, Sequence, TypedDict, Union
+from typing import Any, Optional, TypedDict, Union
 
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
@@ -51,7 +52,7 @@ class DagsterCloudUploadLocationData:
     runs in this location.
     """
 
-    upload_repository_datas: List[DagsterCloudUploadRepositoryData]
+    upload_repository_datas: list[DagsterCloudUploadRepositoryData]
     container_image: Optional[str]
     executable_path: Optional[str]
     dagster_library_versions: Optional[Mapping[str, str]] = None
@@ -147,7 +148,7 @@ class DagsterCloudApiUnknownCommandResponse:
 @whitelist_for_serdes
 @record
 class DagsterCloudApiErrorResponse:
-    error_infos: List[SerializableErrorInfo]
+    error_infos: list[SerializableErrorInfo]
     thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
@@ -288,7 +289,7 @@ class DagsterCloudUploadApiResponse:
 @whitelist_for_serdes
 @record
 class BatchDagsterCloudUploadApiResponse:
-    batch: List[DagsterCloudUploadApiResponse]
+    batch: list[DagsterCloudUploadApiResponse]
 
 
 @whitelist_for_serdes
@@ -326,7 +327,7 @@ class AgentHeartbeatMetadata(TypedDict):
     version: NotRequired[str]
     image_tag: NotRequired[str]
     type: NotRequired[str]
-    queues: NotRequired[List[str]]
+    queues: NotRequired[list[str]]
 
 
 @whitelist_for_serdes

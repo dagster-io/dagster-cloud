@@ -1,10 +1,9 @@
 import logging
-from typing import Dict
 
 from dagster import DagsterRun
 
 
-def extract_run_attributes(deployment_name, run: DagsterRun) -> Dict[str, str]:
+def extract_run_attributes(deployment_name, run: DagsterRun) -> dict[str, str]:
     attributes = {
         "job": run.job_name or "unknown",
         "repository": "unknown",

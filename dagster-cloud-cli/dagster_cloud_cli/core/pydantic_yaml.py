@@ -1,6 +1,6 @@
 """Use a pydantic definition to validate dagster_cloud.yaml."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 from pydantic import BaseModel, Extra, Field, model_validator, validator
@@ -13,8 +13,8 @@ class CodeSource(BaseModel, extra=Extra.forbid):
 
     @model_validator(mode="before")
     def exactly_one_source_defined(
-        cls, values: Dict[str, Optional[str]]
-    ) -> Dict[str, Optional[str]]:
+        cls, values: dict[str, Optional[str]]
+    ) -> dict[str, Optional[str]]:
         defined = [key for key, value in values.items() if value]
         if len(defined) > 1:
             raise ValueError(
@@ -38,15 +38,15 @@ class Location(BaseModel, extra=Extra.forbid):
     image: Optional[str] = None
     executable_path: Optional[str] = None
     attribute: Optional[str] = None
-    container_context: Optional[Dict[str, Any]] = None
+    container_context: Optional[dict[str, Any]] = None
     agent_queue: Optional[str] = None
 
 
 class DagsterCloudYaml(BaseModel, extra=Extra.forbid):
-    locations: List[Location] = Field(description="List of code locations")
+    locations: list[Location] = Field(description="List of code locations")
 
     @validator("locations")
-    def no_duplicate_names(cls, v: List[Location]) -> List[Location]:
+    def no_duplicate_names(cls, v: list[Location]) -> list[Location]:
         names = set()
         for location in v:
             if location.location_name in names:

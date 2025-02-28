@@ -1,6 +1,7 @@
 from collections import defaultdict
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import yaml
 from dagster import (
@@ -133,7 +134,7 @@ def dbt_with_bigquery_insights(
     invocation_id = run_results_json["metadata"]["invocation_id"]
 
     # backcompat-proof in case the invocation does not have an instantiated adapter on it
-    adapter: Optional["BaseAdapter"] = getattr(dbt_cli_invocation, "adapter", None)
+    adapter: Optional[BaseAdapter] = getattr(dbt_cli_invocation, "adapter", None)
     if not adapter:
         if version.parse(dagster_dbt_version) < version.parse(MIN_DAGSTER_DBT_VERSION):
             upgrade_message = f" Extracting cost information requires dagster_dbt>={MIN_DAGSTER_DBT_VERSION} (found {dagster_dbt_version}). "
@@ -149,7 +150,7 @@ def dbt_with_bigquery_insights(
     cost_by_asset = defaultdict(list)
     try:
         with adapter.connection_named("dagster_insights:bigquery_cost"):
-            client: "bigquery.Client" = adapter.connections.get_thread_connection().handle  # pyright: ignore[reportAssignmentType]
+            client: bigquery.Client = adapter.connections.get_thread_connection().handle  # pyright: ignore[reportAssignmentType]
 
             if (client.location or adapter.config.credentials.location) and client.project:
                 # we should populate the location/project from the client, and use that to determine

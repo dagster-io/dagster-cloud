@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from dagster_cloud_cli import gql
+from dagster_cloud_cli.types import SnapshotBaseDeploymentCondition
 
 from . import github_context
 
@@ -12,6 +13,7 @@ def create_or_update_branch_deployment_from_github_context(
     github_event: github_context.GithubEvent,
     mark_closed: bool,
     base_deployment_name: Optional[str],
+    snapshot_base_condition: Optional[SnapshotBaseDeploymentCondition],
 ) -> Optional[str]:
     """Return the branch deployment associated with the github PR."""
     event = github_event
@@ -37,6 +39,7 @@ def create_or_update_branch_deployment_from_github_context(
                 commit_message=event.commit_msg,
                 author_avatar_url=github_event.get_github_avatar_url(),
                 base_deployment_name=base_deployment_name,
+                snapshot_base_condition=snapshot_base_condition,
             )
         logging.info(
             "Got branch deployment %r for branch %r",

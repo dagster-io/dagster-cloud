@@ -12,27 +12,12 @@ import threading
 import time
 import zlib
 from abc import abstractmethod, abstractproperty
+from collections import defaultdict
+from collections.abc import Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from contextlib import AbstractContextManager
 from io import BytesIO
-from typing import (
-    Any,
-    Callable,
-    Collection,
-    DefaultDict,
-    Dict,
-    Generic,
-    List,
-    Mapping,
-    NamedTuple,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import Any, Callable, Generic, NamedTuple, Optional, TypeVar, Union, cast
 
 import dagster._check as check
 import grpc
@@ -178,7 +163,7 @@ class UserCodeLauncherEntry(
         code_location_deploy_data,
         update_timestamp,
     ):
-        return super(UserCodeLauncherEntry, cls).__new__(
+        return super().__new__(
             cls,
             check.inst_param(
                 code_location_deploy_data, "code_location_deploy_data", CodeLocationDeployData
@@ -286,8 +271,8 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
     ),
 }
 
-DeploymentAndLocation: TypeAlias = Tuple[str, str]
-UserCodeLauncherEntryMap: TypeAlias = Dict[DeploymentAndLocation, UserCodeLauncherEntry]
+DeploymentAndLocation: TypeAlias = tuple[str, str]
+UserCodeLauncherEntryMap: TypeAlias = dict[DeploymentAndLocation, UserCodeLauncherEntry]
 
 
 class ServerEndpoint(
@@ -297,12 +282,12 @@ class ServerEndpoint(
             ("host", str),
             ("port", Optional[int]),
             ("socket", Optional[str]),
-            ("metadata", Optional[List[Tuple[str, str]]]),
+            ("metadata", Optional[list[tuple[str, str]]]),
         ],
     )
 ):
     def __new__(cls, host, port, socket, metadata=None):
-        return super(ServerEndpoint, cls).__new__(
+        return super().__new__(
             cls,
             check.str_param(host, "host"),
             check.opt_int_param(port, "port"),
@@ -318,7 +303,7 @@ class ServerEndpoint(
     def create_multipex_client(self) -> MultiPexGrpcClient:
         return MultiPexGrpcClient(port=self.port, socket=self.socket, host=self.host)
 
-    def with_metadata(self, metadata: Optional[List[Tuple[str, str]]]):
+    def with_metadata(self, metadata: Optional[list[tuple[str, str]]]):
         return self._replace(metadata=metadata)
 
 
@@ -338,7 +323,7 @@ class DagsterCloudGrpcServer(
         server_endpoint: ServerEndpoint,
         code_location_deploy_data: CodeLocationDeployData,
     ):
-        return super(DagsterCloudGrpcServer, cls).__new__(
+        return super().__new__(
             cls,
             server_handle,
             check.inst_param(server_endpoint, "server_endpoint", ServerEndpoint),
@@ -375,18 +360,18 @@ class DagsterCloudUserCodeLauncher(
         # ignored old setting, allowed to flow through to avoid breakage
         defer_job_snapshots: bool = True,
     ):
-        self._grpc_servers: Dict[
+        self._grpc_servers: dict[
             DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
         ] = {}
-        self._first_unavailable_times: Dict[DeploymentAndLocation, float] = {}
+        self._first_unavailable_times: dict[DeploymentAndLocation, float] = {}
 
-        self._pending_delete_grpc_server_handles: Set[ServerHandle] = set()
+        self._pending_delete_grpc_server_handles: set[ServerHandle] = set()
         self._grpc_servers_lock = threading.Lock()
-        self._per_location_metrics: Dict[
+        self._per_location_metrics: dict[
             DeploymentAndLocation, CloudCodeServerUtilizationMetrics
-        ] = DefaultDict(lambda: init_optional_typeddict(CloudCodeServerUtilizationMetrics))
+        ] = defaultdict(lambda: init_optional_typeddict(CloudCodeServerUtilizationMetrics))
 
-        self._multipex_servers: Dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
+        self._multipex_servers: dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
 
         self._server_ttl_config = check.opt_dict_param(server_ttl, "server_ttl")
         self._direct_snapshot_uploads = direct_snapshot_uploads
@@ -396,21 +381,21 @@ class DagsterCloudUserCodeLauncher(
         self._requires_healthcheck = check.bool_param(requires_healthcheck, "requires_healthcheck")
 
         # periodically reconciles to make desired = actual
-        self._desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
-        self._actual_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
+        self._desired_entries: dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
+        self._actual_entries: dict[DeploymentAndLocation, UserCodeLauncherEntry] = {}
         self._last_refreshed_actual_entries = 0
         self._last_cleaned_up_dangling_code_servers = 0
         self._metadata_lock = threading.Lock()
 
-        self._upload_locations: Set[DeploymentAndLocation] = set()
+        self._upload_locations: set[DeploymentAndLocation] = set()
 
         self._logger = logging.getLogger("dagster_cloud.user_code_launcher")
         self._event_logger = logging.getLogger("cloud-events")
         self._started: bool = False
         self._run_worker_monitoring_thread = None
         self._run_worker_monitoring_thread_shutdown_event = None
-        self._run_worker_deployments_to_check: Set[str] = set()
-        self._run_worker_statuses_dict: Dict[str, List[CloudRunWorkerStatus]] = {}
+        self._run_worker_deployments_to_check: set[str] = set()
+        self._run_worker_statuses_dict: dict[str, list[CloudRunWorkerStatus]] = {}
         self._run_worker_monitoring_lock = threading.Lock()
 
         self._reconcile_count = 0
@@ -430,7 +415,7 @@ class DagsterCloudUserCodeLauncher(
         self._agent_metrics_config = agent_metrics
         super().__init__()
 
-    def get_active_grpc_server_handles(self) -> List[ServerHandle]:
+    def get_active_grpc_server_handles(self) -> list[ServerHandle]:
         with self._grpc_servers_lock:
             return [
                 s.server_handle
@@ -438,7 +423,7 @@ class DagsterCloudUserCodeLauncher(
                 if not isinstance(s, SerializableErrorInfo)
             ] + list(self._pending_delete_grpc_server_handles)
 
-    def get_active_agent_ids(self) -> Optional[Set[str]]:
+    def get_active_agent_ids(self) -> Optional[set[str]]:
         try:
             result = self._instance.organization_scoped_graphql_client().execute(
                 GET_AGENTS_QUERY,
@@ -893,7 +878,7 @@ class DagsterCloudUserCodeLauncher(
 
         list_repositories_response = await self.gen_list_repositories_response(client)
 
-        upload_repo_datas: List[DagsterCloudUploadRepositoryData] = []
+        upload_repo_datas: list[DagsterCloudUploadRepositoryData] = []
 
         for (
             repository_name,
@@ -1045,7 +1030,7 @@ class DagsterCloudUserCodeLauncher(
 
     def _get_existing_pex_servers(
         self, deployment_name: str, location_name: str
-    ) -> List[PexServerHandle]:
+    ) -> list[PexServerHandle]:
         server = self._multipex_servers.get((deployment_name, location_name))
 
         if not server:
@@ -1250,7 +1235,7 @@ class DagsterCloudUserCodeLauncher(
                 self._pending_delete_grpc_server_handles.discard(server_handle)
 
     def _cleanup_servers(
-        self, active_agent_ids: Optional[Set[str]], include_own_servers: bool
+        self, active_agent_ids: Optional[set[str]], include_own_servers: bool
     ) -> None:
         """Remove all servers, across all deployments and locations."""
         with ThreadPoolExecutor() as executor:
@@ -1273,7 +1258,7 @@ class DagsterCloudUserCodeLauncher(
                     self._logger.exception("Error cleaning up server")
 
     @abstractmethod
-    def _list_server_handles(self) -> List[ServerHandle]:
+    def _list_server_handles(self) -> list[ServerHandle]:
         """Return a list of all server handles across all deployments and locations."""
 
     @abstractmethod
@@ -1285,7 +1270,7 @@ class DagsterCloudUserCodeLauncher(
         """Returns the update_timestamp value from the given code server."""
 
     def _can_cleanup_server(
-        self, handle: ServerHandle, active_agent_ids: Optional[Set[str]], include_own_servers: bool
+        self, handle: ServerHandle, active_agent_ids: Optional[set[str]], include_own_servers: bool
     ) -> bool:
         """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active)."""
         agent_id_for_server = self.get_agent_id_for_server(handle)
@@ -1321,7 +1306,7 @@ class DagsterCloudUserCodeLauncher(
             return False
 
         return (active_agent_ids is not None) and (
-            agent_id_for_server not in cast(Set[str], active_agent_ids)
+            agent_id_for_server not in cast(set[str], active_agent_ids)
         )
 
     def _graceful_cleanup_servers(self, include_own_servers: bool):  # ServerHandles
@@ -1330,7 +1315,7 @@ class DagsterCloudUserCodeLauncher(
             return self._cleanup_servers(active_agent_ids, include_own_servers=include_own_servers)
 
         handles = self._list_server_handles()
-        servers_to_remove: List[ServerHandle] = []
+        servers_to_remove: list[ServerHandle] = []
         with self._grpc_servers_lock:
             for handle in handles:
                 if self._can_cleanup_server(
@@ -1367,7 +1352,7 @@ class DagsterCloudUserCodeLauncher(
         super().__exit__(exception_value, exception_value, traceback)  # pyright: ignore[reportAbstractUsage]
 
     def add_upload_metadata(
-        self, upload_metadata: Dict[DeploymentAndLocation, UserCodeLauncherEntry]
+        self, upload_metadata: dict[DeploymentAndLocation, UserCodeLauncherEntry]
     ):
         """Add a set of locations to be uploaded in the next reconcilation loop."""
         with self._metadata_lock:
@@ -1376,7 +1361,7 @@ class DagsterCloudUserCodeLauncher(
 
     def update_grpc_metadata(
         self,
-        desired_metadata: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        desired_metadata: dict[DeploymentAndLocation, UserCodeLauncherEntry],
     ):
         check.dict_param(
             desired_metadata,
@@ -1681,8 +1666,8 @@ class DagsterCloudUserCodeLauncher(
 
     def _deployments_and_locations_to_string(
         self,
-        deployments_and_locations: Set[DeploymentAndLocation],
-        entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        deployments_and_locations: set[DeploymentAndLocation],
+        entries: dict[DeploymentAndLocation, UserCodeLauncherEntry],
     ):
         return (
             "{"
@@ -1706,8 +1691,8 @@ class DagsterCloudUserCodeLauncher(
 
     def _reconcile(
         self,
-        desired_entries: Dict[DeploymentAndLocation, UserCodeLauncherEntry],
-        upload_locations: Set[DeploymentAndLocation],
+        desired_entries: dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        upload_locations: set[DeploymentAndLocation],
         check_on_pending_delete_servers: bool,
     ):
         if check_on_pending_delete_servers:
@@ -1748,26 +1733,26 @@ class DagsterCloudUserCodeLauncher(
         to_update_keys = diff.to_add.union(diff.to_update)
 
         # Handles for all running standalone Dagster GRPC servers
-        existing_standalone_dagster_server_handles: Dict[
+        existing_standalone_dagster_server_handles: dict[
             DeploymentAndLocation, Collection[ServerHandle]
         ] = {}
 
         # Handles for all running Dagster multipex servers (which can each host multiple grpc subprocesses)
-        existing_multipex_server_handles: Dict[DeploymentAndLocation, Collection[ServerHandle]] = {}
+        existing_multipex_server_handles: dict[DeploymentAndLocation, Collection[ServerHandle]] = {}
 
         # For each location, all currently running pex servers on the current multipex server
-        existing_pex_server_handles: Dict[DeploymentAndLocation, List[PexServerHandle]] = {}
+        existing_pex_server_handles: dict[DeploymentAndLocation, list[PexServerHandle]] = {}
 
         # Dagster grpc servers created in this loop (including both standalone grpc servers
         # and pex servers on a multipex server) - or an error that explains why it couldn't load
-        new_dagster_servers: Dict[
+        new_dagster_servers: dict[
             DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
         ] = {}
 
         # Multipex servers created in this loop (a new multipex server might not always
         # be created on each loop even if the code has changed, as long as the base image
         # is the same)
-        new_multipex_servers: Dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
+        new_multipex_servers: dict[DeploymentAndLocation, DagsterCloudGrpcServer] = {}
 
         for to_update_key in to_update_keys:
             deployment_name, location_name = to_update_key
@@ -2246,12 +2231,12 @@ class DagsterCloudUserCodeLauncher(
 
         return server
 
-    def get_grpc_server_heartbeats(self) -> Dict[str, List[CloudCodeServerHeartbeat]]:
+    def get_grpc_server_heartbeats(self) -> dict[str, list[CloudCodeServerHeartbeat]]:
         endpoint_or_errors = self.get_grpc_endpoints()
         with self._metadata_lock:
             desired_entries = set(self._desired_entries.keys())
 
-        heartbeats: Dict[str, List[CloudCodeServerHeartbeat]] = {}
+        heartbeats: dict[str, list[CloudCodeServerHeartbeat]] = {}
         for entry_key in desired_entries:
             deployment_name, location_name = entry_key
             endpoint_or_error = endpoint_or_errors.get(entry_key)
@@ -2301,7 +2286,7 @@ class DagsterCloudUserCodeLauncher(
 
     def get_grpc_endpoints(
         self,
-    ) -> Dict[DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]]:
+    ) -> dict[DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]]:
         with self._grpc_servers_lock:
             return {
                 key: val if isinstance(val, SerializableErrorInfo) else val.server_endpoint

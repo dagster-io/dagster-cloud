@@ -1,6 +1,7 @@
 import logging
+from collections.abc import Mapping
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import dagster_cloud.opentelemetry.factories.logs as logs_factory
 import dagster_cloud.opentelemetry.factories.metrics as metrics_factory

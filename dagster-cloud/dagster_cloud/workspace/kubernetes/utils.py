@@ -2,7 +2,8 @@ import asyncio
 import copy
 import re
 import time
-from typing import Mapping, Optional
+from collections.abc import Mapping
+from typing import Optional
 
 import kubernetes
 from dagster_k8s.client import DagsterKubernetesClient

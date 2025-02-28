@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Sequence, Set
+from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Optional
 
 import dagster._check as check
 from dagster._core.definitions.asset_key import EntityKey
@@ -76,7 +77,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         repository_origin_id: Optional[str] = None,
         repository_selector_id: Optional[str] = None,
         instigator_type: Optional[InstigatorType] = None,
-        instigator_statuses: Optional[Set[InstigatorStatus]] = None,
+        instigator_statuses: Optional[set[InstigatorStatus]] = None,
     ) -> Iterable[InstigatorState]:
         res = self._execute_query(
             ALL_STORED_JOB_STATE_QUERY,
@@ -219,7 +220,4 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         raise NotImplementedError("Not callable from user cloud")
 
     def upgrade(self):
-        raise NotImplementedError("Not callable from user cloud")
-
-    def optimize_for_dagit(self, statement_timeout: int, pool_recycle: int):
         raise NotImplementedError("Not callable from user cloud")

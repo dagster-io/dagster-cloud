@@ -6,7 +6,6 @@ import os.path
 import shutil
 import subprocess
 import tempfile
-from typing import List
 from uuid import uuid4
 
 import click
@@ -30,7 +29,7 @@ IGNORED_PATTERNS = [
 
 
 def build_source_pex(
-    code_directory: str, local_package_paths: List[str], output_directory, python_version
+    code_directory: str, local_package_paths: list[str], output_directory, python_version
 ):
     output_directory = os.path.abspath(output_directory)
     os.makedirs(output_directory, exist_ok=True)
@@ -71,7 +70,7 @@ def _build_local_package(local_dir: str, build_dir: str, python_interpreter: str
 
 
 def build_pex_using_setup_py(
-    code_directory: str, local_package_paths: List[str], tmp_pex_path, python_version
+    code_directory: str, local_package_paths: list[str], tmp_pex_path, python_version
 ):
     """Builds package using setup.py and copies built output into PEX."""
     python_interpreter = util.python_interpreter_for(python_version)

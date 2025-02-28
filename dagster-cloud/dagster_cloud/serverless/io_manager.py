@@ -2,7 +2,7 @@ import datetime
 import io
 import os
 import pickle
-from typing import Any, Tuple, Union
+from typing import Any, Union
 
 import boto3
 import dagster._check as check
@@ -27,7 +27,7 @@ class PickledObjectServerlessIOManager(UPathIOManager):
         base_path = UPath(s3_prefix) if s3_prefix else None
         super().__init__(base_path=base_path)
 
-    def _refresh_boto_session(self) -> Tuple[boto3.Session, datetime.datetime]:
+    def _refresh_boto_session(self) -> tuple[boto3.Session, datetime.datetime]:
         # We have to do this whacky way to get credentials to ensure that we get iam role
         # we assigned to the task. If we used the default boto behavior, it could get overriden
         # when users set AWS env vars.

@@ -3,7 +3,7 @@ import json
 import os
 from abc import ABCMeta, abstractmethod
 from enum import Enum
-from typing import List, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Extra, Field
 
@@ -54,7 +54,7 @@ class LocationState(BaseModel, extra=Extra.forbid):
         None, discriminator="strategy"
     )
     status_url: Optional[str]  # link to cicd run url when building and dagster cloud url when done
-    history: List[StatusChange] = []
+    history: list[StatusChange] = []
 
     def add_status_change(self, status: LocationStatus, log: str):
         self.history.append(
@@ -74,9 +74,9 @@ class Store(metaclass=ABCMeta):
     def save(self, location_state: LocationState): ...
 
     @abstractmethod
-    def list_locations(self) -> List[LocationState]: ...
+    def list_locations(self) -> list[LocationState]: ...
 
-    def list_selected_locations(self) -> List[LocationState]:
+    def list_selected_locations(self) -> list[LocationState]:
         return [location for location in self.list_locations() if location.selected]
 
 
@@ -93,7 +93,7 @@ class FileStore(Store):
     def _get_filepath(self, location_name) -> str:
         return os.path.join(self.statedir, f"{self.location_file_prefix}{location_name}.json")
 
-    def list_locations(self) -> List[LocationState]:
+    def list_locations(self) -> list[LocationState]:
         return [
             self._location_from_file(os.path.join(self.statedir, filename))
             for filename in os.listdir(self.statedir)
@@ -107,7 +107,7 @@ class FileStore(Store):
         return self._location_from_file(self._get_filepath(location_name))
 
     def _location_from_file(self, filepath: str) -> LocationState:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             return LocationState.parse_obj(json.load(f))
 
     def save(self, location_state: LocationState):
@@ -115,13 +115,13 @@ class FileStore(Store):
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(location_state.json())
 
-    def deselect(self, location_names: List[str]):
+    def deselect(self, location_names: list[str]):
         locations = [self.load(location_name) for location_name in location_names]
         for location in locations:
             location.selected = False
             self.save(location)
 
-    def select(self, location_names: List[str]):
+    def select(self, location_names: list[str]):
         locations = [self.load(location_name) for location_name in location_names]
         for location in locations:
             location.selected = True

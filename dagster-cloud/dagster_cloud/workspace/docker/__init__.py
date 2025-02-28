@@ -1,7 +1,7 @@
 import logging
 import sys
 import time
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, NamedTuple, Optional
 
 import docker
 import docker.errors
@@ -82,7 +82,7 @@ class DockerUserCodeLauncher(
             container_kwargs, "container_kwargs", key_type=str
         )
 
-        super(DockerUserCodeLauncher, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     @property
     def requires_images(self):
@@ -96,11 +96,11 @@ class DockerUserCodeLauncher(
         return self._inst_data
 
     @property
-    def env_vars(self) -> List[str]:
+    def env_vars(self) -> list[str]:
         return self._input_env_vars + self._instance.dagster_cloud_api_env_vars
 
     @property
-    def container_kwargs(self) -> Dict[str, Any]:
+    def container_kwargs(self) -> dict[str, Any]:
         return self._container_kwargs
 
     @classmethod
@@ -158,7 +158,7 @@ class DockerUserCodeLauncher(
 
     def _get_standalone_dagster_server_handles_for_location(
         self, deployment_name: str, location_name: str
-    ) -> List[DagsterDockerContainer]:
+    ) -> list[DagsterDockerContainer]:
         client = docker.client.from_env()
         return [
             DagsterDockerContainer(container=container)
@@ -176,7 +176,7 @@ class DockerUserCodeLauncher(
 
     def _get_multipex_server_handles_for_location(
         self, deployment_name: str, location_name: str
-    ) -> List[DagsterDockerContainer]:
+    ) -> list[DagsterDockerContainer]:
         client = docker.client.from_env()
         return [
             DagsterDockerContainer(container=container)
@@ -199,13 +199,13 @@ class DockerUserCodeLauncher(
         container_name: str,
         hostname: str,
         grpc_port: int,
-        ports: Dict[int, int],
+        ports: dict[int, int],
         image: str,
         container_context: DockerContainerContext,
-        command: List[str],
-        additional_env: Dict[str, str],
-        labels: Dict[str, str],
-    ) -> Tuple[Container, ServerEndpoint]:
+        command: list[str],
+        additional_env: dict[str, str],
+        labels: dict[str, str],
+    ) -> tuple[Container, ServerEndpoint]:
         client = docker.client.from_env()
 
         self._logger.info(
@@ -381,7 +381,7 @@ class DockerUserCodeLauncher(
         created_time_str = handle.container.attrs["Created"]
         return parse(created_time_str).timestamp()  # pyright: ignore[reportAttributeAccessIssue]
 
-    def _list_server_handles(self) -> List[DagsterDockerContainer]:
+    def _list_server_handles(self) -> list[DagsterDockerContainer]:
         client = docker.client.from_env()
         return [
             DagsterDockerContainer(container=container)

@@ -1,8 +1,9 @@
 import zlib
 from collections import namedtuple
+from collections.abc import Mapping
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Any, Callable, Dict, List, Mapping
+from typing import Any, Callable
 
 from dagster import (
     Field,
@@ -25,7 +26,7 @@ class SerializableNamedtupleMapDiff(
         to_update,
         to_remove,
     ):
-        return super(SerializableNamedtupleMapDiff, cls).__new__(
+        return super().__new__(
             cls,
             check.set_param(to_add, "to_add", tuple),
             check.set_param(to_update, "to_update", tuple),
@@ -52,8 +53,8 @@ def diff_serializable_namedtuple_map(desired_map, actual_map, update_key_fn: Cal
 
 
 def get_env_names_from_config(
-    config_schema: Dict[str, Field], config_dict: Dict[str, Any]
-) -> List[str]:
+    config_schema: dict[str, Field], config_dict: dict[str, Any]
+) -> list[str]:
     env_vars = []
     for field_name, field in config_schema.items():
         config_type = field.config_type
@@ -78,7 +79,7 @@ SERVER_HANDLE_TAG = ".dagster/server_handle"
 
 
 def keys_not_none(
-    keys: List[str],
+    keys: list[str],
     dictionary: Mapping[str, Any],
 ) -> bool:
     return all(key in dictionary and dictionary[key] is not None for key in keys)

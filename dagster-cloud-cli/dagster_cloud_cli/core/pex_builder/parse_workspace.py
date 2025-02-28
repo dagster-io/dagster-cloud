@@ -1,7 +1,6 @@
 import logging
 import os
 from dataclasses import dataclass
-from typing import List
 
 import yaml
 
@@ -14,7 +13,7 @@ class Location:
     location_file: str
 
 
-def get_locations(dagster_cloud_yaml_file) -> List[Location]:
+def get_locations(dagster_cloud_yaml_file) -> list[Location]:
     """Returns list of locations parsed from dagster_cloud.yaml."""
     base_dir = os.path.abspath(os.path.dirname(dagster_cloud_yaml_file))
 

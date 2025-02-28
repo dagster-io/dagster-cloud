@@ -2,8 +2,9 @@ import base64
 import subprocess
 import sys
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator, List, Optional
+from typing import Optional
 
 import pkg_resources
 
@@ -26,7 +27,7 @@ def _template_dockerfile(env_vars, custom_base_image=None) -> Generator[bytes, N
         if custom_base_image
         else f"FROM public.ecr.aws/docker/library/python:{DEFAULT_PYTHON_VERSION}-slim"
     )
-    with open(DOCKERFILE_TEMPLATE, "r", encoding="utf-8") as template:
+    with open(DOCKERFILE_TEMPLATE, encoding="utf-8") as template:
         dockerfile_content = "\n".join(
             [base_image_command, template.read(), *[f"ENV {env_var}" for env_var in env_vars]]
         )
@@ -35,7 +36,7 @@ def _template_dockerfile(env_vars, custom_base_image=None) -> Generator[bytes, N
 
 
 def build_image(
-    source_directory, image: str, registry_info, env_vars: List[str], base_image
+    source_directory, image: str, registry_info, env_vars: list[str], base_image
 ) -> int:
     registry = registry_info["registry_url"]
     with _template_dockerfile(env_vars, base_image) as dockerfile_content:

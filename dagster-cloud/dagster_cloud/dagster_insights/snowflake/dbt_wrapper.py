@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, List, Optional, Tuple, Union
+from collections.abc import Iterable, Iterator
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import yaml
 from dagster import (
@@ -89,7 +90,7 @@ def dbt_with_snowflake_insights(
     if dagster_events is None:
         dagster_events = dbt_cli_invocation.stream()
 
-    asset_and_partition_key_to_unique_id: List[Tuple[AssetKey, Optional[str], Any]] = []
+    asset_and_partition_key_to_unique_id: list[tuple[AssetKey, Optional[str], Any]] = []
     for dagster_event in dagster_events:
         if isinstance(
             dagster_event, (AssetMaterialization, AssetObservation, Output, AssetCheckResult)

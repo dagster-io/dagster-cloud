@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from typing import Callable, Dict, Optional
+from typing import Callable, Optional
 
 from dagster import DagsterError
 from dagster._time import get_current_timestamp
@@ -88,7 +88,7 @@ class _DagsterExecutionResultObserver(ExecutionResultObserver):
     def __init__(
         self,
         instruments: ExecutionObserverInstruments,
-        attributes: Dict[str, str],
+        attributes: dict[str, str],
         result_evaluator_callback: Optional[ResultEvaluatorCallback] = None,
     ):
         self._result_evaluator_callback = result_evaluator_callback
@@ -129,7 +129,7 @@ def observe_execution(
     event_key: str,
     short_description: str,
     result_evaluator_callback: Optional[ResultEvaluatorCallback] = None,
-    attributes: Optional[Dict[str, str]] = None,
+    attributes: Optional[dict[str, str]] = None,
 ):
     """This context manager is used to observe the execution of a code block.
 

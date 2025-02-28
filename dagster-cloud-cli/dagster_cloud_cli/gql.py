@@ -1,9 +1,10 @@
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager, suppress
-from typing import Any, Dict, Generator, List, Optional, Sequence, cast
+from typing import Any, Optional, cast
 
 from dagster import AssetKey
 
-from dagster_cloud_cli.types import CliEventType
+from dagster_cloud_cli.types import CliEventType, SnapshotBaseDeploymentCondition
 
 from .core.graphql_client import DagsterCloudGraphQLClient, create_cloud_webserver_client
 
@@ -43,7 +44,7 @@ query CliDeploymentsQuery {
 """
 
 
-def fetch_full_deployments(client: DagsterCloudGraphQLClient) -> List[Any]:
+def fetch_full_deployments(client: DagsterCloudGraphQLClient) -> list[Any]:
     return client.execute(FULL_DEPLOYMENTS_QUERY)["data"]["fullDeployments"]
 
 
@@ -117,7 +118,7 @@ query CliAgentStatus {
 """
 
 
-def fetch_agent_status(client: DagsterCloudGraphQLClient) -> List[Any]:
+def fetch_agent_status(client: DagsterCloudGraphQLClient) -> list[Any]:
     return client.execute(AGENT_STATUS_QUERY)["data"]["agents"]
 
 
@@ -133,7 +134,7 @@ query CliWorkspaceEntries {
 """
 
 
-def fetch_workspace_entries(client: DagsterCloudGraphQLClient) -> List[Any]:
+def fetch_workspace_entries(client: DagsterCloudGraphQLClient) -> list[Any]:
     return client.execute(WORKSPACE_ENTRIES_QUERY)["data"]["workspace"]["workspaceEntries"]
 
 
@@ -174,7 +175,7 @@ query CliLocationsQuery {
 """
 
 
-def fetch_code_locations(client: DagsterCloudGraphQLClient) -> List[Any]:
+def fetch_code_locations(client: DagsterCloudGraphQLClient) -> list[Any]:
     result = client.execute(REPOSITORY_LOCATIONS_QUERY)["data"]["workspaceOrError"]
     if result["__typename"] != "Workspace":
         raise Exception("Unable to query code locations: ", result["message"])
@@ -201,7 +202,7 @@ mutation CliAddOrUpdateLocation($document: GenericScalar!) {
 
 
 def add_or_update_code_location(
-    client: DagsterCloudGraphQLClient, location_document: Dict[str, Any]
+    client: DagsterCloudGraphQLClient, location_document: dict[str, Any]
 ) -> None:
     result = client.execute(
         ADD_OR_UPDATE_LOCATION_FROM_DOCUMENT_MUTATION,
@@ -260,8 +261,8 @@ mutation CliReconcileLocationsFromDoc($document: GenericScalar!) {
 
 
 def reconcile_code_locations(
-    client: DagsterCloudGraphQLClient, locations_document: Dict[str, Any]
-) -> List[str]:
+    client: DagsterCloudGraphQLClient, locations_document: dict[str, Any]
+) -> list[str]:
     result = client.execute(
         RECONCILE_LOCATIONS_FROM_DOCUMENT_MUTATION,
         variable_values={"document": locations_document},
@@ -306,8 +307,8 @@ mutation CliDeployLocations($document: GenericScalar!) {
 
 def deploy_code_locations(
     client: DagsterCloudGraphQLClient,
-    locations_document: Dict[str, Any],
-) -> List[str]:
+    locations_document: dict[str, Any],
+) -> list[str]:
     result = client.execute(
         DEPLOY_LOCATIONS_FROM_DOCUMENT_MUTATION,
         variable_values={
@@ -338,7 +339,7 @@ query CliLocationsAsDocument {
 """
 
 
-def fetch_locations_as_document(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
+def fetch_locations_as_document(client: DagsterCloudGraphQLClient) -> dict[str, Any]:
     result = client.execute(GET_LOCATIONS_AS_DOCUMENT_QUERY)
 
     return result["data"]["locationsAsDocument"]["document"]
@@ -364,7 +365,7 @@ SET_DEPLOYMENT_SETTINGS_MUTATION = """
 
 
 def set_deployment_settings(
-    client: DagsterCloudGraphQLClient, deployment_settings: Dict[str, Any]
+    client: DagsterCloudGraphQLClient, deployment_settings: dict[str, Any]
 ) -> None:
     result = client.execute(
         SET_DEPLOYMENT_SETTINGS_MUTATION,
@@ -384,7 +385,7 @@ DEPLOYMENT_SETTINGS_QUERY = """
 """
 
 
-def get_deployment_settings(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
+def get_deployment_settings(client: DagsterCloudGraphQLClient) -> dict[str, Any]:
     result = client.execute(DEPLOYMENT_SETTINGS_QUERY)
 
     if result.get("data", {}).get("deploymentSettings", {}).get("settings") is None:
@@ -402,7 +403,7 @@ ALERT_POLICIES_QUERY = """
 """
 
 
-def get_alert_policies(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
+def get_alert_policies(client: DagsterCloudGraphQLClient) -> dict[str, Any]:
     result = client.execute(ALERT_POLICIES_QUERY)
 
     if result.get("data", {}).get("alertPoliciesAsDocument", {}) is None:
@@ -475,7 +476,7 @@ SET_ORGANIZATION_SETTINGS_MUTATION = """
 
 
 def set_organization_settings(
-    client: DagsterCloudGraphQLClient, organization_settings: Dict[str, Any]
+    client: DagsterCloudGraphQLClient, organization_settings: dict[str, Any]
 ) -> None:
     result = client.execute(
         SET_ORGANIZATION_SETTINGS_MUTATION,
@@ -495,7 +496,7 @@ ORGANIZATION_SETTINGS_QUERY = """
 """
 
 
-def get_organization_settings(client: DagsterCloudGraphQLClient) -> Dict[str, Any]:
+def get_organization_settings(client: DagsterCloudGraphQLClient) -> dict[str, Any]:
     result = client.execute(ORGANIZATION_SETTINGS_QUERY)
 
     if result.get("data", {}).get("organizationSettings", {}).get("settings") is None:
@@ -509,11 +510,13 @@ mutation CliCreateOrUpdateBranchDeployment(
     $branchData: CreateOrUpdateBranchDeploymentInput!
     $commit: DeploymentCommitInput!
     $baseDeploymentName: String
+    $snapshotBaseCondition: SnapshotBaseDeploymentCondition
 ) {
     createOrUpdateBranchDeployment(
         branchData: $branchData,
         commit: $commit,
         baseDeploymentName: $baseDeploymentName,
+        snapshotBaseCondition: $snapshotBaseCondition,
     ) {
         __typename
         ... on DagsterCloudDeployment {
@@ -544,6 +547,7 @@ def create_or_update_branch_deployment(
     author_email: Optional[str] = None,
     author_avatar_url: Optional[str] = None,
     base_deployment_name: Optional[str] = None,
+    snapshot_base_condition: Optional[SnapshotBaseDeploymentCondition] = None,
 ) -> str:
     result = client.execute(
         CREATE_OR_UPDATE_BRANCH_DEPLOYMENT,
@@ -566,6 +570,9 @@ def create_or_update_branch_deployment(
                 "authorAvatarUrl": author_avatar_url,
             },
             "baseDeploymentName": base_deployment_name,
+            "snapshotBaseCondition": snapshot_base_condition.name
+            if snapshot_base_condition
+            else None,
         },
     )
 
@@ -632,13 +639,13 @@ def launch_run(
     location_name: str,
     repo_name: str,
     job_name: str,
-    tags: Dict[str, Any],
-    config: Dict[str, Any],
-    asset_keys: Optional[List[str]],
+    tags: dict[str, Any],
+    config: dict[str, Any],
+    asset_keys: Optional[list[str]],
 ) -> str:
     formatted_tags = [{"key": cast(str, k), "value": cast(str, v)} for k, v in tags.items()]
 
-    params: Dict[str, Any] = {
+    params: dict[str, Any] = {
         "selector": {
             "repositoryLocationName": location_name,
             "repositoryName": repo_name,
@@ -732,7 +739,7 @@ def mark_cli_event(
     event_type: CliEventType,
     duration_seconds: float,
     success: bool = True,
-    tags: Optional[List[str]] = None,
+    tags: Optional[list[str]] = None,
     message: Optional[str] = None,
 ) -> Any:
     with suppress(Exception):
@@ -778,7 +785,7 @@ mutation CliDeleteDeployment($deploymentId: Int!) {
 """
 
 
-def get_deployment_by_name(client: DagsterCloudGraphQLClient, deployment: str) -> Dict[str, Any]:
+def get_deployment_by_name(client: DagsterCloudGraphQLClient, deployment: str) -> dict[str, Any]:
     result = client.execute(
         GET_DEPLOYMENT_BY_NAME_QUERY, variable_values={"deploymentName": deployment}
     )["data"]["deploymentByName"]

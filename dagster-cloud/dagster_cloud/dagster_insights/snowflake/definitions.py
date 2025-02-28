@@ -1,14 +1,17 @@
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pprint import pprint
-from typing import TYPE_CHECKING, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from dagster import (
     AssetExecutionContext,
+    AssetKey,
     AssetsDefinition,
     AssetSelection,
     HourlyPartitionsDefinition,
+    RunRequest,
     ScheduleDefinition,
     ScheduleEvaluationContext,
     TimeWindow,
@@ -17,6 +20,11 @@ from dagster import (
     define_asset_job,
     fs_io_manager,
     schedule,
+)
+from dagster._core.definitions.unresolved_asset_job_definition import UnresolvedAssetJobDefinition
+from dagster._core.storage.tags import (
+    ASSET_PARTITION_RANGE_END_TAG,
+    ASSET_PARTITION_RANGE_START_TAG,
 )
 
 from ..metrics_utils import put_cost_information
@@ -32,6 +40,22 @@ SNOWFLAKE_QUERY_HISTORY_LATENCY_SLA_MINS = 45
 class SnowflakeInsightsDefinitions:
     assets: Sequence[AssetsDefinition]
     schedule: ScheduleDefinition
+
+
+def _build_run_request_for_partition_key_range(
+    job: UnresolvedAssetJobDefinition,
+    asset_keys: Sequence[AssetKey],
+    partition_range_start: str,
+    partition_range_end: str,
+) -> RunRequest:
+    tags = {
+        ASSET_PARTITION_RANGE_START_TAG: partition_range_start,
+        ASSET_PARTITION_RANGE_END_TAG: partition_range_end,
+    }
+    partition_key = partition_range_start if partition_range_start == partition_range_end else None
+    return RunRequest(
+        job_name=job.name, asset_selection=asset_keys, partition_key=partition_key, tags=tags
+    )
 
 
 def create_snowflake_insights_asset_and_schedule(
@@ -97,7 +121,7 @@ def create_snowflake_insights_asset_and_schedule(
     def poll_snowflake_query_history_hour(
         context: AssetExecutionContext,
     ) -> None:
-        snowflake: "SnowflakeConnection" = getattr(context.resources, snowflake_resource_key)
+        snowflake: SnowflakeConnection = getattr(context.resources, snowflake_resource_key)
 
         start_hour = context.partition_time_window.start
         end_hour = context.partition_time_window.end
@@ -168,13 +192,14 @@ def create_snowflake_insights_asset_and_schedule(
             n_hours_ago = timestamp - timedelta(hours=schedule_batch_size_hrs)
             window = TimeWindow(start=n_hours_ago, end=timestamp)
 
-            partition_keys = partitions_def.get_partition_keys_in_time_window(window)
+            partition_key_range = partitions_def.get_partition_key_range_for_time_window(window)
 
-            for partition_key in partition_keys:
-                yield insights_job.run_request_for_partition(
-                    partition_key=partition_key,
-                    run_key=partition_key,
-                )
+            yield _build_run_request_for_partition_key_range(
+                insights_job,
+                [poll_snowflake_query_history_hour.key],
+                partition_key_range.start,
+                partition_key_range.end,
+            )
 
         insights_schedule = _insights_schedule
 

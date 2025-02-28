@@ -1,7 +1,8 @@
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Optional
 
 from dagster import AssetKey, AssetsDefinition, ScheduleDefinition
 
@@ -34,7 +35,7 @@ def get_cost_data_for_hour(
     snowflake: "SnowflakeConnection",
     start_hour: datetime,
     end_hour: datetime,
-) -> List[Tuple[str, float, str]]:
+) -> list[tuple[str, float, str]]:
     """Given a date range, queries the Snowflake query_history table for all queries that were run
     during that time period and returns a mapping from AssetMaterializationId to the cost of the
     query that produced it, as estimated by Snowflake. The cost is in Snowflake credits.
@@ -75,7 +76,7 @@ HAVING ARRAY_SIZE(opaque_ids) > 0
             assert result
             results = result.fetchall()
 
-    costs: List[Tuple[str, float, str]] = []
+    costs: list[tuple[str, float, str]] = []
 
     print(
         f"{len(results) if results else 0} annotated queries returned from snowflake query_history"

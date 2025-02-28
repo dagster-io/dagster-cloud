@@ -1,5 +1,3 @@
-from typing import Dict
-
 from dagster import deserialize_value
 from dagster._core.definitions.sensor_definition import SensorExecutionData
 from dagster._core.remote_representation import SensorExecutionErrorSnap
@@ -10,7 +8,7 @@ from dagster_cloud.opentelemetry.observers.execution_observer import ExecutionOb
 def inspect_sensor_result(
     serialized_data_or_error: str,
     instruments: ExecutionObserverInstruments,
-    attributes: Dict[str, str],
+    attributes: dict[str, str],
 ) -> str:
     run_requests = []
     status: str = "unknown"

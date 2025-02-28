@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import click
 import pkg_resources
@@ -34,7 +34,7 @@ class BuildMethod(enum.Enum):
 class DepsRequirements:
     requirements_txt: str
     python_version: version.Version
-    pex_flags: List[str]
+    pex_flags: list[str]
 
     @property
     def hash(self) -> str:
@@ -53,7 +53,7 @@ class DepsRequirements:
 
 @dataclass(frozen=True)
 class LocalPackages:
-    local_package_paths: List[str]
+    local_package_paths: list[str]
 
 
 def local_path_for(line: str, relative_to: str) -> Optional[str]:
@@ -81,14 +81,14 @@ def local_path_for(line: str, relative_to: str) -> Optional[str]:
     return None
 
 
-def get_requirements_lines(local_dir, python_interpreter: str) -> List[str]:
+def get_requirements_lines(local_dir, python_interpreter: str) -> list[str]:
     # Combine dependencies specified in requirements.txt and setup.py
     lines = get_requirements_txt_deps(local_dir)
     lines.extend(get_setup_py_deps(local_dir, python_interpreter))
     return lines
 
 
-def collect_requirements(code_directory, python_interpreter: str) -> Tuple[List[str], List[str]]:
+def collect_requirements(code_directory, python_interpreter: str) -> tuple[list[str], list[str]]:
     # traverse all local packages and return the list of local packages and other requirements
     pending = [os.path.abspath(code_directory)]  # local packages to be processed
     seen = set()
@@ -118,7 +118,7 @@ def collect_requirements(code_directory, python_interpreter: str) -> Tuple[List[
 
 def get_deps_requirements(
     code_directory, python_version: version.Version
-) -> Tuple[LocalPackages, DepsRequirements]:
+) -> tuple[LocalPackages, DepsRequirements]:
     python_interpreter = util.python_interpreter_for(python_version)
     local_package_paths, deps_lines = collect_requirements(code_directory, python_interpreter)
 
@@ -140,7 +140,7 @@ def get_deps_requirements(
     return local_packages, deps_requirements
 
 
-def build_deps_pex(code_directory, output_directory, python_version) -> Tuple[str, str]:
+def build_deps_pex(code_directory, output_directory, python_version) -> tuple[str, str]:
     _, requirements = get_deps_requirements(code_directory, python_version)
     return build_deps_from_requirements(
         requirements, output_directory, build_method=BuildMethod.DOCKER_FALLBACK
@@ -186,7 +186,7 @@ def build_deps_from_requirements(
     requirements: DepsRequirements,
     output_directory: str,
     build_method: BuildMethod,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     os.makedirs(output_directory, exist_ok=True)
     deps_requirements_filename = f"deps-requirements-{requirements.hash}.txt"
     deps_requirements_path = os.path.join(output_directory, deps_requirements_filename)
@@ -272,7 +272,7 @@ def build_deps_from_requirements(
 def build_deps_from_requirements_file(
     deps_requirements_path: str,
     output_pex_path: str,
-    pex_flags: List[str],
+    pex_flags: list[str],
 ) -> None:
     """Attempts to build a pex file from a requirements file and raises DepsBuildFailure on failure."""
     # We try different sets of build flags and use the first one that works
@@ -297,7 +297,7 @@ def build_deps_from_requirements_file(
             break
 
 
-def get_requirements_txt_deps(code_directory: str) -> List[str]:
+def get_requirements_txt_deps(code_directory: str) -> list[str]:
     requirements_path = os.path.join(code_directory, "requirements.txt")
     if not os.path.exists(requirements_path):
         return []
@@ -333,7 +333,7 @@ def get_requirements_txt_deps(code_directory: str) -> List[str]:
     return lines
 
 
-def get_setup_py_deps(code_directory: str, python_interpreter: str) -> List[str]:
+def get_setup_py_deps(code_directory: str, python_interpreter: str) -> list[str]:
     setup_py_path = os.path.join(code_directory, "setup.py")
     if not os.path.exists(setup_py_path):
         return []

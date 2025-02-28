@@ -3,7 +3,7 @@ import functools
 import inspect
 import os
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, cast
+from typing import Any, NamedTuple, Optional, cast
 
 import yaml
 from click import Context
@@ -58,7 +58,7 @@ class DagsterCloudCliConfig(
 
     def __new__(cls, **kwargs):
         none_defaults = {k: kwargs[k] if k in kwargs else None for k in cls._fields}
-        return super(DagsterCloudCliConfig, cls).__new__(cls, **none_defaults)
+        return super().__new__(cls, **none_defaults)
 
 
 def get_config_path():
@@ -80,7 +80,7 @@ def read_config() -> DagsterCloudCliConfig:
     if not os.path.isfile(config_path):
         return DagsterCloudCliConfig()
 
-    with open(config_path, "r", encoding="utf8") as f:
+    with open(config_path, encoding="utf8") as f:
         raw_in = yaml.load(f.read(), Loader=yaml.SafeLoader)
         return DagsterCloudCliConfig(**raw_in)
 
@@ -142,7 +142,7 @@ def get_user_token(ctx: Optional[Context] = None) -> Optional[str]:
     return os.getenv(TOKEN_ENV_VAR_NAME, read_config().user_token)
 
 
-def available_deployment_names(ctx, incomplete: str = "") -> List[str]:
+def available_deployment_names(ctx, incomplete: str = "") -> list[str]:
     """Gets a list of deployment names given the Typer Context, used for CLI completion."""
     organization = get_organization(ctx=ctx)
     user_token = get_user_token(ctx=ctx)
@@ -434,7 +434,7 @@ DEPLOYMENT_CLI_OPTIONS = {
 }
 
 
-def get_location_document(name: Optional[str], kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def get_location_document(name: Optional[str], kwargs: dict[str, Any]) -> dict[str, Any]:
     name = name or kwargs.get("location_name")
     location_file = kwargs.get("location_file")
     location_doc_from_file = {}

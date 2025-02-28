@@ -1,9 +1,10 @@
 import copy
 import socket
 import uuid
+from collections.abc import Mapping, Sequence
 from contextlib import ExitStack
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import yaml
 from dagster import (
@@ -144,7 +145,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._instance_uuid = str(uuid.uuid4())
 
     def _get_processed_config(
-        self, name: str, config: Optional[Dict[str, Any]], config_type: Dict[str, Any]
+        self, name: str, config: Optional[dict[str, Any]], config_type: dict[str, Any]
     ):
         config_dict = check.opt_dict_param(config, "config", key_type=str)
         processed_config = process_config(config_type, config_dict)
@@ -328,7 +329,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return deployment_names[0]
 
     @property
-    def deployment_names(self) -> List[str]:
+    def deployment_names(self) -> list[str]:
         if self._dagster_cloud_api_config.get("deployment"):  # pyright: ignore[reportOptionalMemberAccess]
             return [self._dagster_cloud_api_config["deployment"]]  # pyright: ignore[reportOptionalSubscript]
 
@@ -410,7 +411,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._dagster_cloud_api_config["timeout"]  # pyright: ignore[reportOptionalSubscript]
 
     @property
-    def dagster_cloud_api_proxies(self) -> Optional[Dict[str, str]]:
+    def dagster_cloud_api_proxies(self) -> Optional[dict[str, str]]:
         # Requests library modifies the proxies key so create a copy
         return (
             self._dagster_cloud_api_config.get("proxies").copy()  # pyright: ignore[reportOptionalMemberAccess]
@@ -438,7 +439,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             return f"Agent {self.instance_uuid[:8]}"
 
     @property
-    def dagster_cloud_api_env_vars(self) -> List[str]:
+    def dagster_cloud_api_env_vars(self) -> list[str]:
         return get_env_names_from_config(
             dagster_cloud_api_config(), self._unprocessed_dagster_cloud_api_config
         )

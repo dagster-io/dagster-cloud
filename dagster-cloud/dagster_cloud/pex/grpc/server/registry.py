@@ -9,7 +9,7 @@ import threading
 from dataclasses import dataclass
 from os.path import expanduser
 from pathlib import Path
-from typing import Dict, List, NamedTuple, Optional, Set
+from typing import NamedTuple, Optional
 from uuid import uuid4
 
 from dagster import _check as check
@@ -52,22 +52,22 @@ class PexExecutable(
         "_PexExecutable",
         [
             ("source_path", str),
-            ("all_paths", List[str]),
-            ("environ", Dict[str, str]),
+            ("all_paths", list[str]),
+            ("environ", dict[str, str]),
             ("working_directory", Optional[str]),
-            ("venv_dirs", List[str]),
+            ("venv_dirs", list[str]),
         ],
     )
 ):
     def __new__(
         cls,
         source_path: str,
-        all_paths: List[str],
-        environ: Dict[str, str],
+        all_paths: list[str],
+        environ: dict[str, str],
         working_directory: Optional[str],
-        venv_dirs: List[str],
+        venv_dirs: list[str],
     ):
-        return super(PexExecutable, cls).__new__(
+        return super().__new__(
             cls,
             check.str_param(source_path, "source_path"),
             check.list_param(all_paths, "all_paths", str),
@@ -96,12 +96,12 @@ class PexS3Registry:
             local_pex_files_dir if local_pex_files_dir else DEFAULT_PEX_FILES_DIR
         )
         os.makedirs(self._local_pex_files_dir, exist_ok=True)
-        self.working_dirs: Dict[
+        self.working_dirs: dict[
             str, str
         ] = {}  # once unpacked, working dirs dont change so we cache them
 
         # keep track of local files and directories used by each pex tag
-        self.local_paths_for_pex_tag: Dict[str, Set[str]] = {}
+        self.local_paths_for_pex_tag: dict[str, set[str]] = {}
 
         # lock to do safe install and cleanup
         self._install_lock = threading.RLock()
@@ -149,7 +149,7 @@ class PexS3Registry:
                 deps_pex_filepaths.append(local_filepath)
 
         if not source_pex_filepath:
-            raise ValueError("Invalid pex_tag has no source pex: %r" % pex_metadata.pex_tag)
+            raise ValueError(f"Invalid pex_tag has no source pex: {pex_metadata.pex_tag!r}")
 
         # we unpack each pex file into its own venv
         source_venv = self.venv_for(source_pex_filepath)
@@ -188,11 +188,11 @@ class PexS3Registry:
             venv_dirs=[str(source_venv.path)] + [str(deps_venv.path) for deps_venv in deps_venvs],
         )
 
-    def cleanup_unused_files(self, in_use_pex_metadatas: List[PexMetadata]) -> None:
+    def cleanup_unused_files(self, in_use_pex_metadatas: list[PexMetadata]) -> None:
         with self._install_lock:
             return self._cleanup_unused_files(in_use_pex_metadatas)
 
-    def _cleanup_unused_files(self, in_use_pex_metadatas: List[PexMetadata]) -> None:
+    def _cleanup_unused_files(self, in_use_pex_metadatas: list[PexMetadata]) -> None:
         """Cleans up all local files and directories that are not associated with any PexMetadata provided."""
         in_use_pex_tags = [pex_metadata.pex_tag for pex_metadata in in_use_pex_metadatas]
 

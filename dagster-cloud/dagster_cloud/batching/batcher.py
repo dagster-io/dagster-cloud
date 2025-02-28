@@ -1,10 +1,11 @@
 import logging
 import os
+from collections.abc import Generator
 from concurrent.futures import Future, TimeoutError
 from contextlib import contextmanager
 from queue import Empty, Full, Queue
 from threading import Lock
-from typing import Callable, Generator, Generic, List, Optional, Tuple, TypeVar
+from typing import Callable, Generic, Optional, TypeVar
 
 import dagster._check as check
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 I = TypeVar("I")  # noqa: E741
 O = TypeVar("O")  # noqa: E741
-QueueItem = Tuple[I, Future[O]]
+QueueItem = tuple[I, Future[O]]
 
 
 DEFAULT_MAX_WAIT_MS = 1000
@@ -85,7 +86,7 @@ class Batcher(Generic[I, O]):
     def __init__(
         self,
         name: str,
-        batcher_fn: Callable[[List[I]], List[O]],
+        batcher_fn: Callable[[list[I]], list[O]],
         max_queue_size: Optional[int] = None,
         max_batch_size: Optional[int] = None,
         max_wait_ms: Optional[int] = None,
@@ -124,7 +125,7 @@ class Batcher(Generic[I, O]):
         self._drain_lock = Lock()
         self._instrumentation = (instrumentation or NoOpInstrumentation()).tags([f"batcher:{name}"])
 
-    def _submit_batch(self, batch: List[QueueItem]) -> None:
+    def _submit_batch(self, batch: list[QueueItem]) -> None:
         check.invariant(len(batch) > 0, "should never submit an empty batch")
         self._instrument_batch_size(len(batch))
         try:
@@ -140,7 +141,7 @@ class Batcher(Generic[I, O]):
             for (_, fut), result in zip(batch, results):
                 fut.set_result(result)
 
-    def _build_batch(self) -> List[QueueItem]:
+    def _build_batch(self) -> list[QueueItem]:
         batch = []
         for _ in range(self._max_batch_size):
             try:

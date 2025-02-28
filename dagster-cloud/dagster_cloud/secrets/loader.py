@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from dagster._core.secrets import SecretsLoader
 from dagster._serdes import ConfigurableClass
@@ -26,7 +26,7 @@ class DagsterCloudSecretsLoader(SecretsLoader, ConfigurableClass):
     def _execute_query(self, query, variables=None):
         return self._instance.graphql_client.execute(query, variable_values=variables)  # pyright: ignore[reportAttributeAccessIssue]
 
-    def get_secrets_for_environment(self, location_name: Optional[str]) -> Dict[str, str]:
+    def get_secrets_for_environment(self, location_name: Optional[str]) -> dict[str, str]:
         res = self._execute_query(
             SECRETS_QUERY,
             variables={"locationName": location_name},

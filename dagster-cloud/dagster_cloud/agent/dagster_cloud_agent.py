@@ -3,22 +3,11 @@ import os
 import sys
 import time
 from collections import defaultdict, deque
+from collections.abc import Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    DefaultDict,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 import dagster._check as check
 from dagster import DagsterInstance
@@ -129,8 +118,8 @@ class DagsterCloudAgent:
         self._logger = logging.getLogger("dagster_cloud.agent")
         self._instance: DagsterCloudAgentInstance = instance
 
-        self._batcher: DefaultDict[
-            str, Batcher[Tuple[str, DagsterCloudUploadApiResponse], None]
+        self._batcher: defaultdict[
+            str, Batcher[tuple[str, DagsterCloudUploadApiResponse], None]
         ] = defaultdict(self._batcher_factory)
 
         if self._logger.isEnabledFor(logging.DEBUG):
@@ -147,7 +136,7 @@ class DagsterCloudAgent:
                 thread_name_prefix="dagster_cloud_agent_worker",
             )
         )
-        self._request_ids_to_futures: Dict[str, Future] = {}
+        self._request_ids_to_futures: dict[str, Future] = {}
         self._utilization_metrics = init_optional_typeddict(AgentUtilizationMetrics)
 
         self._last_heartbeat_time: Optional[datetime.datetime] = None
@@ -158,15 +147,15 @@ class DagsterCloudAgent:
             maxlen=AGENT_HEARTBEAT_ERROR_LIMIT
         )  # (SerializableErrorInfo, timestamp) tuples
 
-        self._pending_requests: List[Dict[str, Any]] = []
-        self._locations_with_pending_requests: Set[Tuple[str, str, bool]] = set()
-        self._ready_requests: List[Dict[str, Any]] = []
+        self._pending_requests: list[dict[str, Any]] = []
+        self._locations_with_pending_requests: set[tuple[str, str, bool]] = set()
+        self._ready_requests: list[dict[str, Any]] = []
 
-        self._location_query_times: Dict[Tuple[str, str, bool], float] = {}
+        self._location_query_times: dict[tuple[str, str, bool], float] = {}
         self._pending_requests_limit = check.int_param(
             pending_requests_limit, "pending_requests_limit"
         )
-        self._active_deployments: Set[Tuple[str, bool]] = (  # deployment_name, is_branch_deployment
+        self._active_deployments: set[tuple[str, bool]] = (  # deployment_name, is_branch_deployment
             set()
         )
 
@@ -180,7 +169,7 @@ class DagsterCloudAgent:
 
     def _batcher_factory(
         self,
-    ) -> Batcher[Tuple[str, DagsterCloudUploadApiResponse], None]:
+    ) -> Batcher[tuple[str, DagsterCloudUploadApiResponse], None]:
         return Batcher(
             "upload_api_response",
             self._batch_upload_api_response,
@@ -251,10 +240,8 @@ class DagsterCloudAgent:
 
         if not user_code_launcher.user_code_deployment_type.supports_utilization_metrics:
             self._logger.info(
-                (
-                    f"Cannot interpret resource limits for agent type {user_code_launcher.user_code_deployment_type.value}."
-                    "Skipping utilization metrics retrieval."
-                )
+                f"Cannot interpret resource limits for agent type {user_code_launcher.user_code_deployment_type.value}."
+                "Skipping utilization metrics retrieval."
             )
             return
 
@@ -550,7 +537,7 @@ class DagsterCloudAgent:
         return self._executor
 
     @property
-    def request_ids_to_futures(self) -> Dict[str, Future]:
+    def request_ids_to_futures(self) -> dict[str, Future]:
         return self._request_ids_to_futures
 
     def _upload_outdated_workspace_entries(
@@ -601,7 +588,7 @@ class DagsterCloudAgent:
             else self._instance.user_code_launcher.full_deployment_ttl_seconds
         )
 
-    def _get_locations_with_ttl_to_query(self, user_code_launcher) -> List[Tuple[str, str]]:
+    def _get_locations_with_ttl_to_query(self, user_code_launcher) -> list[tuple[str, str]]:
         now = time.time()
 
         # For the deployments with TTLs, decide which locations to consider
@@ -609,7 +596,7 @@ class DagsterCloudAgent:
         # - a) There's a pending request in the queue for it
         # - b) It's TTL hasn't expired since the last time somebody asked for it
         # Always include locations in a), and add locations from b) until you hit a limit
-        location_candidates: Set[Tuple[str, str, float]] = {
+        location_candidates: set[tuple[str, str, float]] = {
             (deployment, location, -1.0)  # Score below 0 so that they're at the front of the list
             for deployment, location, is_branch_deployment in self._locations_with_pending_requests
             if self._has_ttl(user_code_launcher, is_branch_deployment)
@@ -678,8 +665,8 @@ class DagsterCloudAgent:
 
         # Create mapping of
         # - location name => deployment metadata
-        deployment_map: Dict[Tuple[str, str], UserCodeLauncherEntry] = {}
-        all_locations: Set[Tuple[str, str]] = set()
+        deployment_map: dict[tuple[str, str], UserCodeLauncherEntry] = {}
+        all_locations: set[tuple[str, str]] = set()
 
         self._active_deployments = set()
 
@@ -718,7 +705,7 @@ class DagsterCloudAgent:
                     # only include the locations within locations_with_ttl_to_query.
                     if not self._has_ttl(
                         user_code_launcher, is_branch_deployment
-                    ) or location_key in cast(Set[Tuple[str, str]], locations_with_ttl_to_query):
+                    ) or location_key in cast(set[tuple[str, str]], locations_with_ttl_to_query):
                         deployment_map[location_key] = UserCodeLauncherEntry(
                             code_location_deploy_data=code_location_deploy_data,
                             update_timestamp=float(entry["metadataTimestamp"]),
@@ -1063,7 +1050,7 @@ class DagsterCloudAgent:
 
     def _process_api_request(
         self,
-        json_request: Dict,
+        json_request: dict,
         user_code_launcher: DagsterCloudUserCodeLauncher,
         submitted_to_executor_timestamp: float,
     ) -> Optional[SerializableErrorInfo]:
@@ -1131,8 +1118,8 @@ class DagsterCloudAgent:
         return error_info
 
     def _batch_upload_api_response(
-        self, upload_response_batch: List[Tuple[str, DagsterCloudUploadApiResponse]]
-    ) -> List[None]:
+        self, upload_response_batch: list[tuple[str, DagsterCloudUploadApiResponse]]
+    ) -> list[None]:
         deployment_names = set(deployment_name for deployment_name, _ in upload_response_batch)
         assert len(deployment_names) == 1
         batch_upload_api_response(
@@ -1142,7 +1129,7 @@ class DagsterCloudAgent:
         )
         return [None for _ in upload_response_batch]
 
-    def _get_location_from_request(self, json_request: Dict[str, Any]) -> Optional[str]:
+    def _get_location_from_request(self, json_request: dict[str, Any]) -> Optional[str]:
         request_api = json_request["requestApi"]
         request_body = json_request["requestBody"]
         if request_api not in DagsterCloudApi.__members__:
@@ -1266,7 +1253,7 @@ class DagsterCloudAgent:
 def batch_upload_api_response(
     instance: DagsterCloudAgentInstance,
     deployment_name: str,
-    batch: List[DagsterCloudUploadApiResponse],
+    batch: list[DagsterCloudUploadApiResponse],
 ):
     with compressed_namedtuple_upload_file(BatchDagsterCloudUploadApiResponse(batch=batch)) as f:
         resp = instance.requests_managed_retries_session.put(

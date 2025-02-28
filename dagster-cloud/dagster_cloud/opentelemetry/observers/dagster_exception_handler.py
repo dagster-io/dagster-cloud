@@ -1,11 +1,9 @@
-from typing import Dict, List
-
 from dagster import DagsterError
 from dagster._utils.error import SerializableErrorInfo
 from grpc import Call as GrpcCall
 
 
-def extract_dagster_error_attributes(error: DagsterError) -> Dict[str, str]:
+def extract_dagster_error_attributes(error: DagsterError) -> dict[str, str]:
     """Extracts attributes from a DagsterError that can be used for logging or metrics."""
     error_attributes = {
         "exception": type(error).__name__,
@@ -21,7 +19,7 @@ def extract_dagster_error_attributes(error: DagsterError) -> Dict[str, str]:
 
         attr = getattr(error, field)
         if type(attr) is list and all(isinstance(item, SerializableErrorInfo) for item in attr):
-            serializable_error_infos: List[SerializableErrorInfo] = getattr(error, field)
+            serializable_error_infos: list[SerializableErrorInfo] = getattr(error, field)
             for serializable_error_info in serializable_error_infos:
                 if serializable_error_info.cause:
                     error_attributes["cause"] = serializable_error_info.cause.cls_name

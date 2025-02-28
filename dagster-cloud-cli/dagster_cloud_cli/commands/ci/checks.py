@@ -2,7 +2,6 @@ import os
 import pathlib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List
 
 import pydantic
 
@@ -13,7 +12,7 @@ from ... import ui
 from ...core import pydantic_yaml
 
 
-def get_validation_errors(validation_error: pydantic.ValidationError) -> List[str]:
+def get_validation_errors(validation_error: pydantic.ValidationError) -> list[str]:
     errors = []
     for error in validation_error.errors():
         if "type" in error:
@@ -29,8 +28,8 @@ def get_validation_errors(validation_error: pydantic.ValidationError) -> List[st
 
 @dataclass
 class CheckResult:
-    errors: List[str] = field(default_factory=list)
-    messages: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)
 
 
 def check_dagster_cloud_yaml(yaml_path: pathlib.Path) -> CheckResult:

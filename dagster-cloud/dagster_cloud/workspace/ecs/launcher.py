@@ -1,7 +1,8 @@
 import asyncio
 import os
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Collection, Dict, List, Mapping, Optional, Sequence, cast
+from typing import Any, Optional, cast
 
 import boto3
 import grpc
@@ -60,12 +61,12 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def __init__(
         self,
         cluster: str,
-        subnets: List[str],
+        subnets: list[str],
         execution_role_arn: str,
         log_group: str,
         service_discovery_namespace_id: str,
         task_role_arn: Optional[str] = None,
-        security_group_ids: Optional[List[str]] = None,
+        security_group_ids: Optional[list[str]] = None,
         inst_data: Optional[ConfigurableClassData] = None,
         secrets=None,
         secrets_tag=None,
@@ -179,7 +180,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             grace_period=self._ecs_grace_period,
             launch_type=self.launch_type,
         )
-        super(EcsUserCodeLauncher, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     @property
     def show_debug_cluster_info(self) -> bool:
@@ -299,7 +300,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
     @classmethod
-    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: Dict[str, Any]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: dict[str, Any]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property
@@ -348,10 +349,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def _get_enable_ecs_exec(self) -> bool:
         return self._enable_ecs_exec
 
-    def _get_additional_grpc_server_env(self) -> Dict[str, str]:
+    def _get_additional_grpc_server_env(self) -> dict[str, str]:
         return {}
 
-    def _get_dagster_tags(self, deployment_name: str, location_name: str) -> Dict[str, str]:
+    def _get_dagster_tags(self, deployment_name: str, location_name: str) -> dict[str, str]:
         return {
             "dagster/deployment_name": get_ecs_human_readable_label(deployment_name),
             "dagster/location_name": get_ecs_human_readable_label(
@@ -675,7 +676,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         }
         return self.client.list_services(tags)
 
-    def _list_server_handles(self) -> List[EcsServerHandleType]:
+    def _list_server_handles(self) -> list[EcsServerHandleType]:
         return [
             service
             for service in self.client.list_services()
@@ -689,7 +690,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def get_server_create_timestamp(self, handle: EcsServerHandleType) -> Optional[float]:
         return handle.create_timestamp
 
-    def _run_launcher_kwargs(self) -> Dict[str, Any]:
+    def _run_launcher_kwargs(self) -> dict[str, Any]:
         return dict(
             task_definition={
                 "log_group": self.log_group,

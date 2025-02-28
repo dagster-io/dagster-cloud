@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Optional
 
 from opentelemetry._logs import LoggerProvider as APILoggerProvider
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler, LogRecordProcessor
@@ -62,7 +62,7 @@ def build_log_record_processor(exporter: LogExporter, processor_config: dict) ->
 
 def build_logger_provider(
     processor: LogRecordProcessor,
-    resource_attributes: Optional[Dict[str, str]] = None,
+    resource_attributes: Optional[dict[str, str]] = None,
 ) -> APILoggerProvider:
     """Build an OpenTelemetry logger provider.
     params:

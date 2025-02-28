@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from tempfile import TemporaryDirectory
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -27,8 +27,8 @@ mutation GenerateServerlessPexUrlMutation($filenames: [String!]!) {
 
 
 def get_s3_urls_for_put(
-    dagster_cloud_url: str, dagster_cloud_api_token: str, filenames: List[str]
-) -> Optional[List[str]]:
+    dagster_cloud_url: str, dagster_cloud_api_token: str, filenames: list[str]
+) -> Optional[list[str]]:
     with gql.graphql_client_from_url(dagster_cloud_url, dagster_cloud_api_token) as client:
         result = client.execute(
             GENERATE_PUT_URL_QUERY,
@@ -42,8 +42,8 @@ def get_s3_urls_for_put(
 
 
 def get_s3_urls_for_get(
-    dagster_cloud_url: str, dagster_cloud_api_token: str, filenames: List[str]
-) -> Optional[List[str]]:
+    dagster_cloud_url: str, dagster_cloud_api_token: str, filenames: list[str]
+) -> Optional[list[str]]:
     with gql.graphql_client_from_url(dagster_cloud_url, dagster_cloud_api_token) as client:
         result = client.execute(
             GENERATE_GET_URL_QUERY,
@@ -71,7 +71,7 @@ def get_cached_deps_details(
     dagster_cloud_api_token: str,
     requirements_hash: str,
     cache_tag: Optional[str],
-) -> Optional[Dict[str, Any]]:
+) -> Optional[dict[str, Any]]:
     """Returns a metadata dict for the requirements_hash and cache_tag.
 
     The dict contains:
@@ -123,7 +123,7 @@ def set_cached_deps_details(
         upload_files(dagster_cloud_url, dagster_cloud_api_token, [filepath])
 
 
-def upload_files(dagster_cloud_url: str, dagster_cloud_api_token: str, filepaths: List[str]):
+def upload_files(dagster_cloud_url: str, dagster_cloud_api_token: str, filepaths: list[str]):
     filenames = [os.path.basename(filepath) for filepath in filepaths]
     urls = get_s3_urls_for_put(dagster_cloud_url, dagster_cloud_api_token, filenames)
     if not urls:

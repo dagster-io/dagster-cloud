@@ -1,9 +1,10 @@
 import logging
 import re
 import time
+from collections.abc import Mapping
 from contextlib import contextmanager
 from email.utils import mktime_tz, parsedate_tz
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Callable, Optional
 
 import dagster._check as check
 import requests
@@ -42,11 +43,11 @@ class DagsterCloudAgentHttpClient:
     def __init__(
         self,
         session: requests.Session,
-        headers: Optional[Dict[str, Any]] = None,
+        headers: Optional[dict[str, Any]] = None,
         verify: bool = True,
         timeout: int = DEFAULT_TIMEOUT,
-        cookies: Optional[Dict[str, Any]] = None,
-        proxies: Optional[Dict[str, Any]] = None,
+        cookies: Optional[dict[str, Any]] = None,
+        proxies: Optional[dict[str, Any]] = None,
         max_retries: int = 0,
         backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
     ):
@@ -210,11 +211,11 @@ class DagsterCloudGraphQLClient:
         self,
         url: str,
         session: requests.Session,
-        headers: Optional[Dict[str, Any]] = None,
+        headers: Optional[dict[str, Any]] = None,
         verify: bool = True,
         timeout: int = DEFAULT_TIMEOUT,
-        cookies: Optional[Dict[str, Any]] = None,
-        proxies: Optional[Dict[str, Any]] = None,
+        cookies: Optional[dict[str, Any]] = None,
+        proxies: Optional[dict[str, Any]] = None,
         max_retries: int = 0,
         backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
     ):
@@ -301,7 +302,7 @@ class DagsterCloudGraphQLClient:
         return result
 
 
-def get_agent_headers(config_value: Dict[str, Any], scope: DagsterCloudInstanceScope):
+def get_agent_headers(config_value: dict[str, Any], scope: DagsterCloudInstanceScope):
     return get_dagster_cloud_api_headers(
         config_value["agent_token"],
         scope=scope,
@@ -313,12 +314,12 @@ def get_agent_headers(config_value: Dict[str, Any], scope: DagsterCloudInstanceS
 class HTTPAdapterWithSocketOptions(HTTPAdapter):
     def __init__(self, *args, **kwargs):
         self.socket_options = kwargs.pop("socket_options", None)
-        super(HTTPAdapterWithSocketOptions, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def init_poolmanager(self, *args, **kwargs):
         if self.socket_options is not None:
             kwargs["socket_options"] = self.socket_options
-        super(HTTPAdapterWithSocketOptions, self).init_poolmanager(*args, **kwargs)
+        super().init_poolmanager(*args, **kwargs)
 
 
 @contextmanager
@@ -332,7 +333,7 @@ def create_graphql_requests_session(adapter_kwargs: Optional[Mapping[str, Any]] 
 
 def create_agent_http_client(
     session: requests.Session,
-    config_value: Dict[str, Any],
+    config_value: dict[str, Any],
     scope: DagsterCloudInstanceScope = DagsterCloudInstanceScope.DEPLOYMENT,
 ):
     return DagsterCloudAgentHttpClient(
@@ -353,7 +354,7 @@ def create_agent_http_client(
 def create_agent_graphql_client(
     session: requests.Session,
     url: str,
-    config_value: Dict[str, Any],
+    config_value: dict[str, Any],
     scope: DagsterCloudInstanceScope = DagsterCloudInstanceScope.DEPLOYMENT,
 ):
     return DagsterCloudGraphQLClient(

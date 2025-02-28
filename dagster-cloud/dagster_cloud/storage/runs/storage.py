@@ -1,17 +1,6 @@
 import json
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-)
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any, Callable, Optional, Union
 
 import dagster._check as check
 from dagster._core.errors import (
@@ -76,7 +65,7 @@ from .queries import (
 )
 
 
-def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]]:
+def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[dict[str, Any]]:
     filters = check.opt_inst_param(filters, "filters", RunsFilter)
 
     if filters is None:
@@ -108,7 +97,7 @@ def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[Dict[str, Any]
 
 def _get_bulk_actions_filters_input(
     filters: Optional[BulkActionsFilter],
-) -> Optional[Dict[str, Any]]:
+) -> Optional[dict[str, Any]]:
     filters = check.opt_inst_param(filters, "filters", BulkActionsFilter)
     unsupported_filters = []
     if filters and filters.job_name:
@@ -132,7 +121,7 @@ def _get_bulk_actions_filters_input(
     }
 
 
-def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
+def _run_record_from_graphql(graphene_run_record: dict) -> RunRecord:
     check.dict_param(graphene_run_record, "graphene_run_record")
     return RunRecord(
         storage_id=check.int_elem(graphene_run_record, "storageId"),
@@ -151,7 +140,7 @@ def _run_record_from_graphql(graphene_run_record: Dict) -> RunRecord:
     )
 
 
-def _get_bucket_input(bucket_by: Optional[Union[JobBucket, TagBucket]]) -> Optional[Dict[str, Any]]:
+def _get_bucket_input(bucket_by: Optional[Union[JobBucket, TagBucket]]) -> Optional[dict[str, Any]]:
     if not bucket_by:
         return None
 
@@ -274,7 +263,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["getRunsCount"]
 
-    def get_run_group(self, run_id: str) -> Optional[Tuple[str, Iterable[DagsterRun]]]:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_run_group(self, run_id: str) -> Optional[tuple[str, Iterable[DagsterRun]]]:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         res = self._execute_query(
             GET_RUN_GROUP_QUERY, variables={"runId": check.str_param(run_id, "run_id")}
         )
@@ -310,7 +299,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         ascending: bool = False,
         cursor: Optional[str] = None,
         bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
-    ) -> List[RunRecord]:
+    ) -> list[RunRecord]:
         res = self._execute_query(
             GET_RUN_RECORDS_QUERY,
             variables={
@@ -329,7 +318,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         tag_keys: Sequence[str],
         value_prefix: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> Sequence[Tuple[str, Set[str]]]:
+    ) -> Sequence[tuple[str, set[str]]]:
         res = self._execute_query(
             GET_RUN_TAGS_QUERY,
             variables={
@@ -441,7 +430,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             res["data"]["runs"]["getExecutionPlanSnapshot"], ExecutionPlanSnapshot
         )
 
-    def get_run_partition_data(self, runs_filter: RunsFilter) -> List[RunPartitionData]:
+    def get_run_partition_data(self, runs_filter: RunsFilter) -> list[RunPartitionData]:
         res = self._execute_query(
             GET_RUN_PARTITION_DATA_QUERY,
             variables={
@@ -469,7 +458,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def add_run_telemetry(
         self,
         run_telemetry: RunTelemetryData,
-        tags: Optional[Dict[str, str]] = None,
+        tags: Optional[dict[str, str]] = None,
     ) -> None:
         if tags is None:
             tags = {}
@@ -491,7 +480,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     ):
         raise Exception("Not allowed to build indexes from user cloud")
 
-    def get_daemon_heartbeats(self) -> Dict[str, DaemonHeartbeat]:
+    def get_daemon_heartbeats(self) -> dict[str, DaemonHeartbeat]:
         res = self._execute_query(GET_DAEMON_HEARTBEATS_QUERY)
         return {
             key: deserialize_value(heartbeat, DaemonHeartbeat)
@@ -555,7 +544,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             variables={"serializedPartitionBackfill": serialize_value(partition_backfill)},
         )
 
-    def get_cursor_values(self, keys: Set[str]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_cursor_values(self, keys: set[str]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         return NotImplementedError("KVS is not supported from the user cloud")
 
     def set_cursor_values(self, pairs: Mapping[str, str]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!

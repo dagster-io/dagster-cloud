@@ -4,7 +4,7 @@ import string
 import webbrowser
 from enum import Enum
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Optional, Tuple, Type
+from typing import Optional
 from urllib import parse
 
 from typer import Argument, Context, Option, Typer
@@ -60,7 +60,7 @@ def view(
 app_configure = Typer()
 
 
-def create_token_callback_handler(nonce: str) -> Type[BaseHTTPRequestHandler]:
+def create_token_callback_handler(nonce: str) -> type[BaseHTTPRequestHandler]:
     class TokenCallbackHandler(BaseHTTPRequestHandler):
         def _send_shared_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -125,7 +125,7 @@ class TokenServer(HTTPServer):
     organization: Optional[str] = None
     token: Optional[str] = None
 
-    def __init__(self, host: Tuple[str, int], nonce: str):
+    def __init__(self, host: tuple[str, int], nonce: str):
         super().__init__(host, create_token_callback_handler(nonce))
 
     def shutdown(self):

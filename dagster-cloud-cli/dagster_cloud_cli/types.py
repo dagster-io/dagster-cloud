@@ -1,6 +1,5 @@
 from contextlib import suppress
 from enum import Enum, EnumMeta
-from typing import Tuple
 
 
 class CliEventType(Enum):
@@ -57,7 +56,7 @@ class CliEventTags:
         return False
 
     @classmethod
-    def split(cls, value: str) -> Tuple[str, str]:
+    def split(cls, value: str) -> tuple[str, str]:
         if cls.contains(value):
             parts = value.split(":", 1)
             return (parts[0], parts[1])
@@ -67,3 +66,13 @@ class CliEventTags:
     server_strategy = ServerStrategyTags
     source = SourceTags
     subcommand = SubcommandTags
+
+
+class SnapshotBaseDeploymentCondition(Enum):
+    """When to snapshot the base deployment during branch deployment create and update flows.
+
+    Enum values hyphenated for use in CLI.
+    """
+
+    ON_CREATE = "on-create"
+    ON_UPDATE = "on-update"

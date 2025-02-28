@@ -1,5 +1,3 @@
-from typing import List
-
 from . import state
 
 STATUS_IMAGES = {
@@ -21,7 +19,7 @@ STATUS_MESSAGES = {
 }
 
 
-def markdown_report(location_states: List[state.LocationState]):
+def markdown_report(location_states: list[state.LocationState]):
     markdown = []
     markdown.append(
         """
