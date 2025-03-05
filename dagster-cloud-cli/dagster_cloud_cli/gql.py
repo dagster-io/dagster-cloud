@@ -1,9 +1,8 @@
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager, suppress
-from typing import Any, Optional, cast
+from typing import Any, Optional, cast, List, Dict
 
 from dagster import AssetKey
-
 from dagster_cloud_cli.types import CliEventType, SnapshotBaseDeploymentCondition
 
 from .core.graphql_client import DagsterCloudGraphQLClient, create_cloud_webserver_client
@@ -793,7 +792,6 @@ def get_deployment_by_name(client: DagsterCloudGraphQLClient, deployment: str) -
         raise Exception(f"Unable to find deployment {deployment}")
 
     return result
-    raise Exception(f"Unable to find deployment {deployment}")
 
 
 def delete_branch_deployment(client: DagsterCloudGraphQLClient, deployment: str) -> Any:
@@ -810,3 +808,194 @@ def delete_branch_deployment(client: DagsterCloudGraphQLClient, deployment: str)
         raise Exception(f"Unable to delete deployment: {result}")
 
     return result["data"]["deleteDeployment"]["deploymentId"]
+
+
+CREATE_SECRET_MUTATION = """
+mutation CreateSecret($secretName: String!, $secretValue: String!, $scopes: SecretScopesInput!, $locationNames: [String!]!) {
+    createSecret(secretName: $secretName, secretValue: $secretValue, scopes: $scopes, locationNames: $locationNames) {
+        __typename
+        ... on CreateOrUpdateSecretSuccess {
+            secret {
+                id
+                secretName
+                secretValue
+                updatedBy {
+                    email
+                }
+                updateTimestamp
+                locationNames
+                fullDeploymentScope
+                allBranchDeploymentsScope
+                specificBranchDeploymentScope
+                localDeploymentScope
+            }
+        }
+        ...on UnauthorizedError {
+            message
+        }
+        ...on TooManySecretsError {
+            message
+        }
+        ...on InvalidSecretInputError {
+            message
+        }
+        ... on PythonError {
+            message
+            stack
+        }
+    }
+}
+"""
+
+def create_secret(
+    client: DagsterCloudGraphQLClient,
+    secret_name: str,
+    secret_value: str,
+    scopes: Dict[str, Any],
+    location_names: List[str],
+) -> Dict[str, Any]:
+    result = client.execute(
+        CREATE_SECRET_MUTATION,
+        variable_values={
+            "secretName": secret_name,
+            "secretValue": secret_value,
+            "scopes": scopes,
+            "locationNames": location_names,
+        },
+    )["data"]["createSecret"]
+
+    if result["__typename"] != "CreateOrUpdateSecretSuccess":
+        error_message = result.get("message", f"Unknown error ({result['__typename']})")
+        raise Exception(f"Failed to create secret: {error_message}")
+    return result["secret"]
+
+
+DELETE_SECRET_MUTATION = """
+mutation DeleteSecret($secretId: String!) {
+    deleteSecret(secretId: $secretId) {
+        __typename
+        ... on DeleteSecretSuccess {
+            secretId
+        }
+        ...on UnauthorizedError {
+            message
+        }
+        ... on PythonError {
+            message
+            stack
+        }
+    }
+}
+"""
+
+def delete_secret(client: DagsterCloudGraphQLClient, secret_id: str) -> str:
+    result = client.execute(
+        DELETE_SECRET_MUTATION,
+        variable_values={"secretId": secret_id},
+    )["data"]["deleteSecret"]
+
+    if result["__typename"] != "DeleteSecretSuccess":
+        raise Exception(f"Failed to delete secret: {result.get('message')}")
+    return result["secretId"]
+
+
+ALL_SECRETS_QUERY = """
+query AllSecretsQuery {
+    secretsOrError {
+        __typename
+        ... on Secrets {
+            secrets {
+                id
+                secretName
+                secretValue
+                updatedBy {
+                    email
+                }
+                updateTimestamp
+                locationNames
+                fullDeploymentScope
+                allBranchDeploymentsScope
+                specificBranchDeploymentScope
+                localDeploymentScope
+                canViewSecretValue
+                canEditSecret
+            }
+        }
+        ...on UnauthorizedError {
+            message
+        }
+        ... on PythonError {
+            message
+            stack
+        }
+    }
+}
+"""
+
+def get_all_secrets(client: DagsterCloudGraphQLClient) -> List[Dict[str, Any]]:
+    result = client.execute(ALL_SECRETS_QUERY)["data"]["secretsOrError"]
+    if result["__typename"] != "Secrets":
+        raise Exception(f"Failed to fetch secrets: {result.get('message')}")
+    return result["secrets"]
+
+
+UPDATE_SECRET_MUTATION = """
+mutation UpdateSecret($secretId: String!, $secretName: String!, $secretValue: String!, $scopes: SecretScopesInput!, $locationNames: [String!]!) {
+    updateSecret(secretId: $secretId, secretName: $secretName, secretValue: $secretValue, scopes: $scopes, locationNames: $locationNames) {
+        __typename
+        ... on CreateOrUpdateSecretSuccess {
+            secret {
+                id
+                secretName
+                secretValue
+                updatedBy {
+                    email
+                }
+                updateTimestamp
+                locationNames
+                fullDeploymentScope
+                allBranchDeploymentsScope
+                specificBranchDeploymentScope
+                localDeploymentScope
+            }
+        }
+        ...on UnauthorizedError {
+            message
+        }
+        ...on TooManySecretsError {
+            message
+        }
+        ...on InvalidSecretInputError {
+            message
+        }
+        ... on PythonError {
+            message
+            stack
+        }
+    }
+}
+"""
+
+def update_secret(
+    client: DagsterCloudGraphQLClient,
+    secret_id: str,
+    secret_name: str,
+    secret_value: str,
+    scopes: Dict[str, Any],
+    location_names: List[str],
+) -> Dict[str, Any]:
+    result = client.execute(
+        UPDATE_SECRET_MUTATION,
+        variable_values={
+            "secretId": secret_id,
+            "secretName": secret_name,
+            "secretValue": secret_value,
+            "scopes": scopes,
+            "locationNames": location_names,
+        },
+    )["data"]["updateSecret"]
+
+    if result["__typename"] != "CreateOrUpdateSecretSuccess":
+        error_message = result.get("message", f"Unknown error ({result['__typename']})")
+        raise Exception(f"Failed to update secret: {error_message}")
+    return result["secret"]
