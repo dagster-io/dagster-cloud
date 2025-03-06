@@ -601,7 +601,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             )
 
     def _add_metric_header(self, headers: dict[str, str]):
-        if os.getenv("DAGSTER_CLOUD_STORE_EVENT_SEND_METRICS") != "1":
+        if os.getenv("DISABLE_DAGSTER_CLOUD_STORE_EVENT_SEND_METRICS") is not None:
             return
 
         try:
@@ -613,7 +613,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     @contextmanager
     def _event_span(self, event: EventLogEntry):
-        if os.getenv("DAGSTER_CLOUD_STORE_EVENT_SEND_METRICS") != "1":
+        if os.getenv("DISABLE_DAGSTER_CLOUD_STORE_EVENT_SEND_METRICS") is not None:
             yield
         else:
             with self._tracer.start_span("store-event") as event_span:

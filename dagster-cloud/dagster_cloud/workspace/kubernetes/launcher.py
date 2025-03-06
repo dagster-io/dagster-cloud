@@ -96,6 +96,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         security_context=None,
         only_allow_user_defined_k8s_config_fields=None,
         only_allow_user_defined_env_vars=None,
+        fail_pod_on_run_failure=None,
         **kwargs,
     ):
         self._inst_data = inst_data
@@ -198,6 +199,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             resources=self._resources,
             scheduler_name=self._scheduler_name,
             run_k8s_config=self._run_k8s_config,
+            fail_pod_on_run_failure=fail_pod_on_run_failure,
             kubeconfig_file=kubeconfig_file,
             load_incluster_config=not kubeconfig_file,
             security_context=self._security_context,
@@ -282,6 +284,14 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     ),
                     is_required=False,
                     description="Raw Kubernetes configuration for launched runs.",
+                ),
+                "fail_pod_on_run_failure": Field(
+                    bool,
+                    is_required=False,
+                    description=(
+                        "Whether the launched Kubernetes Jobs and Pods should fail if the Dagster"
+                        " run fails"
+                    ),
                 ),
                 "server_k8s_config": Field(
                     Shape(

@@ -396,8 +396,18 @@ def get_deployment_settings(client: DagsterCloudGraphQLClient) -> dict[str, Any]
 
 ALERT_POLICIES_QUERY = """
     query CliAlertPoliciesDocument {
-        alertPoliciesAsDocument {
-            document
+        alertPoliciesAsDocumentOrError {
+            __typename
+            ... on AlertPoliciesAsDocument {
+                document
+            }
+            ... on PythonError {
+                message
+                stack
+            }
+            ... on UnauthorizedError {
+                message
+            }
         }
     }
 """
@@ -406,10 +416,14 @@ ALERT_POLICIES_QUERY = """
 def get_alert_policies(client: DagsterCloudGraphQLClient) -> dict[str, Any]:
     result = client.execute(ALERT_POLICIES_QUERY)
 
-    if result.get("data", {}).get("alertPoliciesAsDocument", {}) is None:
+    if (
+        not result.get("data", {}).get("alertPoliciesAsDocumentOrError", {})
+        or result.get("data", {}).get("alertPoliciesAsDocumentOrError", {}).get("__typename")
+        != "AlertPoliciesAsDocument"
+    ):
         raise Exception(f"Unable to get alert policies: {result}")
 
-    return result["data"]["alertPoliciesAsDocument"]["document"]
+    return result["data"]["alertPoliciesAsDocumentOrError"]["document"]
 
 
 RECONCILE_ALERT_POLICIES_FROM_DOCUMENT_MUTATION = """

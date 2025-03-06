@@ -25,6 +25,7 @@ IGNORED_PATTERNS = [
     "*.pyc",
     ".mypy_cache",
     ".cache",
+    ".venv",
 ]
 
 
