@@ -6,10 +6,10 @@ from enum import Enum
 import pydantic
 
 from dagster_cloud_cli import gql
+from dagster_cloud_cli.config.models import load_dagster_cloud_yaml
 from dagster_cloud_cli.config_utils import TOKEN_ENV_VAR_NAME
 
 from ... import ui
-from ...core import pydantic_yaml
 
 
 def get_validation_errors(validation_error: pydantic.ValidationError) -> list[str]:
@@ -45,7 +45,7 @@ def check_dagster_cloud_yaml(yaml_path: pathlib.Path) -> CheckResult:
         return result
 
     try:
-        parsed = pydantic_yaml.load_dagster_cloud_yaml(yaml_path.read_text())
+        parsed = load_dagster_cloud_yaml(yaml_path.read_text())
     except pydantic.ValidationError as err:
         for error in get_validation_errors(err):
             result.errors.append(error)
@@ -115,11 +115,11 @@ def handle_result(
             print_indented(result.errors)
             ui.print("\n")
             return Verdict.warning
-    else:
-        passed(success_message)
-        print_indented(result.messages)
-        ui.print("\n")
-        return Verdict.passed
+
+    passed(success_message)
+    print_indented(result.messages)
+    ui.print("\n")
+    return Verdict.passed
 
 
 def check_connect_dagster_cloud(url) -> CheckResult:

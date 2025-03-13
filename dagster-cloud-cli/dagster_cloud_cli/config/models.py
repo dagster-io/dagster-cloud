@@ -3,10 +3,10 @@
 from typing import Any, Optional
 
 import yaml
-from pydantic import BaseModel, Extra, Field, model_validator, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-class CodeSource(BaseModel, extra=Extra.forbid):
+class CodeSource(BaseModel, extra="forbid"):
     package_name: Optional[str] = None
     module_name: Optional[str] = None
     python_file: Optional[str] = None
@@ -25,12 +25,12 @@ class CodeSource(BaseModel, extra=Extra.forbid):
         return values
 
 
-class Build(BaseModel, extra=Extra.forbid):
+class Build(BaseModel, extra="forbid"):
     directory: Optional[str] = None
     registry: Optional[str] = None
 
 
-class Location(BaseModel, extra=Extra.forbid):
+class Location(BaseModel, extra="forbid"):
     location_name: str
     code_source: Optional[CodeSource] = None
     build: Optional[Build] = None
@@ -42,10 +42,22 @@ class Location(BaseModel, extra=Extra.forbid):
     agent_queue: Optional[str] = None
 
 
-class DagsterCloudYaml(BaseModel, extra=Extra.forbid):
+class LocationDefaults(BaseModel, extra="forbid"):
+    build: Optional[Build] = None
+    working_directory: Optional[str] = None
+    image: Optional[str] = None
+    executable_path: Optional[str] = None
+    container_context: Optional[dict[str, Any]] = None
+    agent_queue: Optional[str] = None
+
+
+class DagsterCloudYaml(BaseModel, extra="forbid"):
+    defaults: Optional[LocationDefaults] = Field(
+        description="Default values for code locations", default=None
+    )
     locations: list[Location] = Field(description="List of code locations")
 
-    @validator("locations")
+    @field_validator("locations")
     def no_duplicate_names(cls, v: list[Location]) -> list[Location]:
         names = set()
         for location in v:
@@ -55,6 +67,9 @@ class DagsterCloudYaml(BaseModel, extra=Extra.forbid):
         return v
 
 
+class ProcessedDagsterCloudConfig(BaseModel, extra="forbid"):
+    locations: list[Location] = Field(description="List of code locations")
+
+
 def load_dagster_cloud_yaml(text) -> DagsterCloudYaml:
-    parsed = DagsterCloudYaml.parse_obj(yaml.load(text, Loader=yaml.SafeLoader))
-    return parsed
+    return DagsterCloudYaml.model_validate(yaml.safe_load(text))

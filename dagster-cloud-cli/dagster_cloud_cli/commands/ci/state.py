@@ -7,7 +7,7 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Extra, Field
 
-from dagster_cloud_cli.core import pydantic_yaml
+from dagster_cloud_cli.config import models
 
 
 class DockerBuildOutput(BaseModel, extra=Extra.forbid):
@@ -26,7 +26,7 @@ class PexBuildOutput(BaseModel, extra=Extra.forbid):
 class BuildMetadata(BaseModel):
     git_url: Optional[str]
     commit_hash: Optional[str]
-    build_config: Optional[pydantic_yaml.Build]  # copied from dagster_cloud.yaml
+    build_config: Optional[models.Build]  # copied from dagster_cloud.yaml
 
 
 class LocationStatus(Enum):

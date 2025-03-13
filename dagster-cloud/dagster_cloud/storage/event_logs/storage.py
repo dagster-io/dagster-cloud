@@ -735,6 +735,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return True
 
     @property
+    def supports_partition_subset_in_asset_materialization_planned_events(self) -> bool:
+        return True
+
+    @property
     def asset_records_have_last_planned_materialization_storage_id(self) -> bool:
         return True
 

@@ -723,8 +723,8 @@ class DagsterCloudUserCodeLauncher(
         first_response = unpack_value(res.json(), DagsterCloudCodeLocationUpdateResponse)
         if first_response.updated:
             self._logger.info(
-                "Workspace entry for"
-                f" {deployment_name}:{workspace_entry.location_name} {first_response.message}"
+                "Code location update result for"
+                f" {deployment_name}:{workspace_entry.location_name} - {first_response.message}"
             )
             return
 
@@ -762,15 +762,15 @@ class DagsterCloudUserCodeLauncher(
             if second_response.missing_job_snapshots:
                 # this condition is expected to be extremely unlikely
                 raise Exception(
-                    "Workspace entry upload failed, job definitions changed while uploading:"
+                    "Code location update failed, job definitions changed while uploading:"
                     f" {second_response.missing_job_snapshots}"
                 )
             else:
-                raise Exception(f"Workspace entry upload failed: {second_response.message}")
+                raise Exception(f"Code location update failed: {second_response.message}")
 
         self._logger.info(
-            "Workspace entry for"
-            f" {deployment_name}:{workspace_entry.location_name} {second_response.message}"
+            "Code location update result for"
+            f" {deployment_name}:{workspace_entry.location_name} - {second_response.message}"
         )
 
     def _update_workspace_entry_server_upload(

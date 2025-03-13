@@ -11,11 +11,16 @@ from enum import Enum
 from typing import Any, Optional, cast
 
 import typer
+import yaml
+from dagster._core.test_utils import remove_none_recursively
+from jinja2 import TemplateSyntaxError
 from typer import Typer
 
 from dagster_cloud_cli import docker_utils, gql, pex_utils, ui
 from dagster_cloud_cli.commands.ci import utils
 from dagster_cloud_cli.commands.workspace import wait_for_load
+from dagster_cloud_cli.config import DagsterCloudConfigDefaultsMerger, JinjaTemplateLoader
+from dagster_cloud_cli.config.models import load_dagster_cloud_yaml
 from dagster_cloud_cli.config_utils import (
     AGENT_HEARTBEAT_TIMEOUT_OPTION,
     DAGSTER_ENV_OPTION,
@@ -27,7 +32,7 @@ from dagster_cloud_cli.config_utils import (
     get_location_document,
     get_org_url,
 )
-from dagster_cloud_cli.core import pex_builder, pydantic_yaml
+from dagster_cloud_cli.core import pex_builder
 from dagster_cloud_cli.core.artifacts import (
     download_organization_artifact,
     upload_organization_artifact,
@@ -260,6 +265,97 @@ def check(
 STATEDIR_OPTION = typer.Option(..., envvar="DAGSTER_BUILD_STATEDIR")
 
 
+@app.command(help="Render the processed dagster cloud configuration file to the console")
+def template(
+    project_dir: str = typer.Option(".", help="Path to the project directory"),
+    dagster_cloud_yaml_path: str = typer.Option(
+        "dagster_cloud.yaml", help="Path to the dagster cloud configuration file"
+    ),
+    values_file: Optional[str] = typer.Option(default=None, help="Path to a values file"),
+    value: list[str] = typer.Option(
+        [],
+        help="Key value pairs to override in the yaml file, value can be a str or a valid json representation",
+    ),
+    merge: bool = typer.Option(
+        True, help="Render the yaml file with defaults merged in each location", is_flag=True
+    ),
+) -> None:
+    project_path = pathlib.Path(project_dir)
+    yaml_path = project_path / dagster_cloud_yaml_path
+    if not yaml_path.exists():
+        raise ui.error(f"No such file {yaml_path}")
+
+    context = _create_context_from_values(value, values_file)
+
+    template_loader = JinjaTemplateLoader()
+    rendered_config_yaml: str
+    try:
+        rendered_config_yaml = template_loader.render(filepath=str(yaml_path), context=context)
+    except TemplateSyntaxError as error:
+        raise ui.error(
+            f"jinja TemplateSyntaxError: {error.message} at line {error.lineno} in {error.filename}"
+        )
+    except Exception as error:
+        raise ui.error(f"Error rendering template: {error}")
+
+    if not merge:
+        ui.print(rendered_config_yaml)
+        return
+
+    try:
+        dagster_cloud_config = load_dagster_cloud_yaml(rendered_config_yaml)
+    except Exception as err:
+        raise ui.error(f"Error parsing the configuration: {err}")
+
+    config_merger = DagsterCloudConfigDefaultsMerger()
+    processed_config = config_merger.process(dagster_cloud_config)
+    config_as_dict = remove_none_recursively(processed_config.model_dump())
+    ui.print(yaml.dump(config_as_dict))
+
+
+def _create_context_from_values(
+    values_list: list[str], values_file: Optional[str]
+) -> dict[str, Any]:
+    """Creates a collection of values by loading values from a file then
+    overlaying a value list to extend or override those values.
+    """
+    context: dict[str, Any] = {}
+
+    # load values from file
+    values_file_path = pathlib.Path(values_file) if values_file else None
+    if values_file_path:
+        try:
+            with open(values_file_path) as f:
+                if values_file_path.suffix == ".json":
+                    context.update(json.load(f))
+                elif values_file_path.suffix in [".yaml", ".yml"]:
+                    context.update(yaml.safe_load(f))
+                else:
+                    raise ui.error(f"Unsupported values file extension {values_file_path.suffix}")
+        except Exception as err:
+            raise ui.error(f"Error parsing values file {values_file}: {err}")
+
+    # overlay command line value arguments
+    for value_entry in values_list:
+        key, value = value_entry.split("=", 1)
+        try:
+            # command line values may be expressed as json to allow for complex values
+            val = json.loads(value)
+        except json.JSONDecodeError:
+            val = value
+
+        # command line values may specify a path to set keys in
+        key_path = key.split(".") if "." in key else [key]
+        sub_context_ref = context
+        for step in key_path:
+            if step == key_path[-1]:
+                sub_context_ref[step] = val
+            elif step not in sub_context_ref:
+                sub_context_ref[step] = {}
+            sub_context_ref = sub_context_ref[step]
+    return context
+
+
 @app.command(help="Initialize a build session")
 @dagster_cloud_options(allow_empty=False, allow_empty_deployment=True, requires_url=False)
 def init(
@@ -281,7 +377,7 @@ def init(
         raise ui.error(
             f"Dagster Cloud yaml file not found at specified path {yaml_path.resolve()}."
         )
-    locations_def = pydantic_yaml.load_dagster_cloud_yaml(yaml_path.read_text())
+    locations_def = load_dagster_cloud_yaml(yaml_path.read_text())
     locations = locations_def.locations
     if location_name:
         selected_locations = set(location_name)
@@ -670,7 +766,7 @@ def set_build_output(
     # validation pass - computes the full image name for all locations
     images = {}
     for name, location_state in locations.items():
-        configured_defs = pydantic_yaml.load_dagster_cloud_yaml(
+        configured_defs = load_dagster_cloud_yaml(
             open(location_state.location_file, encoding="utf-8").read()
         )
         location_defs = [loc for loc in configured_defs.locations if loc.location_name == name]
