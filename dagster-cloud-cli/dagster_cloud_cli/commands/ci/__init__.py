@@ -802,17 +802,21 @@ def deploy(
     ui.print("Going to deploy the following locations:")
 
     built_locations: list[state.LocationState] = []
+    unbuilt_location_names: list[str] = []
     for name, location_state in locations.items():
         if location_state.build_output:
             status = "Ready to deploy"
             built_locations.append(location_state)
         else:
             status = "Not ready to deploy"
+            unbuilt_location_names.append(name)
         ui.print(f"- {name} [{status}]")
 
-    if len(built_locations) < len(locations):
+    if unbuilt_location_names:
         raise ui.error(
-            "Cannot deploy because locations have not been built. Use 'ci build' to build"
+            f"Cannot deploy because the following location{'s have' if len(unbuilt_location_names) > 1 else ' has'} "
+            f"not been built: {', '.join(unbuilt_location_names)}. "
+            "Use 'ci build' (in Dagster+ Serverless) or `ci set-build-output` (in Dagster+ Hybrid) to build"
             " locations."
         )
 

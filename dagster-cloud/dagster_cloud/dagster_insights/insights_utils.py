@@ -3,6 +3,7 @@ from typing import Optional, Union
 
 import dagster._check as check
 from dagster import (
+    AssetCheckEvaluation,
     AssetCheckResult,
     AssetExecutionContext,
     AssetKey,
@@ -40,15 +41,24 @@ def get_asset_key_for_output(
     return asset_key
 
 
-def extract_asset_info_from_event(context, dagster_event, record_observation_usage):
+def extract_asset_info_from_event(
+    context,
+    dagster_event: Union[
+        Output, AssetMaterialization, AssetObservation, AssetCheckResult, AssetCheckEvaluation
+    ],
+    record_observation_usage,
+):
     if isinstance(dagster_event, AssetMaterialization):
         return dagster_event.asset_key, dagster_event.partition
 
-    if isinstance(dagster_event, (AssetCheckResult, AssetObservation)) and record_observation_usage:
+    if (
+        isinstance(dagster_event, (AssetCheckResult, AssetObservation, AssetCheckEvaluation))
+        and record_observation_usage
+    ):
         partition = dagster_event.partition if isinstance(dagster_event, AssetObservation) else None
         return dagster_event.asset_key, partition
 
-    if isinstance(dagster_event, (AssetCheckResult, AssetObservation)):
+    if isinstance(dagster_event, (AssetCheckResult, AssetObservation, AssetCheckEvaluation)):
         return None, None
 
     if isinstance(dagster_event, Output):

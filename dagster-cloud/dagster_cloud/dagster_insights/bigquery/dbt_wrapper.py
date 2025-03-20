@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import yaml
 from dagster import (
+    AssetCheckEvaluation,
     AssetCheckResult,
     AssetExecutionContext,
     AssetKey,
@@ -53,11 +54,21 @@ def dbt_with_bigquery_insights(
     context: Union[OpExecutionContext, AssetExecutionContext],
     dbt_cli_invocation: DbtCliInvocation,
     dagster_events: Optional[
-        Iterable[Union[Output, AssetMaterialization, AssetObservation, AssetCheckResult]]
+        Iterable[
+            Union[
+                Output,
+                AssetMaterialization,
+                AssetObservation,
+                AssetCheckResult,
+                AssetCheckEvaluation,
+            ]
+        ]
     ] = None,
     skip_config_check=False,
     record_observation_usage: bool = True,
-) -> Iterator[Union[Output, AssetMaterialization, AssetObservation, AssetCheckResult]]:
+) -> Iterator[
+    Union[Output, AssetMaterialization, AssetObservation, AssetCheckResult, AssetCheckEvaluation]
+]:
     """Wraps a dagster-dbt invocation to associate each BigQuery query with the produced
     asset materializations. This allows the cost of each query to be associated with the asset
     materialization that it produced.
@@ -68,7 +79,7 @@ def dbt_with_bigquery_insights(
     Args:
         context (AssetExecutionContext): The context of the asset that is being materialized.
         dbt_cli_invocation (DbtCliInvocation): The invocation of the dbt CLI to wrap.
-        dagster_events (Optional[Iterable[Union[Output, AssetObservation, AssetCheckResult]]]):
+        dagster_events (Optional[Iterable[Union[Output, AssetObservation, AssetCheckResult, AssetCheckEvaluation]]]):
             The events that were produced by the dbt CLI invocation. If not provided, it is assumed
             that the dbt CLI invocation has not yet been run, and it will be run and the events
             will be streamed.
@@ -117,7 +128,14 @@ def dbt_with_bigquery_insights(
     asset_info_by_unique_id = {}
     for dagster_event in dagster_events:
         if isinstance(
-            dagster_event, (AssetMaterialization, AssetObservation, Output, AssetCheckResult)
+            dagster_event,
+            (
+                AssetMaterialization,
+                AssetObservation,
+                Output,
+                AssetCheckResult,
+                AssetCheckEvaluation,
+            ),
         ):
             unique_id = dagster_event.metadata["unique_id"].value
             asset_key, partition = extract_asset_info_from_event(

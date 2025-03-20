@@ -22,7 +22,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.10.5",
+    "dagster==1.10.6",
     "packaging>=20.9",
     "questionary",
     "requests",
@@ -39,6 +39,7 @@ tests = [
     "freezegun",
     "dagster[test]",
     "dagster-pipes",
+    "dagster-shared",
 ]
 
 [project.scripts]
