@@ -1,5 +1,6 @@
+import datetime
 import json
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, List, Optional, Sequence, Union
 
 import questionary
 import typer
@@ -44,6 +45,11 @@ def error(message: str, code: int = 1) -> Exception:
     return ExitWithMessage(message=message, code=code)
 
 
+def success(message: str) -> None:
+    """Prints a success message."""
+    print(f"{green('Success:')} {message}")
+
+
 def censor_token(token: str) -> str:
     return ("*" * (len(token) - 6)) + token[-6:]
 
@@ -84,6 +90,38 @@ def print_json(data: Any):
 
 def print_yaml(data: Any):
     return typer.echo(yaml.dump(data))
+
+
+def print_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> None:
+    """Print a table with headers and rows."""
+    if not rows:
+        return
+    
+    # Calculate the maximum width for each column based on headers and rows
+    col_widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            cell_str = str(cell)
+            col_widths[i] = max(col_widths[i], len(cell_str))
+    
+    # Print the headers
+    header_row = " │ ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers))
+    print(header_row)
+    
+    # Print the separator
+    separator = "─┼─".join("─" * width for width in col_widths)
+    print(separator)
+    
+    # Print each row
+    for row in rows:
+        row_str = " │ ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
+        print(row_str)
+
+
+def format_timestamp(timestamp: float) -> str:
+    """Format a timestamp as a human-readable date string."""
+    dt = datetime.datetime.fromtimestamp(timestamp)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def erase_previous_line(number_of_lines: int = 1) -> None:
