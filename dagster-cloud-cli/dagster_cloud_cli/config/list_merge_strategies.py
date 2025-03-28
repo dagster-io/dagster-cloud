@@ -1,6 +1,7 @@
 from typing import Any, Callable
 
-from dagster._utils import check, hash_collection
+from dagster_shared import check
+from dagster_shared.utils.hash import hash_collection
 
 ListMergeFunction = Callable[[list[Any], list[Any]], list[Any]]
 

@@ -12,7 +12,7 @@ from typing import Any, Optional, cast
 
 import typer
 import yaml
-from dagster._core.test_utils import remove_none_recursively
+from dagster_shared.utils import remove_none_recursively
 from jinja2 import TemplateSyntaxError
 from typer import Typer
 

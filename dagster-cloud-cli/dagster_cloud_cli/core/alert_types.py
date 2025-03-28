@@ -1,6 +1,6 @@
 from enum import Enum
 
-from dagster._serdes import whitelist_for_serdes
+from dagster_shared.serdes import whitelist_for_serdes
 
 
 @whitelist_for_serdes

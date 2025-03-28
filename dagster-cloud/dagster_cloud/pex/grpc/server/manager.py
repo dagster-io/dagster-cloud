@@ -7,15 +7,15 @@ import time
 from contextlib import AbstractContextManager
 from typing import Optional, Union, cast
 
-import dagster._seven as seven
 from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.instance.ref import InstanceRef
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
-from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData, PexMetadata
+from dagster_shared import seven
+from dagster_shared.serdes.ipc import open_ipc_subprocess
 from pydantic import BaseModel, Extra
 
 from ..types import PexServerHandle

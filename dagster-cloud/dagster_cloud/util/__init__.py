@@ -11,7 +11,7 @@ from dagster import (
 )
 from dagster._config import BoolSourceType, IntSourceType, StringSourceType
 from dagster._serdes import serialize_value
-from dagster._serdes.serdes import PackableValue
+from dagster_shared.serdes.serdes import PackableValue
 
 
 class SerializableNamedtupleMapDiff(

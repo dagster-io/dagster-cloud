@@ -3,10 +3,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Optional
 
-import dagster._check as check
 import yaml
-from dagster._serdes.serdes import deserialize_value
 from dagster._utils import DEFAULT_WORKSPACE_YAML_FILENAME
+from dagster_shared import check
+from dagster_shared.serdes.serdes import deserialize_value
 from typer import Argument, Option, Typer
 
 from dagster_cloud_cli import gql, ui

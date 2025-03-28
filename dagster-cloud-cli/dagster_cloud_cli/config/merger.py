@@ -1,8 +1,8 @@
 from copy import deepcopy
 from typing import Any
 
-from dagster._core.test_utils import remove_none_recursively
-from dagster._utils import check
+from dagster_shared import check
+from dagster_shared.utils import remove_none_recursively
 
 from dagster_cloud_cli.config.list_merge_strategies import (
     deduplicate,

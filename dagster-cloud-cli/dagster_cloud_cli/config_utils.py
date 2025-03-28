@@ -7,8 +7,8 @@ from typing import Any, NamedTuple, Optional, cast
 
 import yaml
 from click import Context
-from dagster._core.test_utils import remove_none_recursively
-from dagster._utils.merger import deep_merge_dicts
+from dagster_shared.merger import deep_merge_dicts
+from dagster_shared.utils import remove_none_recursively
 from typer import Option
 
 from . import gql, ui

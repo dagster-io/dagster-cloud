@@ -13,8 +13,8 @@ from dagster._core.errors import DagsterHomeNotSetError
 from dagster._utils.interrupts import capture_interrupts
 from dagster._utils.log import default_date_format_string, default_format_string
 from dagster._utils.merger import deep_merge_dicts
-from dagster._utils.yaml_utils import load_yaml_from_globs
 from dagster_cloud_cli import ui
+from dagster_shared.yaml_utils import load_yaml_from_globs
 from typer import Argument, Option, Typer
 
 from dagster_cloud.agent.dagster_cloud_agent import DagsterCloudAgent

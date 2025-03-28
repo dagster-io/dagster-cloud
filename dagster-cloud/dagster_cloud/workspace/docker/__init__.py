@@ -15,13 +15,13 @@ from dagster._core.utils import parse_env_var
 from dagster._grpc.types import ExecuteRunArgs
 from dagster._serdes import ConfigurableClass
 from dagster._serdes.config_class import ConfigurableClassData
-from dagster._serdes.serdes import deserialize_value, serialize_value
 from dagster._utils import find_free_port
 from dagster._utils.merger import merge_dicts
 from dagster._vendored.dateutil.parser import parse
 from dagster_cloud_cli.core.workspace import PexMetadata
 from dagster_docker import DockerRunLauncher
 from dagster_docker.container_context import DockerContainerContext
+from dagster_shared.serdes.serdes import deserialize_value, serialize_value
 from docker.models.containers import Container
 from typing_extensions import Self
 

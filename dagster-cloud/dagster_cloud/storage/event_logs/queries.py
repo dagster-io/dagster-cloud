@@ -151,8 +151,8 @@ ASSET_CHECK_STATE_FRAGMENT = (
             }
             createTimestamp
         }
-        lastRunId 
-    } 
+        lastRunId
+    }
 """
 )
 
@@ -161,7 +161,7 @@ GET_MAXIMUM_RECORD_ID = """
         eventLogs {
             getMaximumRecordId
         }
-    } 
+    }
     """
 
 GET_RECORDS_FOR_RUN_QUERY = (
@@ -749,6 +749,23 @@ GET_RUN_STATUS_CHANGE_EVENTS_QUERY = (
 query getRunStatusChangeEventRecordsQuery($recordsFilter: RunStatusChangeRecordsFilter!, $limit: Int, $cursor: String, $ascending: Boolean) {
     eventLogs {
         getRunStatusChangeEventRecords(recordsFilter: $recordsFilter, limit: $limit, cursor: $cursor, ascending: $ascending) {
+            records {
+                ...EventLogRecordFragment
+            }
+            cursor
+            hasMore
+        }
+    }
+}
+"""
+)
+
+FETCH_FAILED_MATERIALIZATIONS_QUERY = (
+    EVENT_RECORD_FRAGMENT
+    + """
+query fetchFailedMaterializationsQuery($recordsFilter: AssetRecordsFilter!, $limit: Int, $cursor: String, $ascending: Boolean) {
+    eventLogs {
+        fetchFailedMaterializations(recordsFilter: $recordsFilter, limit: $limit, cursor: $cursor, ascending: $ascending) {
             records {
                 ...EventLogRecordFragment
             }

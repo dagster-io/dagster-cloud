@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from dagster import _seven as seven
+from dagster_shared import seven
 from typer import Argument, Option, Typer
 
 from dagster_cloud_cli import docker_utils, gql, pex_utils, ui

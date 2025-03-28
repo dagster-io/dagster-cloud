@@ -6,8 +6,8 @@ from contextlib import contextmanager
 from email.utils import mktime_tz, parsedate_tz
 from typing import Any, Callable, Optional
 
-import dagster._check as check
 import requests
+from dagster_shared import check
 from requests.adapters import HTTPAdapter
 from requests.exceptions import (
     ConnectionError as RequestsConnectionError,

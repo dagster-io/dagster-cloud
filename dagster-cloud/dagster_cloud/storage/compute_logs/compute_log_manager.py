@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Optional
 
-import dagster._seven as _seven
 import requests
 from dagster import (
     Field,
@@ -19,6 +18,7 @@ from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils import ensure_file
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
+from dagster_shared import seven
 from requests.adapters import HTTPAdapter
 from typing_extensions import Self
 
@@ -37,7 +37,7 @@ class CloudComputeLogManager(
     ):
         # proxy calls to local compute log manager (for subscriptions, etc)
         if not local_dir:
-            local_dir = _seven.get_system_temp_directory()
+            local_dir = seven.get_system_temp_directory()
 
         self._upload_session = requests.Session()
         adapter = HTTPAdapter(max_retries=3)

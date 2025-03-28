@@ -7,7 +7,6 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping
 from typing import Any, NamedTuple, Optional, Union
 
-import dagster._seven as seven
 from dagster import (
     BoolSource,
     Field,
@@ -17,9 +16,10 @@ from dagster import (
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
-from dagster._serdes.ipc import open_ipc_subprocess
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.merger import merge_dicts
+from dagster_shared import seven
+from dagster_shared.serdes.ipc import open_ipc_subprocess
 from typing_extensions import Self
 
 from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType

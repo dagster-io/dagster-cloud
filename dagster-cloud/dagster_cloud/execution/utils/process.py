@@ -2,7 +2,7 @@ import os
 import sys
 from collections.abc import Sequence
 
-from dagster._serdes.ipc import interrupt_ipc_subprocess_pid, open_ipc_subprocess
+from dagster_shared.serdes.ipc import interrupt_ipc_subprocess_pid, open_ipc_subprocess
 
 from . import TaskStatus
 

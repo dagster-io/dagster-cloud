@@ -2,11 +2,11 @@ import json
 import os
 from typing import Any, NamedTuple, Optional
 
-import dagster._check as check
 import yaml
 from dagster._core.instance.ref import InstanceRef
-from dagster._serdes import serialize_value, whitelist_for_serdes
 from dagster._utils.merger import merge_dicts
+from dagster_shared import check
+from dagster_shared.serdes import serialize_value, whitelist_for_serdes
 
 from .agent_queue import AgentQueue
 

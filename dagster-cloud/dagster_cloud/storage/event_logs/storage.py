@@ -39,7 +39,6 @@ from dagster._core.storage.event_log.base import (
 )
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
 from dagster._serdes import ConfigurableClass, ConfigurableClassData, serialize_value
-from dagster._serdes.serdes import deserialize_value
 from dagster._time import datetime_from_timestamp
 from dagster._utils.concurrency import (
     ClaimedSlotInfo,
@@ -51,6 +50,7 @@ from dagster._utils.concurrency import (
 from dagster._utils.error import SerializableErrorInfo
 from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import DagsterCloudAgentServerError
+from dagster_shared.serdes.serdes import deserialize_value
 from typing_extensions import Self
 
 from dagster_cloud.api.dagster_cloud_api import StoreEventBatchRequest
@@ -74,6 +74,7 @@ from .queries import (
     DELETE_DYNAMIC_PARTITION_MUTATION,
     DELETE_EVENTS_MUTATION,
     ENABLE_SECONDARY_INDEX_MUTATION,
+    FETCH_FAILED_MATERIALIZATIONS_QUERY,
     FETCH_MATERIALIZATIONS_QUERY,
     FETCH_OBSERVATIONS_QUERY,
     FETCH_PLANNED_MATERIALIZATIONS,
@@ -739,7 +740,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return True
 
     @property
-    def asset_records_have_last_planned_materialization_storage_id(self) -> bool:
+    def asset_records_have_last_planned_and_failed_materializations(self) -> bool:
         return True
 
     def get_asset_check_summary_records(
@@ -1223,6 +1224,26 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             },
         )
         return _event_records_result_from_graphql(res["data"]["eventLogs"]["fetchMaterializations"])
+
+    def fetch_failed_materializations(
+        self,
+        records_filter: Union[AssetKey, AssetRecordsFilter],
+        limit: int,
+        cursor: Optional[str] = None,
+        ascending: bool = False,
+    ) -> EventRecordsResult:
+        res = self._execute_query(
+            FETCH_FAILED_MATERIALIZATIONS_QUERY,
+            variables={
+                "recordsFilter": _get_asset_records_filter_input(records_filter),
+                "limit": limit,
+                "cursor": cursor,
+                "ascending": ascending,
+            },
+        )
+        return _event_records_result_from_graphql(
+            res["data"]["eventLogs"]["fetchFailedMaterializations"]
+        )
 
     def fetch_observations(
         self,
