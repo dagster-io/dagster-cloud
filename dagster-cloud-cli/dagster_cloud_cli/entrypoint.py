@@ -26,6 +26,7 @@ from .commands.organization import (
     legacy_settings_app,
 )
 from .commands.run import app as run_app
+from .commands.variable import app as variable_app
 from .commands.serverless import app as serverless_app
 from .commands.workspace import app as workspace_app
 from .version import __version__
@@ -196,6 +197,8 @@ _import_commands(
 app.add_typer(branch_deployment_app, name="branch-deployment", no_args_is_help=True)
 app.add_typer(job_app, name="job", no_args_is_help=True)
 app.add_typer(run_app, name="run", no_args_is_help=True, hidden=True)
+
+app.add_typer(variable_app, name="variable", no_args_is_help=True)
 app.add_typer(serverless_app, name="serverless", no_args_is_help=True)
 app.add_typer(pex_app, name="pex", hidden=True, no_args_is_help=True)
 app.add_typer(ci_app, name="ci", no_args_is_help=True)
