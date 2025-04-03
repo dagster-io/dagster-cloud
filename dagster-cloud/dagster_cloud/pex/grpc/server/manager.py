@@ -15,8 +15,10 @@ from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData, PexMetadata
 from dagster_shared import seven
-from dagster_shared.serdes.ipc import open_ipc_subprocess
+from dagster_shared.ipc import open_ipc_subprocess
 from pydantic import BaseModel, Extra
+
+from dagster_cloud.workspace.user_code_launcher.utils import get_grpc_server_env
 
 from ..types import PexServerHandle
 from .registry import PexS3Registry
@@ -245,7 +247,8 @@ class MultiPexManager(AbstractContextManager):
                     port = None
                     socket = safe_tempfile_path_unmanaged()
 
-                additional_env = metadata.get_grpc_server_env(
+                additional_env = get_grpc_server_env(
+                    code_location_deploy_data=metadata,
                     port=port,
                     location_name=server_handle.location_name,
                     instance_ref=instance_ref,

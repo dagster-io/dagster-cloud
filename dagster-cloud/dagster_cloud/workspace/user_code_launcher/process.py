@@ -19,13 +19,14 @@ from dagster._serdes import ConfigurableClass, ConfigurableClassData
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.merger import merge_dicts
 from dagster_shared import seven
-from dagster_shared.serdes.ipc import open_ipc_subprocess
+from dagster_shared.ipc import open_ipc_subprocess
 from typing_extensions import Self
 
 from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.pex.grpc import MultiPexGrpcClient
+from dagster_cloud.workspace.user_code_launcher.utils import get_grpc_server_env
 
 from .user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
@@ -267,7 +268,8 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                 str(self._heartbeat_ttl),
             ]
 
-            additional_env = metadata.get_grpc_server_env(
+            additional_env = get_grpc_server_env(
+                metadata,
                 port=port,
                 location_name=location_name,
                 instance_ref=self._instance.ref_for_deployment(deployment_name),

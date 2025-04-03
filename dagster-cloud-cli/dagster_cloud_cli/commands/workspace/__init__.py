@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from dagster._utils import DEFAULT_WORKSPACE_YAML_FILENAME
 from dagster_shared import check
 from dagster_shared.serdes.serdes import deserialize_value
 from typer import Argument, Option, Typer
@@ -303,7 +302,7 @@ def sync_command(
     location_load_timeout: int,
     agent_heartbeat_timeout: int,
     workspace: Path = Option(
-        DEFAULT_WORKSPACE_YAML_FILENAME,
+        "workspace.yaml",
         "--workspace",
         "-w",
         exists=True,

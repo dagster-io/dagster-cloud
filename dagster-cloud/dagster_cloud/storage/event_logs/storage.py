@@ -743,6 +743,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def asset_records_have_last_planned_and_failed_materializations(self) -> bool:
         return True
 
+    @property
+    def can_store_asset_failure_events(self) -> bool:
+        return True
+
     def get_asset_check_summary_records(
         self, asset_check_keys: Sequence[AssetCheckKey]
     ) -> Mapping[AssetCheckKey, AssetCheckSummaryRecord]:

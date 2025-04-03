@@ -2,13 +2,15 @@ import json
 from typing import Any, Optional
 
 import typer
-from dagster._core.definitions.repository_definition import SINGLETON_REPOSITORY_NAME
 from typer import Typer
 
 from ... import gql, ui
 from ...config_utils import dagster_cloud_options
 
 app = Typer(help="Commands for working with Dagster Cloud jobs.")
+
+
+SINGLETON_REPOSITORY_NAME = "__repository__"
 
 
 @app.command(name="launch")

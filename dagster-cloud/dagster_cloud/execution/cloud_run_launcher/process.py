@@ -6,11 +6,11 @@ from dagster._core.launcher import RunLauncher
 from dagster._core.launcher.base import LaunchRunContext
 from dagster._core.utils import parse_env_var
 from dagster._grpc.types import ExecuteRunArgs
-from dagster_cloud_cli.core.workspace import get_instance_ref_for_user_code
-from dagster_shared.serdes.ipc import open_ipc_subprocess
+from dagster_shared.ipc import open_ipc_subprocess
 
 from dagster_cloud.execution.utils import TaskStatus
 from dagster_cloud.execution.utils.process import check_on_process, kill_process
+from dagster_cloud.workspace.user_code_launcher.utils import get_instance_ref_for_user_code
 
 PID_TAG = "process/pid"
 

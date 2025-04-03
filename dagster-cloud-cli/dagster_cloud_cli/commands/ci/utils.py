@@ -1,8 +1,10 @@
-import os
 from contextlib import contextmanager
 from typing import Any, Optional
 
+from dagster_shared import check
+
 from dagster_cloud_cli import gql
+from dagster_cloud_cli.config_utils import get_user_token
 
 
 @contextmanager
@@ -10,7 +12,7 @@ def client_from_env(url: str, deployment: Optional[str] = None):
     if deployment:
         url = url + "/" + deployment
     with gql.graphql_client_from_url(
-        url, os.environ["DAGSTER_CLOUD_API_TOKEN"], deployment_name=deployment
+        url, check.not_none(get_user_token()), deployment_name=deployment
     ) as client:
         yield client
 

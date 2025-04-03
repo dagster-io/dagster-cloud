@@ -26,7 +26,7 @@ from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import DagsterCloudHTTPError, raise_http_error
-from dagster_cloud_cli.core.workspace import CodeLocationDeployData, get_instance_ref_for_user_code
+from dagster_cloud_cli.core.workspace import CodeLocationDeployData
 
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
@@ -50,6 +50,7 @@ from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,
 )
+from dagster_cloud.workspace.user_code_launcher.utils import get_instance_ref_for_user_code
 
 from ..opentelemetry.observers.execution_observer import observe_execution
 from ..util import SERVER_HANDLE_TAG, compressed_namedtuple_upload_file, is_isolated_run

@@ -3,7 +3,7 @@ import subprocess
 import sys
 import uuid
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Optional
 
 import pkg_resources
@@ -36,10 +36,23 @@ def _template_dockerfile(env_vars, custom_base_image=None) -> Generator[bytes, N
 
 
 def build_image(
-    source_directory, image: str, registry_info, env_vars: list[str], base_image
+    source_directory,
+    image: str,
+    registry_info,
+    env_vars: list[str],
+    base_image,
+    dockerfile_path: Optional[str] = None,
 ) -> int:
     registry = registry_info["registry_url"]
-    with _template_dockerfile(env_vars, base_image) as dockerfile_content:
+
+    with ExitStack() as stack:
+        if dockerfile_path:
+            file_path = dockerfile_path
+            build_input = None
+        else:
+            file_path = "-"
+            build_input = stack.enter_context(_template_dockerfile(env_vars, base_image))
+
         cmd = [
             "docker",
             "build",
@@ -47,11 +60,11 @@ def build_image(
             "-t",
             f"{registry}:{image}",
             "-f",
-            "-",
+            file_path,
             "--platform",
             "linux/amd64",
         ]
-        return subprocess.run(cmd, input=dockerfile_content, check=True).returncode
+        return subprocess.run(cmd, input=build_input, check=True).returncode
 
 
 def upload_image(image, registry_info) -> int:

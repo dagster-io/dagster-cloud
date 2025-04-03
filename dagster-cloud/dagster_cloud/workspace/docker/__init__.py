@@ -29,6 +29,7 @@ from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.storage.tags import PEX_METADATA_TAG
 from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
+from dagster_cloud.workspace.user_code_launcher.utils import get_grpc_server_env
 
 from ..config_schema.docker import SHARED_DOCKER_CONFIG
 from ..user_code_launcher import (
@@ -317,8 +318,11 @@ class DockerUserCodeLauncher(
             command = metadata.get_grpc_server_command(
                 metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
             )
-            environment = metadata.get_grpc_server_env(
-                grpc_port, location_name, self._instance.ref_for_deployment(deployment_name)
+            environment = get_grpc_server_env(
+                metadata,
+                grpc_port,
+                location_name,
+                self._instance.ref_for_deployment(deployment_name),
             )
             labels = {
                 GRPC_SERVER_LABEL: "",

@@ -45,7 +45,10 @@ from dagster_cloud.workspace.user_code_launcher.user_code_launcher import (
     UserCodeLauncherEntry,
     async_serialize_exceptions,
 )
-from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
+from dagster_cloud.workspace.user_code_launcher.utils import (
+    deterministic_label_for_location,
+    get_grpc_server_env,
+)
 
 from .client import get_debug_ecs_prompt
 from .run_launcher import CloudEcsRunLauncher
@@ -400,8 +403,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             command = metadata.get_grpc_server_command(
                 metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
             )
-            additional_env = metadata.get_grpc_server_env(
-                PORT, location_name, self._instance.ref_for_deployment(deployment_name)
+            additional_env = get_grpc_server_env(
+                metadata, PORT, location_name, self._instance.ref_for_deployment(deployment_name)
             )
             tags = {
                 "dagster/grpc_server": "1",

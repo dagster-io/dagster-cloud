@@ -14,6 +14,7 @@ from dagster_cloud.instance import DagsterCloudAgentInstance
 
 from ..user_code_launcher.utils import (
     deterministic_label_for_location,
+    get_grpc_server_env,
     get_human_readable_label,
     unique_resource_name,
 )
@@ -122,8 +123,8 @@ def construct_code_location_deployment(
     args,
     server_timestamp: float,
 ):
-    env = metadata.get_grpc_server_env(
-        SERVICE_PORT, location_name, instance.ref_for_deployment(deployment_name)
+    env = get_grpc_server_env(
+        metadata, SERVICE_PORT, location_name, instance.ref_for_deployment(deployment_name)
     )
 
     user_defined_config = container_context.server_k8s_config

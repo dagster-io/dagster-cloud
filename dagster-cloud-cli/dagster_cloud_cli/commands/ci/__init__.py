@@ -562,6 +562,12 @@ def build(
         help="Base image used to build the docker image for --build-strategy=docker.",
     ),
     docker_env: list[str] = typer.Option([], help="Env vars for docker builds."),
+    dockerfile_path: Optional[str] = typer.Option(
+        None,
+        help=(
+            "Path to a Dockerfile to use for the docker build. If not provided, a default templated Dockerfile is used."
+        ),
+    ),
     python_version: str = typer.Option(
         DEFAULT_PYTHON_VERSION,
         help=(
@@ -630,6 +636,7 @@ def build(
                     docker_base_image=docker_base_image,
                     docker_env=docker_env,
                     location_state=location_state,
+                    dockerfile_path=dockerfile_path,
                 )
                 state_store.save(location_state)
             elif build_strategy == BuildStrategy.pex:
@@ -672,6 +679,7 @@ def _build_docker(
     docker_base_image: str,
     docker_env: list[str],
     location_state: state.LocationState,
+    dockerfile_path: Optional[str] = None,
 ) -> state.DockerBuildOutput:
     name = location_state.location_name
     ui.print(f"Building docker image for location {name} using base image {docker_base_image}")
@@ -688,6 +696,7 @@ def _build_docker(
         registry_info,
         env_vars=docker_env,
         base_image=docker_base_image,
+        dockerfile_path=dockerfile_path,
     )
     if retval != 0:
         raise ui.error(f"Failed to build docker image for location {name}")
@@ -941,8 +950,12 @@ def manage_state_command(
             "Unable to import dagster_dbt. To use `manage-state`, dagster_dbt must be installed."
         )
         return
-    from dagster._core.code_pointer import load_python_file
-    from dagster._core.definitions.module_loaders.utils import find_objects_in_module_of_types
+    try:
+        from dagster._core.code_pointer import load_python_file
+        from dagster._core.definitions.module_loaders.utils import find_objects_in_module_of_types
+    except:
+        ui.print("Unable to import dagster. To use `manage-state`, dagster must be installed.")
+        return
 
     state_store = state.FileStore(statedir=statedir)
     locations = state_store.list_locations()

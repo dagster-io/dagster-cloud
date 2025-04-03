@@ -2,8 +2,6 @@ from collections.abc import Generator, Sequence
 from contextlib import contextmanager, suppress
 from typing import Any, Optional, cast
 
-from dagster import AssetKey
-
 from dagster_cloud_cli.types import CliEventType, SnapshotBaseDeploymentCondition
 
 from .core.graphql_client import DagsterCloudGraphQLClient, create_cloud_webserver_client
@@ -665,11 +663,7 @@ def launch_run(
             "repositoryName": repo_name,
             "jobName": job_name,
             **(
-                {
-                    "assetSelection": [
-                        AssetKey.from_user_string(path).to_graphql_input() for path in asset_keys
-                    ]
-                }
+                {"assetSelection": [{"path": path.split("/")} for path in asset_keys]}
                 if asset_keys
                 else {}
             ),

@@ -1,12 +1,8 @@
-import json
 import os
 from typing import Any, NamedTuple, Optional
 
-import yaml
-from dagster._core.instance.ref import InstanceRef
-from dagster._utils.merger import merge_dicts
 from dagster_shared import check
-from dagster_shared.serdes import serialize_value, whitelist_for_serdes
+from dagster_shared.serdes import whitelist_for_serdes
 
 from .agent_queue import AgentQueue
 
@@ -64,32 +60,6 @@ class PexMetadata(
             return f"657821118200.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{image_tag}"
         else:
             return f"878483074102.dkr.ecr.us-west-2.amazonaws.com/dagster-cloud-serverless-base-py{self.python_version}:{image_tag}"
-
-
-def get_instance_ref_for_user_code(instance_ref: InstanceRef) -> InstanceRef:
-    # Remove fields from InstanceRef that may not be compatible with earlier
-    # versions of dagster and aren't actually needed by user code
-
-    custom_instance_class_data = instance_ref.custom_instance_class_data
-    if custom_instance_class_data:
-        config_dict = custom_instance_class_data.config_dict
-        new_config_dict = {
-            key: val for key, val in config_dict.items() if key not in {"agent_queues"}
-        }
-
-        user_code_launcher_config = config_dict.get("user_code_launcher", {}).get("config")
-        if user_code_launcher_config:
-            new_config_dict["user_code_launcher"]["config"] = {
-                key: val
-                for key, val in user_code_launcher_config.items()
-                if key not in {"agent_metrics"}
-            }
-
-        custom_instance_class_data = custom_instance_class_data._replace(
-            config_yaml=yaml.dump(new_config_dict)
-        )
-
-    return instance_ref._replace(custom_instance_class_data=custom_instance_class_data)
 
 
 # History of CodeLocationDeployData
@@ -179,51 +149,4 @@ class CodeLocationDeployData(
                 "grpc",
             ]
             + (["--enable-metrics"] if metrics_enabled else [])
-        )
-
-    def get_grpc_server_env(
-        self,
-        port: Optional[int],
-        location_name: str,
-        instance_ref: Optional[InstanceRef],
-        socket: Optional[str] = None,
-    ) -> dict[str, str]:
-        return merge_dicts(
-            {
-                "DAGSTER_LOCATION_NAME": location_name,
-                "DAGSTER_INJECT_ENV_VARS_FROM_INSTANCE": "1",
-                "DAGSTER_CLI_API_GRPC_LAZY_LOAD_USER_CODE": "1",
-                "DAGSTER_CLI_API_GRPC_HOST": "0.0.0.0",
-                # include the container context on the code server to ensure that it is uploaded
-                # to the server and included in the workspace snapshot, which ensures that while a
-                # code location is still being updated, existing code will use the snapshotted
-                # version rather than the newly updated version
-                "DAGSTER_CONTAINER_CONTEXT": json.dumps(self.container_context),
-            },
-            (
-                {
-                    "DAGSTER_INSTANCE_REF": serialize_value(
-                        get_instance_ref_for_user_code(instance_ref)
-                    )
-                }
-                if instance_ref
-                else {}
-            ),
-            ({"DAGSTER_CLI_API_GRPC_PORT": str(port)} if port else {}),
-            ({"DAGSTER_CLI_API_GRPC_SOCKET": str(socket)} if socket else {}),
-            ({"DAGSTER_CURRENT_IMAGE": self.image} if self.image else {}),
-            ({"DAGSTER_CLI_API_GRPC_PYTHON_FILE": self.python_file} if self.python_file else {}),
-            ({"DAGSTER_CLI_API_GRPC_MODULE_NAME": self.module_name} if self.module_name else {}),
-            ({"DAGSTER_CLI_API_GRPC_PACKAGE_NAME": self.package_name} if self.package_name else {}),
-            (
-                {"DAGSTER_CLI_API_GRPC_WORKING_DIRECTORY": self.working_directory}
-                if self.working_directory
-                else {}
-            ),
-            ({"DAGSTER_CLI_API_GRPC_ATTRIBUTE": self.attribute} if self.attribute else {}),
-            (
-                {"DAGSTER_CLI_API_GRPC_USE_PYTHON_ENVIRONMENT_ENTRY_POINT": "1"}
-                if self.executable_path
-                else {}
-            ),
         )
