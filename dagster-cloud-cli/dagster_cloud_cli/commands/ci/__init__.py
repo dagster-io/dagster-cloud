@@ -12,6 +12,7 @@ from typing import Any, Optional, cast
 
 import typer
 import yaml
+from dagster_shared import check
 from dagster_shared.utils import remove_none_recursively
 from jinja2 import TemplateSyntaxError
 from typer import Typer
@@ -26,11 +27,11 @@ from dagster_cloud_cli.config_utils import (
     DAGSTER_ENV_OPTION,
     LOCATION_LOAD_TIMEOUT_OPTION,
     ORGANIZATION_OPTION,
-    TOKEN_ENV_VAR_NAME,
     URL_ENV_VAR_NAME,
     dagster_cloud_options,
     get_location_document,
     get_org_url,
+    get_user_token,
 )
 from dagster_cloud_cli.core import pex_builder
 from dagster_cloud_cli.core.artifacts import (
@@ -134,9 +135,9 @@ def create_or_update_deployment_from_context(
     snapshot_base_condition: Optional[SnapshotBaseDeploymentCondition],
 ) -> str:
     source = metrics.get_source()
+    api_token = check.not_none(get_user_token())
     if source == CliEventTags.source.github:
         event = github_context.get_github_event(project_dir)
-        api_token = os.environ[TOKEN_ENV_VAR_NAME]
         deployment_name = code_location.create_or_update_branch_deployment_from_github_context(
             url,
             api_token,
@@ -155,7 +156,7 @@ def create_or_update_deployment_from_context(
         event = gitlab_context.get_gitlab_event(project_dir)
         if not event.merge_request_iid:
             raise ValueError("no merge request id")
-        with gql.graphql_client_from_url(url, os.environ[TOKEN_ENV_VAR_NAME]) as client:
+        with gql.graphql_client_from_url(url, api_token) as client:
             deployment_name = gql.create_or_update_branch_deployment(
                 client,
                 repo_name=event.project_name,
@@ -185,7 +186,7 @@ def create_or_update_deployment_from_context(
 
 def get_branch_deployment_name_from_context(url, project_dir: str) -> Optional[str]:
     source = metrics.get_source()
-    api_token = os.environ[TOKEN_ENV_VAR_NAME]
+    api_token = check.not_none(get_user_token())
     if source == CliEventTags.source.github:
         event = github_context.get_github_event(project_dir)
         if not event.branch_name:
@@ -208,8 +209,8 @@ def get_branch_deployment_name_from_context(url, project_dir: str) -> Optional[s
         raise ValueError(f"unsupported for {source}")
 
 
-@app.command(help="Validate configuration")
-def check(
+@app.command(name="check", help="Validate configuration")
+def check_command(
     organization: Optional[str] = ORGANIZATION_OPTION,
     dagster_env: Optional[str] = DAGSTER_ENV_OPTION,
     project_dir: str = typer.Option("."),
@@ -593,6 +594,11 @@ def build(
                 "--base-image or --image-tag not supported for --build-strategy=python-executable."
             )
 
+    if docker_base_image and dockerfile_path:
+        raise ui.error(
+            "--base-image and --dockerfile-path cannot both be provided. Please provide only one."
+        )
+
     state_store = state.FileStore(statedir=statedir)
     locations = _get_selected_locations(state_store, location_name)
     ui.print("Going to build the following locations:")
@@ -623,17 +629,16 @@ def build(
                 location_build_dir = "."
 
             url = location_state.url
-            api_token = os.environ.get(TOKEN_ENV_VAR_NAME, "")
+            api_token = get_user_token() or ""
 
             if build_strategy == BuildStrategy.docker:
-                if not docker_base_image:
-                    docker_base_image = f"python:{python_version}-slim"
                 location_state.build_output = _build_docker(
                     url=url,
                     api_token=api_token,
                     name=name,
                     location_build_dir=location_build_dir,
                     docker_base_image=docker_base_image,
+                    python_version=python_version,
                     docker_env=docker_env,
                     location_state=location_state,
                     dockerfile_path=dockerfile_path,
@@ -676,18 +681,26 @@ def _build_docker(
     api_token: str,
     name: str,
     location_build_dir: str,
-    docker_base_image: str,
+    python_version: str,
+    docker_base_image: Optional[str],
     docker_env: list[str],
     location_state: state.LocationState,
     dockerfile_path: Optional[str] = None,
 ) -> state.DockerBuildOutput:
     name = location_state.location_name
-    ui.print(f"Building docker image for location {name} using base image {docker_base_image}")
     docker_utils.verify_docker()
     registry_info = utils.get_registry_info(url)
 
     docker_image_tag = docker_utils.default_image_tag(
         location_state.deployment_name, name, location_state.build.commit_hash
+    )
+
+    if not dockerfile_path and not docker_base_image:
+        docker_base_image = f"python:{python_version}-slim"
+
+    ui.print(
+        f"Building docker image for location {name}"
+        + (f" using base image {docker_base_image}" if docker_base_image else "")
     )
 
     retval = docker_utils.build_image(
@@ -836,7 +849,7 @@ def deploy(
     try:
         _deploy(
             url=built_locations[0].url,
-            api_token=os.environ[TOKEN_ENV_VAR_NAME],
+            api_token=check.not_none(get_user_token()),
             built_locations=built_locations,
             location_load_timeout=location_load_timeout,
             agent_heartbeat_timeout=agent_heartbeat_timeout,

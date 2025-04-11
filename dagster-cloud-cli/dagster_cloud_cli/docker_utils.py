@@ -1,12 +1,11 @@
 import base64
+import importlib.resources
 import subprocess
 import sys
 import uuid
 from collections.abc import Generator
 from contextlib import ExitStack, contextmanager
 from typing import Optional
-
-import pkg_resources
 
 from dagster_cloud_cli import ui
 from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION
@@ -19,8 +18,8 @@ def verify_docker() -> None:
 
 @contextmanager
 def _template_dockerfile(env_vars, custom_base_image=None) -> Generator[bytes, None, None]:
-    DOCKERFILE_TEMPLATE = pkg_resources.resource_filename(
-        "dagster_cloud_cli", "commands/serverless/Dockerfile"
+    DOCKERFILE_TEMPLATE = str(
+        importlib.resources.files("dagster_cloud_cli") / "commands/serverless/Dockerfile"
     )
     base_image_command = (
         f"FROM {custom_base_image}"
@@ -40,7 +39,7 @@ def build_image(
     image: str,
     registry_info,
     env_vars: list[str],
-    base_image,
+    base_image: Optional[str],
     dockerfile_path: Optional[str] = None,
 ) -> int:
     registry = registry_info["registry_url"]

@@ -1,5 +1,7 @@
 import json
+import os
 from typing import Any, Optional
+from uuid import uuid4
 
 import typer
 from typer import Typer
@@ -48,7 +50,18 @@ def launch(
     loaded_config: dict[str, Any] = json.loads(config) if config else {}
 
     repository = repository or SINGLETON_REPOSITORY_NAME
-    with gql.graphql_client_from_url(url, api_token, deployment_name=deployment) as client:
+
+    headers: dict[str, str] = {
+        "Idempotency-Key": str(uuid4()),
+    }
+
+    with gql.graphql_client_from_url(
+        url,
+        api_token,
+        deployment_name=deployment,
+        headers=headers,
+        retries=int(os.getenv("DAGSTER_CLOUD_JOB_LAUNCH_RETRIES", "5")),
+    ) as client:
         ui.print(
             gql.launch_run(
                 client,

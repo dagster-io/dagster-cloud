@@ -247,8 +247,8 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
     "direct_snapshot_uploads": Field(
         BoolSource,
         is_required=False,
-        default_value=False,
-        description=("Opt-in for uploading definition snapshots directly to blob storage."),
+        default_value=True,
+        description=("Opt-out for uploading definition snapshots directly to blob storage."),
     ),
     "upload_snapshots_on_startup": Field(
         BoolSource,

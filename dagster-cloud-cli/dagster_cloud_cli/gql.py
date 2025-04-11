@@ -13,9 +13,10 @@ def graphql_client_from_url(
     token: str,
     retries: int = 3,
     deployment_name: Optional[str] = None,
+    headers: Optional[dict[str, Any]] = None,
 ) -> Generator[DagsterCloudGraphQLClient, None, None]:
     with create_cloud_webserver_client(
-        url.rstrip("/"), token, retries, deployment_name=deployment_name
+        url.rstrip("/"), token, retries, deployment_name=deployment_name, headers=headers
     ) as client:
         yield client
 

@@ -36,7 +36,7 @@ trial.
 
 ## Installation
 
-The Dagster Cloud Agent is available on PyPI and officially supports Python 3.8.
+The Dagster Cloud Agent is available on [PyPI](https://pypi.org/project/dagster-cloud/).
 
 ```
 pip install dagster-cloud

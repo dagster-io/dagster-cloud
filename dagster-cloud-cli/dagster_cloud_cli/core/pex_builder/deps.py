@@ -2,6 +2,7 @@
 
 import enum
 import hashlib
+import importlib.metadata
 import json
 import logging
 import os
@@ -14,7 +15,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 import click
-import pkg_resources
 from packaging import version
 
 from dagster_cloud_cli import ui
@@ -353,15 +353,12 @@ def get_setup_py_deps(code_directory: str, python_interpreter: str) -> list[str]
                 + proc.stdout.decode("utf-8")
                 + proc.stderr.decode("utf-8")
             )
-        # read in requirements using pkg_resources
-        dists = list(pkg_resources.find_distributions(temp_dir))
+        dists = list(importlib.metadata.distributions(path=[temp_dir]))
         if len(dists) != 1:
             raise ValueError(f"Could not find distribution for {setup_py_path}")
         dist = dists[0]
-        for requirement in dist.requires():
-            # the str() for Requirement is correctly formatted requirement
-            # https://setuptools.pypa.io/en/latest/pkg_resources.html#requirement-methods-and-attributes
-            lines.append(str(requirement))
+        for requirement in dist.requires or []:
+            lines.append(requirement)
 
     return lines
 

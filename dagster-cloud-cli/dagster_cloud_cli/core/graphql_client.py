@@ -241,10 +241,13 @@ class DagsterCloudGraphQLClient:
         idempotent_mutation: bool = False,
     ):
         if "mutation " in query and not idempotent_mutation:
+            all_headers = {
+                **(self.headers if self.headers is not None else {}),
+                **(headers if headers is not None else {}),
+            }
+
             # mutations can be made idempotent if they use Idempotency-Key header
-            retry_on_read_timeout = (
-                bool(headers.get("Idempotency-Key")) if headers is not None else False
-            )
+            retry_on_read_timeout = bool(all_headers.get("Idempotency-Key"))
         else:
             retry_on_read_timeout = True
 
@@ -398,15 +401,19 @@ def create_cloud_webserver_client(
     api_token: str,
     retries=3,
     deployment_name: Optional[str] = None,
+    headers: Optional[dict[str, Any]] = None,
 ):
     with create_graphql_requests_session(adapter_kwargs={}) as session:
         yield DagsterCloudGraphQLClient(
             session=session,
             url=f"{url}/graphql",
-            headers=get_dagster_cloud_api_headers(
-                api_token,
-                scope=DagsterCloudInstanceScope.DEPLOYMENT,
-                deployment_name=deployment_name,
-            ),
+            headers={
+                **get_dagster_cloud_api_headers(
+                    api_token,
+                    scope=DagsterCloudInstanceScope.DEPLOYMENT,
+                    deployment_name=deployment_name,
+                ),
+                **(headers if headers else {}),
+            },
             max_retries=retries,
         )

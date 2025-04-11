@@ -22,7 +22,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster-shared==0.26.9",
+    "dagster-shared==0.26.10",
     "packaging>=20.9",
     "questionary",
     "requests",
@@ -40,6 +40,7 @@ tests = [
     "freezegun",
     "pytest>=8",
     "pytest-mock==3.14.0",
+    "buildkite-test-collector",
 ]
 
 [project.scripts]

@@ -10,6 +10,7 @@ from zipfile import ZipFile
 import click
 from packaging import version
 
+from dagster_cloud_cli.core.pex_builder.platforms import COMPLETE_PLATFORMS
 from dagster_cloud_cli.utils import DEFAULT_PYTHON_VERSION
 
 TARGET_PYTHON_VERSIONS = [
@@ -49,10 +50,14 @@ def get_pex_flags(python_version: version.Version, build_sdists: bool = True) ->
     resolve_local = ["--resolve-local-platforms"] if build_sdists else []
     # This is mainly useful in local mac test environments
     include_current = ["--platform=current"] if os.getenv("PEX_INCLUDE_CURRENT_PLATFORM") else []
+
+    complete_platform = os.getenv(
+        "PEX_COMPLETE_PLATFORM", json.dumps(COMPLETE_PLATFORMS[version_tag])
+    )
+
     return [
-        # this platform matches what can run on our serverless base images
-        # the version tag is a major/minor string like "38"
-        f"--platform=manylinux_2_28_x86_64-cp-{version_tag}-cp{version_tag}",
+        # this complete platform matches what can run on our serverless base images
+        f"--complete-platform={complete_platform}",
         *include_current,
         # this ensures PEX_PATH is not cleared and any subprocess invoked can also use this.
         # this is important for running console scripts that use the pex environment (eg dbt)
