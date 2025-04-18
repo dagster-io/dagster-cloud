@@ -24,9 +24,9 @@ from dagster_cloud.dagster_insights.insights_utils import get_current_context_an
 from .snowflake_utils import meter_snowflake_query
 
 
-def get_current_context_and_asset_key_or_warn() -> (
-    tuple[Union[OpExecutionContext, AssetExecutionContext, None], Optional[AssetKey]]
-):
+def get_current_context_and_asset_key_or_warn() -> tuple[
+    Union[OpExecutionContext, AssetExecutionContext, None], Optional[AssetKey]
+]:
     try:
         return get_current_context_and_asset_key()
     except (DagsterInvalidPropertyError, DagsterInvariantViolationError, CheckError):
@@ -91,7 +91,7 @@ class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
 
     def cursor(self, cursor_class=None) -> SnowflakeCursor:
         if cursor_class is None:
-            cursor = cast(InsightsSnowflakeCursor, super().cursor(InsightsSnowflakeCursor))
+            cursor = cast("InsightsSnowflakeCursor", super().cursor(InsightsSnowflakeCursor))
             cursor.set_asset_key(self._asset_key)
         else:
             cursor = super().cursor(cursor_class)

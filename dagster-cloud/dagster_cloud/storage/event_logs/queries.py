@@ -512,6 +512,19 @@ query getDynamicPartitions($partitionsDefName: String!) {
 }
 """
 
+GET_PAGINATED_DYNAMIC_PARTITIONS_QUERY = """
+query getPaginatedDynamicPartitions($partitionsDefName: String!, $limit: Int!, $ascending: Boolean!, $cursor: String) {
+    eventLogs {
+        getPaginatedDynamicPartitions(partitionsDefName: $partitionsDefName, limit: $limit, ascending: $ascending, cursor: $cursor) {
+            results
+            hasMore
+            cursor
+        }
+    }
+}
+"""
+
+
 HAS_DYNAMIC_PARTITION_QUERY = """
 query hasDynamicPartition($partitionsDefName: String!, $partitionKey: String!) {
     eventLogs {

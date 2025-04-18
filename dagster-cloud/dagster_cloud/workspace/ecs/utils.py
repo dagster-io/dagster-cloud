@@ -29,7 +29,7 @@ def _get_family_hash(name, max_length=32, hash_size=8):
     m = hashlib.sha1()
     m.update(name.encode("utf-8"))
     name_hash = m.hexdigest()[:hash_size]
-    return f"{name[:(max_length-hash_size-1)]}_{name_hash}"
+    return f"{name[: (max_length - hash_size - 1)]}_{name_hash}"
 
 
 def get_server_task_definition_family(

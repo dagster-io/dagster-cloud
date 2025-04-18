@@ -1306,7 +1306,7 @@ class DagsterCloudUserCodeLauncher(
             return False
 
         return (active_agent_ids is not None) and (
-            agent_id_for_server not in cast(set[str], active_agent_ids)
+            agent_id_for_server not in cast("set[str]", active_agent_ids)
         )
 
     def _graceful_cleanup_servers(self, include_own_servers: bool):  # ServerHandles
@@ -1401,7 +1401,7 @@ class DagsterCloudUserCodeLauncher(
         endpoints_or_errors = self.get_grpc_endpoints()
         for (deployment_name, location_name), endpoint_or_error in endpoints_or_errors.items():
             if isinstance(endpoint_or_error, ServerEndpoint):
-                endpoint = cast(ServerEndpoint, endpoint_or_error)
+                endpoint = cast("ServerEndpoint", endpoint_or_error)
                 raw_metrics_str = (
                     endpoint.create_client().ping("").get("serialized_server_utilization_metrics")
                 )
@@ -1604,7 +1604,7 @@ class DagsterCloudUserCodeLauncher(
                     if (
                         isinstance(e, DagsterUserCodeUnreachableError)
                         and isinstance(e.__cause__, grpc.RpcError)
-                        and cast(grpc.RpcError, e.__cause__).code() == grpc.StatusCode.UNAVAILABLE
+                        and cast("grpc.RpcError", e.__cause__).code() == grpc.StatusCode.UNAVAILABLE
                     ):
                         first_unavailable_time = self._first_unavailable_times.get(
                             deployment_location
@@ -1674,7 +1674,7 @@ class DagsterCloudUserCodeLauncher(
             + ", ".join(
                 sorted(
                     [
-                        f"({dep}, {loc}, {entries[(dep,loc)].update_timestamp})"
+                        f"({dep}, {loc}, {entries[(dep, loc)].update_timestamp})"
                         for dep, loc in deployments_and_locations
                     ]
                 )
@@ -1846,8 +1846,7 @@ class DagsterCloudUserCodeLauncher(
             deployment_name, location_name = to_update_key
 
             self._logger.info(
-                f"Waiting for new multipex server for {deployment_name}:{location_name} to be"
-                " ready"
+                f"Waiting for new multipex server for {deployment_name}:{location_name} to be ready"
             )
             tasks[to_update_key] = self._wait_for_new_multipex_server(
                 deployment_name,

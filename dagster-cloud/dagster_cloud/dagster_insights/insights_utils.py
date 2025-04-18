@@ -16,9 +16,9 @@ from dagster import (
 from dagster._core.errors import DagsterInvalidPropertyError
 
 
-def get_current_context_and_asset_key() -> (
-    tuple[Union[OpExecutionContext, AssetExecutionContext], Optional[AssetKey]]
-):
+def get_current_context_and_asset_key() -> tuple[
+    Union[OpExecutionContext, AssetExecutionContext], Optional[AssetKey]
+]:
     asset_key = None
     try:
         context = AssetExecutionContext.get()

@@ -89,7 +89,7 @@ class CloudCodeServerHeartbeat(
             server_status=check.inst_param(server_status, "server_status", CloudCodeServerStatus),
             error=check.opt_inst_param(error, "error", SerializableErrorInfo),
             metadata=cast(
-                CloudCodeServerHeartbeatMetadata, check.opt_mapping_param(metadata, "metadata")
+                "CloudCodeServerHeartbeatMetadata", check.opt_mapping_param(metadata, "metadata")
             ),
         )
 
@@ -100,7 +100,7 @@ class CloudCodeServerHeartbeat(
         return self._replace(
             error=None,
             metadata=cast(
-                CloudCodeServerHeartbeatMetadata,
+                "CloudCodeServerHeartbeatMetadata",
                 {},
             ),
         )

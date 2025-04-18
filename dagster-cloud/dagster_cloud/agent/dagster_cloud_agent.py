@@ -706,7 +706,7 @@ class DagsterCloudAgent:
                     # only include the locations within locations_with_ttl_to_query.
                     if not self._has_ttl(
                         user_code_launcher, is_branch_deployment
-                    ) or location_key in cast(set[tuple[str, str]], locations_with_ttl_to_query):
+                    ) or location_key in cast("set[tuple[str, str]]", locations_with_ttl_to_query):
                         deployment_map[location_key] = UserCodeLauncherEntry(
                             code_location_deploy_data=code_location_deploy_data,
                             update_timestamp=float(entry["metadataTimestamp"]),
@@ -807,7 +807,7 @@ class DagsterCloudAgent:
             return DagsterCloudApiSuccess()
         elif api_name == DagsterCloudApi.GET_EXTERNAL_EXECUTION_PLAN:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
             serialized_snapshot_or_error = client.execution_plan_snapshot(
                 execution_plan_snapshot_args=request.request_args._replace(
@@ -820,7 +820,7 @@ class DagsterCloudAgent:
 
         elif api_name == DagsterCloudApi.GET_SUBSET_EXTERNAL_PIPELINE_RESULT:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
 
             serialized_subset_result_or_error = client.external_pipeline_subset(
@@ -832,7 +832,7 @@ class DagsterCloudAgent:
             )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_CONFIG:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
             serialized_partition_config_or_error = client.external_partition_config(
                 partition_args=request.request_args,
@@ -842,7 +842,7 @@ class DagsterCloudAgent:
             )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_TAGS:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
             serialized_partition_tags_or_error = client.external_partition_tags(
                 partition_args=request.request_args,
@@ -852,7 +852,7 @@ class DagsterCloudAgent:
             )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_NAMES:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
             serialized_partition_names_or_error = client.external_partition_names(
                 partition_names_args=request.request_args,
@@ -862,7 +862,7 @@ class DagsterCloudAgent:
             )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_PARTITION_SET_EXECUTION_PARAM_DATA:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
             serialized_partition_execution_params_or_error = (
                 client.external_partition_set_execution_params(
@@ -874,7 +874,7 @@ class DagsterCloudAgent:
             )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_SCHEDULE_EXECUTION_DATA:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
 
             args = request.request_args._replace(
@@ -907,7 +907,7 @@ class DagsterCloudAgent:
 
         elif api_name == DagsterCloudApi.GET_EXTERNAL_SENSOR_EXECUTION_DATA:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
 
             args = request.request_args._replace(
@@ -937,7 +937,7 @@ class DagsterCloudAgent:
                 )
         elif api_name == DagsterCloudApi.GET_EXTERNAL_NOTEBOOK_DATA:
             client = self._get_grpc_client(
-                user_code_launcher, deployment_name, cast(str, location_name)
+                user_code_launcher, deployment_name, cast("str", location_name)
             )
             response = client.external_notebook_data(request.request_args.notebook_path)
             return DagsterCloudApiGrpcResponse(serialized_response_or_error=response.decode())
@@ -984,7 +984,7 @@ class DagsterCloudAgent:
                         )
 
                         run_location_name = cast(
-                            str,
+                            "str",
                             run.remote_job_origin.repository_origin.code_location_origin.location_name,
                         )
 
@@ -1031,7 +1031,7 @@ class DagsterCloudAgent:
                         launcher.terminate(run.run_id)
                     else:
                         run_location_name = cast(
-                            str,
+                            "str",
                             run.remote_job_origin.repository_origin.code_location_origin.location_name,
                         )
 

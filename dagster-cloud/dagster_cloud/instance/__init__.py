@@ -162,16 +162,12 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         if deployment_name:
             new_api_config["deployment"] = deployment_name  # pyright: ignore[reportArgumentType]
             if self.includes_branch_deployments:
-                del new_api_config["branch_deployments"]  # pyright: ignore[reportArgumentType]
-            if "deployments" in new_api_config:
-                del new_api_config["deployments"]  # pyright: ignore[reportArgumentType]
-            if "all_serverless_deployments" in new_api_config:
-                del new_api_config["all_serverless_deployments"]  # pyright: ignore[reportArgumentType]
+                del new_api_config["branch_deployments"]  # pyright: ignore
+            new_api_config.pop("deployments", None)  # pyright: ignore
+            new_api_config.pop("all_serverless_deployments", None)  # pyright: ignore
         else:
-            if "deployment" in new_api_config:
-                del new_api_config["deployment"]  # pyright: ignore[reportArgumentType]
-            if "deployments" in new_api_config:
-                del new_api_config["deployments"]  # pyright: ignore[reportArgumentType]
+            new_api_config.pop("deployment", None)  # pyright: ignore
+            new_api_config.pop("deployments", None)  # pyright: ignore
 
         return new_api_config
 

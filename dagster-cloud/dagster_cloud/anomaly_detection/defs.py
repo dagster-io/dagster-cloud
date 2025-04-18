@@ -1,6 +1,6 @@
 import datetime
 from collections.abc import Iterable, Sequence
-from typing import Optional, Union, cast
+from typing import TYPE_CHECKING, Optional, Union, cast
 
 from dagster import (
     AssetCheckExecutionContext,
@@ -36,14 +36,15 @@ from dagster_cloud_cli.core.graphql_client import (
     create_cloud_webserver_client,
 )
 
-from dagster_cloud import DagsterCloudAgentInstance
-
 from .mutation import ANOMALY_DETECTION_INFERENCE_MUTATION
 from .types import (
     AnomalyDetectionModelParams,
     BetaFreshnessAnomalyDetectionParams,
     FreshnessAnomalyDetectionResult,
 )
+
+if TYPE_CHECKING:
+    from dagster_cloud import DagsterCloudAgentInstance
 
 DEFAULT_MODEL_PARAMS = BetaFreshnessAnomalyDetectionParams(sensitivity=0.1)
 MODEL_PARAMS_METADATA_KEY = "dagster/anomaly_detection_model_params"
@@ -89,7 +90,7 @@ def _build_check_for_assets(
                 "Anomaly detection is only available for dagster cloud deployments."
                 f"Instance type: {type(context.instance)}."
             )
-        instance = cast(DagsterCloudAgentInstance, context.instance)
+        instance = cast("DagsterCloudAgentInstance", context.instance)
         with create_cloud_webserver_client(
             instance.dagit_url[:-1]
             if instance.dagit_url.endswith("/")

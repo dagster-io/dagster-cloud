@@ -614,7 +614,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             except Exception as e:
                 if (
                     isinstance(e.__cause__, grpc.RpcError)
-                    and cast(grpc.RpcError, e.__cause__).code() == grpc.StatusCode.UNIMPLEMENTED
+                    and cast("grpc.RpcError", e.__cause__).code() == grpc.StatusCode.UNIMPLEMENTED
                 ):
                     # New gRPC method not implemented on old multipex server versions
                     pass

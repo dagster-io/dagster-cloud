@@ -49,7 +49,7 @@ class Meter:
             )
             self._instruments[key] = instrument
 
-        return cast(Counter, instrument)
+        return cast("Counter", instrument)
 
     def get_up_down_counter(
         self, name: str, description: str = "", unit: str = ""
@@ -64,7 +64,7 @@ class Meter:
             )
             self._instruments[key] = instrument
 
-        return cast(UpDownCounter, instrument)
+        return cast("UpDownCounter", instrument)
 
     def get_histogram(self, name: str, description: str = "", unit: str = "") -> Histogram:
         key = (name, description, unit)
@@ -77,7 +77,7 @@ class Meter:
             )
             self._instruments[key] = instrument
 
-        return cast(Histogram, instrument)
+        return cast("Histogram", instrument)
 
     def get_observable_counter(
         self,
@@ -97,7 +97,7 @@ class Meter:
             )
             self._instruments[key] = instrument
 
-        return cast(ObservableCounter, instrument)
+        return cast("ObservableCounter", instrument)
 
     def get_observable_up_down_counter(
         self,
@@ -117,7 +117,7 @@ class Meter:
             )
             self._instruments[key] = instrument
 
-        return cast(ObservableUpDownCounter, instrument)
+        return cast("ObservableUpDownCounter", instrument)
 
     def get_observable_gauge(
         self,
@@ -137,4 +137,4 @@ class Meter:
             )
             self._instruments[key] = instrument
 
-        return cast(ObservableGauge, instrument)
+        return cast("ObservableGauge", instrument)

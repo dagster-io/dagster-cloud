@@ -141,7 +141,7 @@ class MultiPexManager(AbstractContextManager):
             if isinstance(pex_server_or_error, PexErrorEntry):
                 return pex_server_or_error.error
 
-            return cast(PexProcessEntry, self._pex_servers[handle_id]).grpc_client
+            return cast("PexProcessEntry", self._pex_servers[handle_id]).grpc_client
 
     def get_active_pex_servers(self) -> list[PexProcessEntry]:
         with self._pex_servers_lock:

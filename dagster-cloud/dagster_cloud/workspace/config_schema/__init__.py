@@ -93,7 +93,7 @@ def process_workspace_config(workspace_config) -> dict[str, Any]:
         if not validation.success:
             check.failed(
                 ", ".join(
-                    [error.message for error in cast(list[EvaluationError], validation.errors)]
+                    [error.message for error in cast("list[EvaluationError]", validation.errors)]
                 ),
             )
         return workspace_config

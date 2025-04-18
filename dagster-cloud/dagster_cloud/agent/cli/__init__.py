@@ -239,7 +239,7 @@ def _get_agent_logging_config(
     agent_logging_config: Optional[Mapping[str, object]] = None
     if agent_logging_config_path:
         agent_logging_config = cast(
-            Mapping[str, object],
+            "Mapping[str, object]",
             load_yaml_from_globs(str(agent_logging_config_path)),
         )
     elif agent_logging_config_string:

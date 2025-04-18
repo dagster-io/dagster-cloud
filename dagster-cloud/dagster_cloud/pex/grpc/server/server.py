@@ -242,7 +242,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         except Exception as e:
             if (
                 isinstance(e, grpc.RpcError)
-                and cast(grpc.RpcError, e).code() == grpc.StatusCode.UNIMPLEMENTED
+                and cast("grpc.RpcError", e).code() == grpc.StatusCode.UNIMPLEMENTED
             ):
                 context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
@@ -278,7 +278,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         except Exception as e:
             if (
                 isinstance(e, grpc.RpcError)
-                and cast(grpc.RpcError, e).code() == grpc.StatusCode.UNIMPLEMENTED
+                and cast("grpc.RpcError", e).code() == grpc.StatusCode.UNIMPLEMENTED
             ):
                 context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,

@@ -38,6 +38,7 @@ from dagster._core.storage.event_log.base import (
     PoolLimit,
 )
 from dagster._core.storage.partition_status_cache import AssetStatusCacheValue
+from dagster._core.types.pagination import PaginatedResults
 from dagster._serdes import ConfigurableClass, ConfigurableClassData, serialize_value
 from dagster._time import datetime_from_timestamp
 from dagster._utils.concurrency import (
@@ -97,6 +98,7 @@ from .queries import (
     GET_MATERIALIZATION_COUNT_BY_PARTITION,
     GET_MATERIALIZED_PARTITIONS,
     GET_MAXIMUM_RECORD_ID,
+    GET_PAGINATED_DYNAMIC_PARTITIONS_QUERY,
     GET_POOL_CONFIG_QUERY,
     GET_POOL_LIMITS_QUERY,
     GET_RECORDS_FOR_RUN_QUERY,
@@ -473,9 +475,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     @property
     def agent_instance(self) -> "DagsterCloudAgentInstance":
-        from dagster_cloud.instance import DagsterCloudAgentInstance
-
-        return cast(DagsterCloudAgentInstance, self._instance)
+        return cast("DagsterCloudAgentInstance", self._instance)
 
     def _execute_query(self, query, variables=None, headers=None, idempotent_mutation=False):
         return self._graphql_client.execute(
@@ -507,12 +507,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                 "runId": check.str_param(run_id, "run_id"),
                 "cursor": check.opt_str_param(cursor, "cursor"),
                 "ofType": (
-                    cast(DagsterEventType, of_type).value
+                    cast("DagsterEventType", of_type).value
                     if of_type and not is_of_type_set
                     else None
                 ),
                 "ofTypes": (
-                    [dagster_type.value for dagster_type in cast(set, of_type)]
+                    [dagster_type.value for dagster_type in cast("set", of_type)]
                     if of_type and is_of_type_set
                     else None
                 ),
@@ -984,6 +984,28 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             variables={"partitionsDefName": partitions_def_name},
         )
         return res["data"]["eventLogs"]["getDynamicPartitions"]
+
+    def get_paginated_dynamic_partitions(
+        self, partitions_def_name: str, limit: int, ascending: bool, cursor: Optional[str] = None
+    ) -> PaginatedResults[str]:
+        check.str_param(partitions_def_name, "partitions_def_name")
+        check.int_param(limit, "limit")
+        check.bool_param(ascending, "ascending")
+        check.opt_str_param(cursor, "cursor")
+        res = self._execute_query(
+            GET_PAGINATED_DYNAMIC_PARTITIONS_QUERY,
+            variables={
+                "partitionsDefName": partitions_def_name,
+                "limit": limit,
+                "ascending": ascending,
+                "cursor": cursor,
+            },
+        )
+        return PaginatedResults(
+            results=res["data"]["eventLogs"]["getPaginatedDynamicPartitions"]["results"],
+            cursor=res["data"]["eventLogs"]["getPaginatedDynamicPartitions"]["cursor"],
+            has_more=res["data"]["eventLogs"]["getPaginatedDynamicPartitions"]["hasMore"],
+        )
 
     def has_dynamic_partition(self, partitions_def_name: str, partition_key: str) -> bool:
         check.str_param(partitions_def_name, "partitions_def_name")
