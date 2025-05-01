@@ -259,6 +259,7 @@ class PexS3Registry:
                     # since we combine multiple venvs, we need non hermetic scripts
                     "--non-hermetic-scripts",
                     venv_dir,
+                    "--pip",
                 ],
                 stderr=subprocess.STDOUT,
             )
