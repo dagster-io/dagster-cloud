@@ -1,5 +1,6 @@
 import json
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import datetime
 from typing import Any, Callable, Optional, Union
 
 import dagster._check as check
@@ -190,6 +191,11 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             query, variable_values=variables, idempotent_mutation=idempotent_mutation
         )
 
+    def add_historical_run(
+        self, dagster_run: DagsterRun, run_creation_time: datetime
+    ) -> DagsterRun:
+        raise NotImplementedError("add_historical run is not yet supported in the user cloud")
+
     def add_run(self, dagster_run: DagsterRun):
         check.inst_param(dagster_run, "dagster_run", DagsterRun)
         res = self._execute_query(
@@ -211,7 +217,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
         return dagster_run
 
-    def handle_run_event(self, run_id: str, event: DagsterEvent):
+    def handle_run_event(
+        self, run_id: str, event: DagsterEvent, update_timestamp: Optional[datetime] = None
+    ):
         raise NotImplementedError("Should never be called by an agent client")
 
     @property
