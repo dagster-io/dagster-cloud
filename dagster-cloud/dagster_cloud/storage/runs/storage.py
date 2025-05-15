@@ -40,6 +40,7 @@ from .queries import (
     ADD_BACKFILL_MUTATION,
     ADD_DAEMON_HEARTBEAT_MUTATION,
     ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION,
+    ADD_HISTORICAL_RUN_MUTATION,
     ADD_PIPELINE_SNAPSHOT_MUTATION,
     ADD_RUN_MUTATION,
     ADD_RUN_TAGS_MUTATION,
@@ -194,7 +195,25 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def add_historical_run(
         self, dagster_run: DagsterRun, run_creation_time: datetime
     ) -> DagsterRun:
-        raise NotImplementedError("add_historical run is not yet supported in the user cloud")
+        check.inst_param(dagster_run, "dagster_run", DagsterRun)
+        res = self._execute_query(
+            ADD_HISTORICAL_RUN_MUTATION,
+            variables={
+                "serializedPipelineRun": serialize_value(dagster_run),
+                "runCreationTime": run_creation_time.timestamp(),
+            },
+        )
+        result = res["data"]["runs"]["addHistoricalRun"]
+        error = result.get("error")
+        # Special-case some errors to match the RunStorage API
+        if error:
+            if error["className"] == "DagsterRunAlreadyExists":
+                raise DagsterRunAlreadyExists(error["message"])
+            if error["className"] == "DagsterSnapshotDoesNotExist":
+                raise DagsterSnapshotDoesNotExist(error["message"])
+            else:
+                raise DagsterCloudAgentServerError(res)
+        return dagster_run
 
     def add_run(self, dagster_run: DagsterRun):
         check.inst_param(dagster_run, "dagster_run", DagsterRun)

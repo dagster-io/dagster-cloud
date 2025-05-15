@@ -43,6 +43,21 @@ ADD_RUN_MUTATION = (
 """
 )
 
+ADD_HISTORICAL_RUN_MUTATION = (
+    ERROR_FRAGMENT
+    + """
+    mutation addHistoricalRunMutation($serializedPipelineRun: String!, $runCreationTime: Float!) {
+        runs {
+            addHistoricalRun(serializedPipelineRun: $serializedPipelineRun, runCreationTime: $runCreationTime) {
+                ok
+                error {
+                    ...errorFragment
+                }
+            }
+        }
+    }
+    """
+)
 
 GET_RUNS_QUERY = """
     query getRunsQuery($filters: RunsFilter, $cursor: String, $limit: Int, $bucketBy: RunBucket, $ascending: Boolean) {
