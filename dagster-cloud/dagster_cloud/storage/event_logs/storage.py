@@ -624,6 +624,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
                     if event.dagster_event is not None
                     else "user",
                 )
+                event_span.set_attribute("run_id", event.run_id)
                 yield
 
     def store_event(self, event: EventLogEntry):
