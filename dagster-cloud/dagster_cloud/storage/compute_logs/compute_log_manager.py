@@ -1,5 +1,6 @@
+import os
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Optional
+from typing import IO, TYPE_CHECKING, Any, Optional
 
 import requests
 from dagster import (
@@ -8,14 +9,15 @@ from dagster import (
     StringSource,
     _check as check,
 )
-from dagster._core.storage.cloud_storage_compute_log_manager import CloudStorageComputeLogManager
+from dagster._core.storage.cloud_storage_compute_log_manager import (
+    TruncatingCloudStorageComputeLogManager,
+)
 from dagster._core.storage.compute_log_manager import ComputeIOType
 from dagster._core.storage.local_compute_log_manager import (
     IO_TYPE_EXTENSION,
     LocalComputeLogManager,
 )
 from dagster._serdes import ConfigurableClass, ConfigurableClassData
-from dagster._utils import ensure_file
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from dagster_shared import seven
@@ -27,7 +29,7 @@ if TYPE_CHECKING:
 
 
 class CloudComputeLogManager(
-    CloudStorageComputeLogManager["DagsterCloudAgentInstance"], ConfigurableClass
+    TruncatingCloudStorageComputeLogManager["DagsterCloudAgentInstance"], ConfigurableClass
 ):
     def __init__(
         self,
@@ -47,6 +49,7 @@ class CloudComputeLogManager(
         self._local_manager = LocalComputeLogManager(local_dir)
         self._upload_interval = check.opt_int_param(upload_interval, "upload_interval")
         self._inst_data = check.opt_inst_param(inst_data, "inst_data", ConfigurableClassData)
+        super().__init__()
 
     @property
     def inst_data(self):
@@ -88,14 +91,15 @@ class CloudComputeLogManager(
         """Returns whether the cloud storage contains logs for a given log key."""
         return False
 
-    def upload_to_cloud_storage(
-        self, log_key: Sequence[str], io_type: ComputeIOType, partial=False
+    def _upload_file_obj(
+        self, data: IO[bytes], log_key: Sequence[str], io_type: ComputeIOType, partial=False
     ):
         path = self.local_manager.get_captured_local_path(log_key, IO_TYPE_EXTENSION[io_type])
-        ensure_file(path)
+        size_bytes = os.stat(path).st_size
         params: dict[str, Any] = {
             "log_key": log_key,
             "io_type": io_type.value,
+            "size_bytes": size_bytes,
             # for back-compat
             "run_id": log_key[0],
             "key": log_key[-1],
@@ -115,12 +119,11 @@ class CloudComputeLogManager(
         if resp_data.get("skip_upload"):
             return
 
-        with open(path, "rb") as f:
-            self._upload_session.post(
-                resp_data["url"],
-                data=resp_data["fields"],
-                files={"file": f},
-            )
+        self._upload_session.post(
+            resp_data["url"],
+            data=resp_data["fields"],
+            files={"file": data},
+        )
 
     def download_from_cloud_storage(
         self, log_key: Sequence[str], io_type: ComputeIOType, partial=False
