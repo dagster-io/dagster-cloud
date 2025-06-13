@@ -1044,10 +1044,16 @@ class DagsterCloudAgent:
                         client.cancel_execution(CancelExecutionRequest(run_id=run.run_id))
 
             return DagsterCloudApiSuccess()
-
+        elif api_name in (
+            DagsterCloudApi.CHECK_STEP_HEALTH,
+            DagsterCloudApi.TERMINATE_STEP,
+            DagsterCloudApi.LAUNCH_STEP,
+            DagsterCloudApi.CHECK_RUN_HEALTH,
+            DagsterCloudApi.LOAD_REPOSITORIES,
+        ):
+            check.failed(f"Unexpected deprecated request type {api_name}")
         else:
             check.assert_never(api_name)
-            raise Exception(f"Unexpected dagster cloud api call {api_name}")
 
     def _process_api_request(
         self,

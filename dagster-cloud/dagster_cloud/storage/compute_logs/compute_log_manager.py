@@ -123,6 +123,7 @@ class CloudComputeLogManager(
             resp_data["url"],
             data=resp_data["fields"],
             files={"file": data},
+            timeout=self._instance.dagster_cloud_api_timeout,
         )
 
     def download_from_cloud_storage(

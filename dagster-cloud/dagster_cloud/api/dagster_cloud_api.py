@@ -84,7 +84,6 @@ class DagsterCloudUploadWorkspaceResponse:
 @whitelist_for_serdes
 class DagsterCloudApi(Enum):
     CHECK_FOR_WORKSPACE_UPDATES = "CHECK_FOR_WORKSPACE_UPDATES"
-    LOAD_REPOSITORIES = "LOAD_REPOSITORIES"
     GET_EXTERNAL_EXECUTION_PLAN = "GET_EXTERNAL_EXECUTION_PLAN"
     GET_SUBSET_EXTERNAL_PIPELINE_RESULT = "GET_SUBSET_EXTERNAL_PIPELINE_RESULT"
     GET_EXTERNAL_PARTITION_CONFIG = "GET_EXTERNAL_PARTITION_CONFIG"
@@ -98,13 +97,15 @@ class DagsterCloudApi(Enum):
     GET_EXTERNAL_NOTEBOOK_DATA = "GET_EXTERNAL_NOTEBOOK_DATA"
 
     LAUNCH_RUN = "LAUNCH_RUN"
-    CHECK_RUN_HEALTH = "CHECK_RUN_HEALTH"  # deprecated, agents now surface this in heartbeats
     TERMINATE_RUN = "TERMINATE_RUN"
+
+    PING_LOCATION = "PING_LOCATION"  # Signal that a location is in use and should keep servers up
+
+    CHECK_RUN_HEALTH = "CHECK_RUN_HEALTH"  # deprecated, agents now surface this in heartbeats
     LAUNCH_STEP = "LAUNCH_STEP"  # deprecated with cloud executor
     CHECK_STEP_HEALTH = "CHECK_STEP_HEALTH"  # deprecated with cloud executor
     TERMINATE_STEP = "TERMINATE_STEP"  # deprecated with cloud executor
-
-    PING_LOCATION = "PING_LOCATION"  # Signal that a location is in use and should keep servers up
+    LOAD_REPOSITORIES = "LOAD_REPOSITORIES"  # deprecated
 
     def __structlog__(self):
         return self.name
