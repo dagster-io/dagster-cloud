@@ -14,7 +14,7 @@ from dagster._grpc.__generated__.dagster_api_pb2_grpc import (
     DagsterApiServicer,
     add_DagsterApiServicer_to_server,
 )
-from dagster._grpc.client import DEFAULT_GRPC_TIMEOUT
+from dagster._grpc.client import DEFAULT_GRPC_TIMEOUT, DEFAULT_REPOSITORY_GRPC_TIMEOUT
 from dagster._grpc.server import server_termination_target
 from dagster._grpc.types import GetCurrentRunsResult, SensorExecutionArgs
 from dagster._grpc.utils import max_rx_bytes, max_send_bytes
@@ -201,7 +201,9 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         return self._query("GetCurrentImage", request, context)
 
     def StreamingExternalRepository(self, request, context):
-        return self._streaming_query("StreamingExternalRepository", request, context)
+        return self._streaming_query(
+            "StreamingExternalRepository", request, context, timeout=DEFAULT_REPOSITORY_GRPC_TIMEOUT
+        )
 
     def Heartbeat(self, request, context):
         return self._query("Heartbeat", request, context)

@@ -62,8 +62,21 @@ def process_workspace_config(workspace_config) -> dict[str, Any]:
             python_file = config.get("python_file")
             package_name = config.get("package_name")
             module_name = config.get("module_name")
+            autoload_defs_module_name = config.get("autoload_defs_module_name")
             check.invariant(
-                len([val for val in [python_file, package_name, module_name] if val]) == 1,
+                len(
+                    [
+                        val
+                        for val in [
+                            python_file,
+                            package_name,
+                            module_name,
+                            autoload_defs_module_name,
+                        ]
+                        if val
+                    ]
+                )
+                == 1,
                 "Must supply exactly one of a file name, a package name, or a module name",
             )
 
@@ -73,7 +86,8 @@ def process_workspace_config(workspace_config) -> dict[str, Any]:
             new_location = {
                 k: v
                 for k, v in location.items()
-                if k not in ("python_file", "package_name", "module_name")
+                if k
+                not in ("python_file", "package_name", "module_name", "autoload_defs_module_name")
             }
             new_location["code_source"] = {}
             if "python_file" in location:
@@ -82,6 +96,10 @@ def process_workspace_config(workspace_config) -> dict[str, Any]:
                 new_location["code_source"]["package_name"] = location["package_name"]
             elif "module_name" in location:
                 new_location["code_source"]["module_name"] = location["module_name"]
+            elif "autoload_defs_module_name" in location:
+                new_location["code_source"]["autoload_defs_module_name"] = location[
+                    "autoload_defs_module_name"
+                ]
 
             new_location["location_name"] = name
             updated_locations.append(new_location)
@@ -194,6 +212,10 @@ CONFIG_SCHEMA_FIELDS = {
                     config=str,
                     description="Python module containing the target Dagster repository.",
                 ),
+                "autoload_defs_module_name": Field(
+                    config=str,
+                    description="Python module to automatically load Dagster definitions from.",
+                ),
             },
         ),
         description="Python entry point for the code location.",
@@ -281,6 +303,11 @@ LEGACY_CONFIG_SCHEMA_FIELDS = {
         config=StringSource,
         is_required=False,
         description="Python module containing the target Dagster repository.",
+    ),
+    "autoload_defs_module_name": Field(
+        config=str,
+        is_required=False,
+        description="Python module to automatically load Dagster definitions from.",
     ),
 }
 LEGACY_LOCATION_CONFIG_SCHEMA = Shape(fields=LEGACY_CONFIG_SCHEMA_FIELDS)

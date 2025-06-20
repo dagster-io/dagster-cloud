@@ -125,4 +125,11 @@ def get_grpc_server_env(
             if code_location_deploy_data.executable_path
             else {}
         ),
+        **(
+            {
+                "DAGSTER_CLI_API_GRPC_AUTOLOAD_DEFS_MODULE_NAME": code_location_deploy_data.autoload_defs_module_name
+            }
+            if code_location_deploy_data.autoload_defs_module_name
+            else {}
+        ),
     }
