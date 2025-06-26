@@ -11,6 +11,7 @@ import dagster._check as check
 from dagster import AssetCheckKey, DagsterInvalidInvocationError, PartitionsDefinition
 from dagster._core.assets import AssetDetails
 from dagster._core.definitions.events import AssetKey, ExpectationResult
+from dagster._core.definitions.freshness import FreshnessStateRecord
 from dagster._core.event_api import (
     AssetRecordsFilter,
     EventLogRecord,
@@ -778,6 +779,11 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             _asset_record_from_graphql(result)
             for result in res["data"]["eventLogs"]["getAssetRecords"]
         ]
+
+    def get_freshness_state_records(
+        self, keys: Sequence[AssetKey]
+    ) -> Mapping[AssetKey, FreshnessStateRecord]:
+        raise NotImplementedError("Not callable from user cloud")
 
     def has_asset_key(self, asset_key: AssetKey):
         check.inst_param(asset_key, "asset_key", AssetKey)
