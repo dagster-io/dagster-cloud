@@ -1516,9 +1516,25 @@ class DagsterCloudUserCodeLauncher(
         # thread-safe since reconcile_count is an integer
         return self._reconcile_count > 0
 
-    def _make_check_on_running_server_endpoint(self, server_endpoint: ServerEndpoint):
-        # Ensure that server_endpoint is bound correctly
-        return lambda: server_endpoint.create_client().ping("")
+    def _make_check_on_running_server_endpoint(
+        self, server_endpoint: ServerEndpoint
+    ) -> Callable[[], Union[ListRepositoriesResponse, SerializableErrorInfo]]:
+        return lambda: deserialize_value(
+            server_endpoint.create_client().list_repositories(),
+            (ListRepositoriesResponse, SerializableErrorInfo),
+        )
+
+    def _trigger_recovery_server_restart(self, deployment_location: DeploymentAndLocation):
+        del self._actual_entries[deployment_location]
+
+        if deployment_location in self._first_unavailable_times:
+            del self._first_unavailable_times[deployment_location]
+
+        # redeploy the multipex server in this case as well to ensure a fresh start
+        # (and ensure that we don't try to create the same PexServerHandle again and
+        # delete the code location in a loop)
+        if deployment_location in self._multipex_servers:
+            del self._multipex_servers[deployment_location]
 
     def _refresh_actual_entries(self) -> None:
         for deployment_location, multipex_server in self._multipex_servers.items():
@@ -1596,10 +1612,16 @@ class DagsterCloudUserCodeLauncher(
 
                 deployment_name, location_name = deployment_location
                 try:
-                    future.result()
-
+                    response_or_error = future.result()
                     # Successful ping resets the tracked last unavailable time for this code server, if set
                     self._first_unavailable_times.pop(deployment_location, None)
+                    if isinstance(response_or_error, SerializableErrorInfo):
+                        # This can happen if the server was previously healthy but restarted
+                        # and moved into an error state - attempt to recover
+                        self._logger.exception(
+                            f"Code server for {deployment_name}:{location_name} unexpectedly moved into an error state. Deploying a new code server. Observed error: \n{response_or_error.to_string()}"
+                        )
+                        self._trigger_recovery_server_restart(deployment_location)
                 except Exception as e:
                     if (
                         isinstance(e, DagsterUserCodeUnreachableError)
@@ -1622,14 +1644,7 @@ class DagsterCloudUserCodeLauncher(
                             self._logger.warning(
                                 f"Code server for {deployment_name}:{location_name} has been unresponsive for more than {unavailable_server_timeout} seconds. Deploying a new code server."
                             )
-                            del self._actual_entries[deployment_location]
-                            del self._first_unavailable_times[deployment_location]
-
-                            # redeploy the multipex server in this case as well to ensure a fresh start
-                            # (and ensure that we don't try to create the same PexServerHandle again and
-                            # delete the code location in a loop)
-                            if deployment_location in self._multipex_servers:
-                                del self._multipex_servers[deployment_location]
+                            self._trigger_recovery_server_restart(deployment_location)
 
                     else:
                         self._logger.exception(
