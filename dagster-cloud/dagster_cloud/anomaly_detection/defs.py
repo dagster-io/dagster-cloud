@@ -7,24 +7,27 @@ from dagster import (
     MetadataValue,
     _check as check,
 )
-from dagster._core.definitions.asset_check_factories.freshness_checks.last_update import (
+from dagster._core.definitions.asset_checks.asset_check_factories.freshness_checks.last_update import (
     construct_description,
 )
-from dagster._core.definitions.asset_check_factories.utils import (
+from dagster._core.definitions.asset_checks.asset_check_factories.utils import (
     FRESH_UNTIL_METADATA_KEY,
     LAST_UPDATED_TIMESTAMP_METADATA_KEY,
     LOWER_BOUND_TIMESTAMP_METADATA_KEY,
     assets_to_keys,
 )
-from dagster._core.definitions.asset_check_result import AssetCheckResult
-from dagster._core.definitions.asset_check_spec import (
+from dagster._core.definitions.asset_checks.asset_check_result import AssetCheckResult
+from dagster._core.definitions.asset_checks.asset_check_spec import (
     AssetCheckKey,
     AssetCheckSeverity,
     AssetCheckSpec,
 )
-from dagster._core.definitions.asset_checks import AssetChecksDefinition
+from dagster._core.definitions.asset_checks.asset_checks_definition import AssetChecksDefinition
 from dagster._core.definitions.asset_key import AssetKey
-from dagster._core.definitions.assets import AssetsDefinition, unique_id_from_asset_and_check_keys
+from dagster._core.definitions.assets.definition.assets_definition import (
+    AssetsDefinition,
+    unique_id_from_asset_and_check_keys,
+)
 from dagster._core.definitions.decorators.asset_check_decorator import multi_asset_check
 from dagster._core.definitions.events import CoercibleToAssetKey
 from dagster._core.definitions.source_asset import SourceAsset

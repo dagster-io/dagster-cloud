@@ -33,7 +33,7 @@ def get_current_context_and_asset_key() -> tuple[
 def get_asset_key_for_output(
     context: Union[OpExecutionContext, AssetExecutionContext], output_name: str
 ) -> Optional[AssetKey]:
-    asset_key = context.job_def.asset_layer.asset_key_for_output(
+    asset_key = context.job_def.asset_layer.get_asset_key_for_node_output(
         node_handle=context.op_handle, output_name=output_name
     )
     if asset_key is None:

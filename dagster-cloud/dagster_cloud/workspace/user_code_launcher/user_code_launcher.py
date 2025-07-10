@@ -1626,7 +1626,8 @@ class DagsterCloudUserCodeLauncher(
                     if (
                         isinstance(e, DagsterUserCodeUnreachableError)
                         and isinstance(e.__cause__, grpc.RpcError)
-                        and cast("grpc.RpcError", e.__cause__).code() == grpc.StatusCode.UNAVAILABLE
+                        and cast("grpc.RpcError", e.__cause__).code()
+                        in {grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN}
                     ):
                         first_unavailable_time = self._first_unavailable_times.get(
                             deployment_location

@@ -189,7 +189,12 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             return dagster_api_pb2.ListRepositoriesReply(
                 serialized_list_repositories_response_or_error=serialize_value(client_or_error)
             )
-        return client_or_error._get_response("ListRepositories", request)  # noqa: SLF001
+
+        try:
+            return client_or_error._get_response("ListRepositories", request)  # noqa: SLF001
+        except grpc.RpcError as e:
+            # Surface the grpc error to the caller
+            context.abort(e.code(), e.details())
 
     def Ping(self, request, context):
         return self._query("Ping", request, context)
