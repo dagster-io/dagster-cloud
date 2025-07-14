@@ -1,18 +1,13 @@
 [build-system]
-requires = [
-    "setuptools>=61.2",
-]
+requires = ["setuptools>=61.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dagster-cloud"
 requires-python = ">=3.9,<3.14"
-dynamic = [
-    "version",
-]
-authors = [
-    { name = "Elementl", email = "support@elementl.com" },
-]
+dynamic = ["version"]
+authors = [{name = "Elementl", email = "support@elementl.com"}]
+license = {text = "Apache-2.0"}
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -29,9 +24,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.11.3",
-    "dagster-shared==1.11.3",
-    "dagster-cloud-cli==1.11.3",
+    "dagster",
+    "dagster-shared",
+    "dagster-cloud-cli",
     "opentelemetry-api>=1.27.0,<2",
     "opentelemetry-sdk>=1.27.0,<2",
     "opentelemetry-exporter-otlp-proto-grpc>=1.27.0,<2",
@@ -41,9 +36,6 @@ dependencies = [
     "requests",
     "typer",
 ]
-
-[project.license]
-text = "Apache-2.0"
 
 [project.readme]
 file = "README.md"
@@ -83,41 +75,22 @@ tests = [
     "dbt-duckdb",
     "dagster-dbt",
     "dagster-k8s",
-    "dagster-cloud-backend",
+    "dagster-cloud-backend"
 ]
-insights = [
-    "pyarrow",
-]
-docker = [
-    "docker",
-    "dagster-docker==0.27.3",
-]
-kubernetes = [
-    "kubernetes",
-    "dagster-k8s==0.27.3",
-]
-ecs = [
-    "dagster-aws==0.27.3",
-    "boto3",
-]
-sandbox = [
-    "supervisor",
-]
-pex = [
-    "boto3",
-]
-serverless = [
-    "boto3",
-]
+insights = ["pyarrow"]
+docker = ["docker", "dagster-docker"]
+kubernetes = ["kubernetes", "dagster-k8s"]
+ecs = ["dagster-aws", "boto3"]
+sandbox = ["supervisor"]
+pex = ["boto3"]
+serverless = ["boto3"]
 
 [tool.setuptools]
 include-package-data = true
 
-[tool.setuptools.dynamic.version]
-attr = "dagster_cloud.version.__version__"
+[tool.setuptools.dynamic]
+version = {attr = "dagster_cloud.version.__version__"}
 
 [tool.setuptools.packages.find]
-exclude = [
-    "dagster_cloud_tests*",
-]
+exclude = ["dagster_cloud_tests*"]
 namespaces = false
