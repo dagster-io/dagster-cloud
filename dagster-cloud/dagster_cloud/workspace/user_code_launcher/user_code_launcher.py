@@ -45,7 +45,11 @@ from dagster._serdes import (
     whitelist_for_serdes,
 )
 from dagster._time import get_current_timestamp
-from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
+from dagster._utils.error import (
+    SerializableErrorInfo,
+    serializable_error_info_from_exc_info,
+    truncate_serialized_error,
+)
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import raise_http_error
@@ -91,7 +95,6 @@ from dagster_cloud.pex.grpc.types import (
     ShutdownPexServerArgs,
 )
 from dagster_cloud.util import diff_serializable_namedtuple_map
-from dagster_cloud.util.errors import truncate_serialized_error
 
 DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT = 180
 DEFAULT_MAX_TTL_SERVERS = 25

@@ -21,7 +21,11 @@ from dagster._serdes import deserialize_value, serialize_value
 from dagster._time import get_current_datetime, get_current_timestamp
 from dagster._utils.cached_method import cached_method
 from dagster._utils.container import retrieve_containerized_utilization_metrics
-from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
+from dagster._utils.error import (
+    SerializableErrorInfo,
+    serializable_error_info_from_exc_info,
+    truncate_serialized_error,
+)
 from dagster._utils.interrupts import raise_interrupts_as
 from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
@@ -45,7 +49,6 @@ from dagster_cloud.api.dagster_cloud_api import (
 )
 from dagster_cloud.batching import Batcher
 from dagster_cloud.instance import DagsterCloudAgentInstance
-from dagster_cloud.util.errors import truncate_serialized_error
 from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,

@@ -11,9 +11,7 @@ from dagster._core.events import (
     StepRetryData,
 )
 from dagster._core.events.log import EventLogEntry
-from dagster._utils.error import SerializableErrorInfo
-
-from dagster_cloud.util.errors import truncate_serialized_error
+from dagster._utils.error import SerializableErrorInfo, truncate_serialized_error
 
 
 def _get_error_character_size_limit() -> int:
