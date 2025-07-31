@@ -308,6 +308,19 @@ class DagsterCloudAgent:
 
         self._check_initial_deployment_names()
 
+        serving = []
+        queues = list(filter(None, self._instance.agent_queues_config.queues))
+        if queues:
+            serving.append(f"queues{queues}")
+        if self._instance.deployment_names:
+            serving.append(f"deployments{self._instance.deployment_names}")
+        if self._instance.include_all_serverless_deployments:
+            serving.append("all serverless deployments")
+        if self._instance.includes_branch_deployments:
+            serving.append("branch deployments")
+
+        self._logger.info(f"Agent is serving: {', '.join(serving)}")
+
         self._check_update_workspace(
             user_code_launcher,
             upload_all=user_code_launcher.upload_snapshots_on_startup,
