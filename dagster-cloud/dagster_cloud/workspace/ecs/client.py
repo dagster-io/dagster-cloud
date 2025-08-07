@@ -64,6 +64,7 @@ class Client:
         grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
         launch_type: str = "FARGATE",
         show_debug_cluster_info: bool = True,
+        assign_public_ip: Optional[bool] = None,
     ):
         self.ecs = ecs_client if ecs_client else boto3.client("ecs", config=config)
         self.logs = boto3.client("logs", config=config)
@@ -85,6 +86,7 @@ class Client:
         self.grace_period = check.int_param(grace_period, "grace_period")
         self.launch_type = check.str_param(launch_type, "launch_type")
         self._namespace: Optional[str] = None
+        self._assign_public_ip_override = assign_public_ip
 
     @property
     def ec2(self):
@@ -115,14 +117,17 @@ class Client:
     @property
     @cached_method
     def network_configuration(self):
+        if self.launch_type != "FARGATE":
+            assign_public_ip = None
+        elif self._assign_public_ip_override is not None:
+            assign_public_ip = "ENABLED" if self._assign_public_ip_override else "DISABLED"
+        else:
+            assign_public_ip = self._infer_assign_public_ip()
+
         network_configuration = {
             "awsvpcConfiguration": {
                 "subnets": self.subnet_ids,
-                **(
-                    {"assignPublicIp": self._assign_public_ip()}
-                    if self.launch_type == "FARGATE"
-                    else {}
-                ),
+                **({"assignPublicIp": assign_public_ip} if assign_public_ip else {}),
             },
         }
 
@@ -760,7 +765,7 @@ class Client:
                 if service["Name"] == service_name:
                     return service["Id"]
 
-    def _assign_public_ip(self):
+    def _infer_assign_public_ip(self):
         # https://docs.aws.amazon.com/AmazonECS/latest/userguide/fargate-task-networking.html
         # Assign a public IP if any of the subnets are public
         route_tables = self.ec2.route_tables.filter(

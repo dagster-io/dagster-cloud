@@ -29,9 +29,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.11.4",
-    "dagster-shared==1.11.4",
-    "dagster-cloud-cli==1.11.4",
+    "dagster==1.11.5",
+    "dagster-shared==1.11.5",
+    "dagster-cloud-cli==1.11.5",
     "opentelemetry-api>=1.27.0,<2",
     "opentelemetry-sdk>=1.27.0,<2",
     "opentelemetry-exporter-otlp-proto-grpc>=1.27.0,<2",
@@ -90,14 +90,14 @@ insights = [
 ]
 docker = [
     "docker",
-    "dagster-docker==0.27.4",
+    "dagster-docker==0.27.5",
 ]
 kubernetes = [
     "kubernetes",
-    "dagster-k8s==0.27.4",
+    "dagster-k8s==0.27.5",
 ]
 ecs = [
-    "dagster-aws==0.27.4",
+    "dagster-aws==0.27.5",
     "boto3",
 ]
 sandbox = [

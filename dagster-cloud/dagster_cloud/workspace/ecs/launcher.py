@@ -90,6 +90,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         enable_ecs_exec=False,
         server_task_definition_prefix: str = "server",
         run_task_definition_prefix: str = "run",
+        assign_public_ip: Optional[bool] = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -182,6 +183,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             timeout=self._ecs_timeout,
             grace_period=self._ecs_grace_period,
             launch_type=self.launch_type,
+            assign_public_ip=assign_public_ip,
         )
         super().__init__(**kwargs)
 
@@ -296,6 +298,16 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 ),
                 "run_task_definition_prefix": Field(
                     str, is_required=False, default_value="dagsterrun"
+                ),
+                "assign_public_ip": Field(
+                    Noneable(bool),
+                    is_required=False,
+                    default_value=None,
+                    description=(
+                        "When using the FARGATE launch type, the launcher will attempt to automatically determine if it is "
+                        "necessary to assign a public IP to the ECS task. In complex network topologies, this automatic "
+                        "determination may not be accurate. In this case, you can explicitly set this value to True or False."
+                    ),
                 ),
             },
             SHARED_ECS_CONFIG,
