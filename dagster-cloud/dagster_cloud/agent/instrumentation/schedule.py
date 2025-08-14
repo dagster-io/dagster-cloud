@@ -1,6 +1,6 @@
 from dagster import deserialize_value
 from dagster._core.definitions.schedule_definition import ScheduleExecutionData
-from dagster._core.remote_representation import ScheduleExecutionErrorSnap
+from dagster._core.remote_representation.external_data import ScheduleExecutionErrorSnap
 
 from dagster_cloud.opentelemetry.observers.execution_observer import ExecutionObserverInstruments
 

@@ -7,7 +7,8 @@ from typing import Any, Optional, TypedDict, Union
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
 from dagster._core.events.log import EventLogEntry
-from dagster._core.remote_representation import CodeLocationOrigin, RepositorySnap
+from dagster._core.remote_origin import CodeLocationOrigin
+from dagster._core.remote_representation.external_data import RepositorySnap
 from dagster._core.storage.dagster_run import DagsterRun
 from dagster._core.utils import RequestUtilizationMetrics
 from dagster._record import IHaveNew, copy, record, record_custom

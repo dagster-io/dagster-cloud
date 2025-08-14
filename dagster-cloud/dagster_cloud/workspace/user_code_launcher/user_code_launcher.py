@@ -27,13 +27,13 @@ from dagster._core.definitions.selector import JobSelector
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.instance import MayHaveInstanceWeakref
 from dagster._core.launcher import RunLauncher
-from dagster._core.remote_representation import RemoteRepositoryOrigin
-from dagster._core.remote_representation.external_data import (
-    extract_serialized_job_snap_from_serialized_job_data_snap,
-)
-from dagster._core.remote_representation.origin import (
+from dagster._core.remote_origin import (
     CodeLocationOrigin,
     RegisteredCodeLocationOrigin,
+    RemoteRepositoryOrigin,
+)
+from dagster._core.remote_representation.external_data import (
+    extract_serialized_job_snap_from_serialized_job_data_snap,
 )
 from dagster._grpc.client import DagsterGrpcClient
 from dagster._grpc.types import GetCurrentImageResult, ListRepositoriesResponse
@@ -1534,8 +1534,8 @@ class DagsterCloudUserCodeLauncher(
             del self._first_unavailable_times[deployment_location]
 
         # redeploy the multipex server in this case as well to ensure a fresh start
-        # (and ensure that we don't try to create the same PexServerHandle again and
-        # delete the code location in a loop)
+        # if it resource contrained (and ensure that we don't try to create the same
+        # PexServerHandle again and delete the code location in a loop)
         if deployment_location in self._multipex_servers:
             del self._multipex_servers[deployment_location]
 
@@ -1568,11 +1568,11 @@ class DagsterCloudUserCodeLauncher(
                     if isinstance(grpc_server_or_error, DagsterCloudGrpcServer):
                         self._logger.warning(
                             "Pex servers disappeared for running code location %s:%s. Removing actual entries to"
-                            " activate reconciliation logic.",
+                            " activate reconciliation logic and deploy a new code server and multipex server.",
                             deployment_name,
                             location_name,
                         )
-                        del self._actual_entries[deployment_location]
+                        self._trigger_recovery_server_restart(deployment_location)
 
         # Check to see if any servers have become unresponsive
         unavailable_server_timeout = int(

@@ -1,6 +1,6 @@
 from dagster import deserialize_value
 from dagster._core.definitions.sensor_definition import SensorExecutionData
-from dagster._core.remote_representation import SensorExecutionErrorSnap
+from dagster._core.remote_representation.external_data import SensorExecutionErrorSnap
 
 from dagster_cloud.opentelemetry.observers.execution_observer import ExecutionObserverInstruments
 

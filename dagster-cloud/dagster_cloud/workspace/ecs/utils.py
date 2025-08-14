@@ -2,7 +2,7 @@ import hashlib
 import re
 from typing import Optional
 
-from dagster._core.remote_representation.origin import RemoteJobOrigin
+from dagster._core.remote_origin import RemoteJobOrigin
 from dagster_aws.ecs.utils import sanitize_family
 
 from ..user_code_launcher.utils import get_human_readable_label, unique_resource_name
