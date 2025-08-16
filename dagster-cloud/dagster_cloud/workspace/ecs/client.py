@@ -191,6 +191,7 @@ class Client:
         runtime_platform=None,
         mount_points=None,
         volumes=None,
+        readonly_root_filesystem=None,
         linux_parameters=None,
         health_check=None,
     ):
@@ -231,6 +232,7 @@ class Client:
             runtime_platform=runtime_platform,
             mount_points=mount_points,
             volumes=volumes,
+            readonly_root_filesystem=readonly_root_filesystem,
             linux_parameters=linux_parameters,
             health_check=health_check,
         )
@@ -272,6 +274,7 @@ class Client:
         runtime_platform=None,
         mount_points=None,
         volumes=None,
+        readonly_root_filesystem=None,
         health_check=None,
     ):
         logger = logger or logging.getLogger("dagster_cloud.EcsClient")
@@ -299,6 +302,7 @@ class Client:
             runtime_platform=runtime_platform,
             mount_points=mount_points,
             volumes=volumes,
+            readonly_root_filesystem=readonly_root_filesystem,
             linux_parameters=ECS_EXEC_LINUX_PARAMETERS if allow_ecs_exec else None,
             health_check=health_check,
         )
