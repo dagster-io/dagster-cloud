@@ -20,6 +20,7 @@ from dagster._core.instance.config import config_field_for_configurable_class
 from dagster._core.instance.ref import InstanceRef, configurable_class_data
 from dagster._core.launcher import DefaultRunLauncher, RunLauncher
 from dagster._core.storage.dagster_run import DagsterRun
+from dagster._core.storage.defs_state.base import DefsStateStorage
 from dagster._serdes import ConfigurableClassData
 from dagster_cloud_cli.core.graphql_client import (
     create_agent_graphql_client,
@@ -63,6 +64,11 @@ class DagsterCloudInstance(DagsterInstance):
         raise NotImplementedError(
             "run_retries.retry_on_asset_or_op_failure is a deployment setting and can only be accessed by a DeploymentScopedHostInstance"
         )
+
+    @property
+    def defs_state_storage(self) -> Optional[DefsStateStorage]:
+        # only DeploymentScopedHostInstance / DagsterCloudAgentInstance have a defs state storage
+        return None
 
 
 class DagsterCloudAgentInstance(DagsterCloudInstance):
@@ -143,6 +149,17 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._opentelemetry_controller: Optional[OpenTelemetryController] = None
 
         self._instance_uuid = str(uuid.uuid4())
+
+    @property
+    def defs_state_storage(self) -> Optional[DefsStateStorage]:
+        # temporary hack to avoid cases where the default BlobStorageStateStorage is used
+        from dagster_cloud.storage.defs_state.storage import GraphQLDefsStateStorage
+
+        return (
+            self._defs_state_storage
+            if isinstance(self._defs_state_storage, GraphQLDefsStateStorage)
+            else None
+        )
 
     def _get_processed_config(
         self, name: str, config: Optional[dict[str, Any]], config_type: dict[str, Any]
@@ -576,6 +593,10 @@ instance_class:
 
         defaults["secrets"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
             "dagster_cloud.secrets", "DagsterCloudSecretsLoader", empty_yaml
+        )
+
+        defaults["defs_state_storage"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+            "dagster_cloud.storage.defs_state", "GraphQLDefsStateStorage", empty_yaml
         )
 
         return defaults
