@@ -644,6 +644,7 @@ class DagsterCloudUserCodeLauncher(
             response = self._instance.requests_managed_retries_session.put(
                 url=upload_data.presigned_put_url,
                 data=file,
+                timeout=self._instance.dagster_cloud_api_timeout,
             )
             raise_http_error(response)
 
