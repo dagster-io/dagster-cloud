@@ -103,6 +103,7 @@ class CloudComputeLogManager(
             # for back-compat
             "run_id": log_key[0],
             "key": log_key[-1],
+            "method": "PUT",
         }
         if partial:
             params["partial"] = True
@@ -119,10 +120,9 @@ class CloudComputeLogManager(
         if resp_data.get("skip_upload"):
             return
 
-        self._upload_session.post(
+        self._upload_session.put(
             resp_data["url"],
-            data=resp_data["fields"],
-            files={"file": data},
+            data=data,
             timeout=self._instance.dagster_cloud_api_timeout,
         )
 
