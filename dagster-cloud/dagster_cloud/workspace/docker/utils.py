@@ -1,6 +1,6 @@
 import re
 
-from ..user_code_launcher.utils import unique_resource_name
+from dagster_cloud.workspace.user_code_launcher.utils import unique_resource_name
 
 
 def unique_docker_resource_name(deployment_name, location_name):

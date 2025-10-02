@@ -13,12 +13,12 @@ from dagster import (
 )
 from dagster._config import EvaluationError, StringSource, validate_config
 
-from .docker import SHARED_DOCKER_CONFIG
-from .ecs import (
+from dagster_cloud.workspace.config_schema.docker import SHARED_DOCKER_CONFIG
+from dagster_cloud.workspace.config_schema.ecs import (
     ECS_CONTAINER_CONTEXT_CONFIG as ECS_CONTAINER_CONTEXT_CONFIG,
     SHARED_ECS_CONFIG as SHARED_ECS_CONFIG,
 )
-from .kubernetes import SHARED_K8S_CONFIG
+from dagster_cloud.workspace.config_schema.kubernetes import SHARED_K8S_CONFIG
 
 
 def validate_workspace_location(workspace_location) -> Optional[list[str]]:

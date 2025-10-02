@@ -7,9 +7,11 @@ from dagster_gcp import BigQueryResource
 from dagster_gcp.bigquery.utils import setup_gcp_creds
 from google.cloud import bigquery
 
+from dagster_cloud.dagster_insights.bigquery.bigquery_utils import (
+    build_bigquery_cost_metadata,
+    marker_asset_key_for_job,
+)
 from dagster_cloud.dagster_insights.insights_utils import get_current_context_and_asset_key
-
-from .bigquery_utils import build_bigquery_cost_metadata, marker_asset_key_for_job
 
 OUTPUT_NON_ASSET_SIGIL = "__bigquery_query_metadata_"
 

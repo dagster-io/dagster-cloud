@@ -1,1 +1,1 @@
-from .launcher import EcsUserCodeLauncher as EcsUserCodeLauncher
+from dagster_cloud.workspace.ecs.launcher import EcsUserCodeLauncher as EcsUserCodeLauncher

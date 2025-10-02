@@ -11,8 +11,7 @@ from dagster_k8s.models import k8s_model_from_dict
 from kubernetes import client
 
 from dagster_cloud.instance import DagsterCloudAgentInstance
-
-from ..user_code_launcher.utils import (
+from dagster_cloud.workspace.user_code_launcher.utils import (
     deterministic_label_for_location,
     get_grpc_server_env,
     get_human_readable_label,

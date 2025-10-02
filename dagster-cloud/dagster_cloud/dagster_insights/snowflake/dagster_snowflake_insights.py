@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 
 from dagster import AssetKey, AssetsDefinition, ScheduleDefinition
 
-from .snowflake_utils import OPAQUE_ID_SQL_SIGIL
+from dagster_cloud.dagster_insights.snowflake.snowflake_utils import OPAQUE_ID_SQL_SIGIL
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection
@@ -78,10 +78,6 @@ HAVING ARRAY_SIZE(opaque_ids) > 0
 
     costs: list[tuple[str, float, str]] = []
 
-    print(
-        f"{len(results) if results else 0} annotated queries returned from snowflake query_history"
-    )
-
     if not results:
         return []
 
@@ -94,8 +90,4 @@ HAVING ARRAY_SIZE(opaque_ids) > 0
         for opaque_id in opaque_ids:
             costs.append((opaque_id, float(cost), query_id))
 
-    print(
-        f"Reported costs for {len(costs)} of {total} asset materializations found in the"
-        " query_history."
-    )
     return costs

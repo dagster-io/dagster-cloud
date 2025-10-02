@@ -24,7 +24,7 @@ from dagster._serdes import (
 )
 from typing_extensions import Self
 
-from .queries import (
+from dagster_cloud.storage.schedules.queries import (
     ADD_JOB_STATE_MUTATION,
     ALL_STORED_JOB_STATE_QUERY,
     CREATE_JOB_TICK_MUTATION,

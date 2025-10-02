@@ -31,9 +31,15 @@ from dagster_cloud.workspace.ecs.client import (
     DEFAULT_ECS_TIMEOUT,
     ECS_EXEC_LINUX_PARAMETERS,
     Client,
+    get_debug_ecs_prompt,
 )
+from dagster_cloud.workspace.ecs.run_launcher import CloudEcsRunLauncher
 from dagster_cloud.workspace.ecs.service import Service
-from dagster_cloud.workspace.ecs.utils import get_ecs_human_readable_label, unique_ecs_resource_name
+from dagster_cloud.workspace.ecs.utils import (
+    get_ecs_human_readable_label,
+    get_server_task_definition_family,
+    unique_ecs_resource_name,
+)
 from dagster_cloud.workspace.user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -49,10 +55,6 @@ from dagster_cloud.workspace.user_code_launcher.utils import (
     deterministic_label_for_location,
     get_grpc_server_env,
 )
-
-from .client import get_debug_ecs_prompt
-from .run_launcher import CloudEcsRunLauncher
-from .utils import get_server_task_definition_family
 
 EcsServerHandleType = Service
 

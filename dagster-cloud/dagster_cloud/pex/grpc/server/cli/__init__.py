@@ -9,8 +9,8 @@ from dagster._utils.interrupts import setup_interrupt_handlers
 from dagster_cloud_cli.core.workspace import PexMetadata
 from typer import Option, Typer
 
-from ..registry import PexS3Registry
-from ..server import run_multipex_server
+from dagster_cloud.pex.grpc.server.registry import PexS3Registry
+from dagster_cloud.pex.grpc.server.server import run_multipex_server
 
 app = Typer(hidden=True)
 

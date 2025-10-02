@@ -1,6 +1,6 @@
 from dagster import BoolSource, Enum, Field, IntSource, Map, Permissive, Shape, StringSource
 
-from ..enum import (
+from dagster_cloud.opentelemetry.enum import (
     AggregationTemporalityEnum,
     CompressionEnum,
     LoggingExporterEnum,

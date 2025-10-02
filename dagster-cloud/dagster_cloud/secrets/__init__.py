@@ -1,1 +1,1 @@
-from .loader import DagsterCloudSecretsLoader as DagsterCloudSecretsLoader
+from dagster_cloud.secrets.loader import DagsterCloudSecretsLoader as DagsterCloudSecretsLoader

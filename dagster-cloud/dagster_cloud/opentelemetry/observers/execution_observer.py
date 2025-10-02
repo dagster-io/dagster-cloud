@@ -5,8 +5,10 @@ from typing import Callable, Optional
 from dagster import DagsterError
 from dagster._time import get_current_timestamp
 
-from ..controller import OpenTelemetryController
-from .dagster_exception_handler import extract_dagster_error_attributes
+from dagster_cloud.opentelemetry.controller import OpenTelemetryController
+from dagster_cloud.opentelemetry.observers.dagster_exception_handler import (
+    extract_dagster_error_attributes,
+)
 
 ResultEvaluatorCallback = Callable[..., str]
 

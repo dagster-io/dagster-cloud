@@ -2,7 +2,6 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from pprint import pprint
 from typing import TYPE_CHECKING, Optional, Union
 
 from dagster import (
@@ -27,8 +26,10 @@ from dagster._core.storage.tags import (
     ASSET_PARTITION_RANGE_START_TAG,
 )
 
-from ..metrics_utils import put_cost_information
-from .dagster_snowflake_insights import get_cost_data_for_hour
+from dagster_cloud.dagster_insights.metrics_utils import put_cost_information
+from dagster_cloud.dagster_insights.snowflake.dagster_snowflake_insights import (
+    get_cost_data_for_hour,
+)
 
 if TYPE_CHECKING:
     from dagster_snowflake import SnowflakeConnection
@@ -154,7 +155,7 @@ def create_snowflake_insights_asset_and_schedule(
         )
 
         if dry_run:
-            pprint(costs)
+            pass
         else:
             context.log.info(
                 f"Submitting cost information for {len(costs)} queries to Dagster Insights"

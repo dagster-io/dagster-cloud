@@ -22,12 +22,13 @@ from dagster._serdes import deserialize_value, serialize_value
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
-from ..__generated__ import multi_pex_api_pb2
-from ..__generated__.multi_pex_api_pb2_grpc import (
+from dagster_cloud.pex.grpc.__generated__ import multi_pex_api_pb2
+from dagster_cloud.pex.grpc.__generated__.multi_pex_api_pb2_grpc import (
     MultiPexApiServicer,
     add_MultiPexApiServicer_to_server,
 )
-from ..types import (
+from dagster_cloud.pex.grpc.server.manager import MultiPexManager
+from dagster_cloud.pex.grpc.types import (
     CreatePexServerArgs,
     CreatePexServerResponse,
     GetCrashedPexServersArgs,
@@ -38,7 +39,6 @@ from ..types import (
     ShutdownPexServerArgs,
     ShutdownPexServerResponse,
 )
-from .manager import MultiPexManager
 
 
 class MultiPexApiServer(MultiPexApiServicer):

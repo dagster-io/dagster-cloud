@@ -28,19 +28,20 @@ from typing_extensions import Self
 from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.storage.tags import PEX_METADATA_TAG
-from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
-from dagster_cloud.workspace.user_code_launcher.utils import get_grpc_server_env
-
-from ..config_schema.docker import SHARED_DOCKER_CONFIG
-from ..user_code_launcher import (
+from dagster_cloud.workspace.config_schema.docker import SHARED_DOCKER_CONFIG
+from dagster_cloud.workspace.docker.utils import unique_docker_resource_name
+from dagster_cloud.workspace.user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudGrpcServer,
     DagsterCloudUserCodeLauncher,
     ServerEndpoint,
 )
-from ..user_code_launcher.utils import deterministic_label_for_location
-from .utils import unique_docker_resource_name
+from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
+from dagster_cloud.workspace.user_code_launcher.utils import (
+    deterministic_label_for_location,
+    get_grpc_server_env,
+)
 
 GRPC_SERVER_LABEL = "dagster_grpc_server"
 MULTIPEX_SERVER_LABEL = "dagster_multipex_server"

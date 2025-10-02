@@ -5,7 +5,10 @@ from typing import Optional
 from dagster._core.remote_origin import RemoteJobOrigin
 from dagster_aws.ecs.utils import sanitize_family
 
-from ..user_code_launcher.utils import get_human_readable_label, unique_resource_name
+from dagster_cloud.workspace.user_code_launcher.utils import (
+    get_human_readable_label,
+    unique_resource_name,
+)
 
 
 def unique_ecs_resource_name(deployment_name, location_name):

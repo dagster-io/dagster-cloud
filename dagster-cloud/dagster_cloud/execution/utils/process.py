@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from dagster_shared.ipc import interrupt_ipc_subprocess_pid, open_ipc_subprocess
 
-from . import TaskStatus
+from dagster_cloud.execution.utils import TaskStatus
 
 
 def launch_process(args: Sequence[str]) -> int:

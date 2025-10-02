@@ -20,8 +20,7 @@ from dagster_snowflake import SnowflakeConnection, SnowflakeResource
 from snowflake.connector.cursor import SnowflakeCursor
 
 from dagster_cloud.dagster_insights.insights_utils import get_current_context_and_asset_key
-
-from .snowflake_utils import meter_snowflake_query
+from dagster_cloud.dagster_insights.snowflake.snowflake_utils import meter_snowflake_query
 
 
 def get_current_context_and_asset_key_or_warn() -> tuple[

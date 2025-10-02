@@ -26,9 +26,7 @@ from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.cloud_run_launcher.process import CloudProcessRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.pex.grpc import MultiPexGrpcClient
-from dagster_cloud.workspace.user_code_launcher.utils import get_grpc_server_env
-
-from .user_code_launcher import (
+from dagster_cloud.workspace.user_code_launcher.user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
     DagsterCloudGrpcServer,
@@ -36,6 +34,7 @@ from .user_code_launcher import (
     ServerEndpoint,
     UserCodeLauncherEntry,
 )
+from dagster_cloud.workspace.user_code_launcher.utils import get_grpc_server_env
 
 CLEANUP_ZOMBIE_PROCESSES_INTERVAL = 5
 

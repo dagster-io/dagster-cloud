@@ -33,17 +33,7 @@ from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.constants import RESERVED_ENV_VAR_NAMES
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
-
-from ..user_code_launcher import (
-    DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
-    SHARED_USER_CODE_LAUNCHER_CONFIG,
-    DagsterCloudGrpcServer,
-    DagsterCloudUserCodeLauncher,
-    ServerEndpoint,
-    UserCodeLauncherEntry,
-)
-from ..user_code_launcher.utils import deterministic_label_for_location
-from .utils import (
+from dagster_cloud.workspace.kubernetes.utils import (
     SERVICE_PORT,
     construct_code_location_deployment,
     construct_code_location_service,
@@ -51,11 +41,20 @@ from .utils import (
     unique_k8s_resource_name,
     wait_for_deployment_complete,
 )
+from dagster_cloud.workspace.user_code_launcher import (
+    DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
+    SHARED_USER_CODE_LAUNCHER_CONFIG,
+    DagsterCloudGrpcServer,
+    DagsterCloudUserCodeLauncher,
+    ServerEndpoint,
+    UserCodeLauncherEntry,
+)
+from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
 
 DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT = 300
 DEFAULT_IMAGE_PULL_GRACE_PERIOD = 30
 
-from ..config_schema.kubernetes import SHARED_K8S_CONFIG
+from dagster_cloud.workspace.config_schema.kubernetes import SHARED_K8S_CONFIG
 
 
 class K8sHandle(NamedTuple):

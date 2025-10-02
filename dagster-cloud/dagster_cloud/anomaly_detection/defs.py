@@ -39,8 +39,8 @@ from dagster_cloud_cli.core.graphql_client import (
     create_cloud_webserver_client,
 )
 
-from .mutation import ANOMALY_DETECTION_INFERENCE_MUTATION
-from .types import (
+from dagster_cloud.anomaly_detection.mutation import ANOMALY_DETECTION_INFERENCE_MUTATION
+from dagster_cloud.anomaly_detection.types import (
     AnomalyDetectionModelParams,
     BetaFreshnessAnomalyDetectionParams,
     FreshnessAnomalyDetectionResult,

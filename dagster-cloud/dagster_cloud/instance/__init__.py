@@ -32,13 +32,12 @@ from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
 from urllib3 import Retry
 
 from dagster_cloud.agent import AgentQueuesConfig
+from dagster_cloud.auth.constants import decode_agent_token
+from dagster_cloud.opentelemetry.config import opentelemetry_config_schema
+from dagster_cloud.opentelemetry.controller import OpenTelemetryController
+from dagster_cloud.storage.client import dagster_cloud_api_config
+from dagster_cloud.util import get_env_names_from_config, is_isolated_run
 from dagster_cloud.version import __version__
-
-from ..auth.constants import decode_agent_token
-from ..opentelemetry.config import opentelemetry_config_schema
-from ..opentelemetry.controller import OpenTelemetryController
-from ..storage.client import dagster_cloud_api_config
-from ..util import get_env_names_from_config, is_isolated_run
 
 if TYPE_CHECKING:
     from requests import Session

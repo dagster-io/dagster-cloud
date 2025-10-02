@@ -36,7 +36,7 @@ from dagster._utils.merger import merge_dicts
 from dagster_cloud_cli.core.errors import DagsterCloudAgentServerError
 from typing_extensions import Self
 
-from .queries import (
+from dagster_cloud.storage.runs.queries import (
     ADD_BACKFILL_MUTATION,
     ADD_DAEMON_HEARTBEAT_MUTATION,
     ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION,

@@ -31,6 +31,16 @@ from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import DagsterCloudHTTPError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData
 
+from dagster_cloud.agent.instrumentation.constants import DAGSTER_CLOUD_AGENT_METRIC_PREFIX
+from dagster_cloud.agent.instrumentation.run_launch import extract_run_attributes
+from dagster_cloud.agent.instrumentation.schedule import inspect_schedule_result
+from dagster_cloud.agent.instrumentation.sensor import inspect_sensor_result
+from dagster_cloud.agent.queries import (
+    ADD_AGENT_HEARTBEATS_MUTATION,
+    DEPLOYMENTS_QUERY,
+    GET_USER_CLOUD_REQUESTS_QUERY,
+    WORKSPACE_ENTRIES_QUERY,
+)
 from dagster_cloud.api.dagster_cloud_api import (
     AgentHeartbeat,
     AgentUtilizationMetrics,
@@ -48,25 +58,14 @@ from dagster_cloud.api.dagster_cloud_api import (
 )
 from dagster_cloud.batching import Batcher
 from dagster_cloud.instance import DagsterCloudAgentInstance
+from dagster_cloud.opentelemetry.observers.execution_observer import observe_execution
+from dagster_cloud.util import SERVER_HANDLE_TAG, compressed_namedtuple_upload_file, is_isolated_run
+from dagster_cloud.version import __version__
 from dagster_cloud.workspace.user_code_launcher import (
     DagsterCloudUserCodeLauncher,
     UserCodeLauncherEntry,
 )
 from dagster_cloud.workspace.user_code_launcher.utils import get_instance_ref_for_user_code
-
-from ..opentelemetry.observers.execution_observer import observe_execution
-from ..util import SERVER_HANDLE_TAG, compressed_namedtuple_upload_file, is_isolated_run
-from ..version import __version__
-from .instrumentation.constants import DAGSTER_CLOUD_AGENT_METRIC_PREFIX
-from .instrumentation.run_launch import extract_run_attributes
-from .instrumentation.schedule import inspect_schedule_result
-from .instrumentation.sensor import inspect_sensor_result
-from .queries import (
-    ADD_AGENT_HEARTBEATS_MUTATION,
-    DEPLOYMENTS_QUERY,
-    GET_USER_CLOUD_REQUESTS_QUERY,
-    WORKSPACE_ENTRIES_QUERY,
-)
 
 if TYPE_CHECKING:
     import datetime

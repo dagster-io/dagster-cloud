@@ -1,15 +1,19 @@
 import sys
 from typing import Any
 
-from .snowflake.dbt_wrapper import dbt_with_snowflake_insights as dbt_with_snowflake_insights
-from .snowflake.definitions import (
+from dagster_cloud.dagster_insights.snowflake.dbt_wrapper import (
+    dbt_with_snowflake_insights as dbt_with_snowflake_insights,
+)
+from dagster_cloud.dagster_insights.snowflake.definitions import (
     create_snowflake_insights_asset_and_schedule as create_snowflake_insights_asset_and_schedule,
 )
-from .snowflake.snowflake_utils import meter_snowflake_query as meter_snowflake_query
+from dagster_cloud.dagster_insights.snowflake.snowflake_utils import (
+    meter_snowflake_query as meter_snowflake_query,
+)
 
 dagster_snowflake_req_imports = {"InsightsSnowflakeResource"}
 try:
-    from .snowflake.insights_snowflake_resource import (
+    from dagster_cloud.dagster_insights.snowflake.insights_snowflake_resource import (
         InsightsSnowflakeResource as InsightsSnowflakeResource,
     )
 except ImportError:
@@ -17,8 +21,10 @@ except ImportError:
 
 dagster_bigquery_req_imports = {"InsightsBigQueryResource", "dbt_with_bigquery_insights"}
 try:
-    from .bigquery.dbt_wrapper import dbt_with_bigquery_insights as dbt_with_bigquery_insights
-    from .bigquery.insights_bigquery_resource import (
+    from dagster_cloud.dagster_insights.bigquery.dbt_wrapper import (
+        dbt_with_bigquery_insights as dbt_with_bigquery_insights,
+    )
+    from dagster_cloud.dagster_insights.bigquery.insights_bigquery_resource import (
         InsightsBigQueryResource as InsightsBigQueryResource,
     )
 except ImportError:

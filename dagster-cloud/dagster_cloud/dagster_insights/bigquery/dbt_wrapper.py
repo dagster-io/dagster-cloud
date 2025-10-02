@@ -18,8 +18,14 @@ from dagster_dbt import DbtCliInvocation
 from dagster_dbt.version import __version__ as dagster_dbt_version
 from packaging import version
 
-from ..insights_utils import extract_asset_info_from_event, handle_raise_on_error
-from .bigquery_utils import build_bigquery_cost_metadata, marker_asset_key_for_job
+from dagster_cloud.dagster_insights.bigquery.bigquery_utils import (
+    build_bigquery_cost_metadata,
+    marker_asset_key_for_job,
+)
+from dagster_cloud.dagster_insights.insights_utils import (
+    extract_asset_info_from_event,
+    handle_raise_on_error,
+)
 
 if TYPE_CHECKING:
     from dbt.adapters.base.impl import BaseAdapter

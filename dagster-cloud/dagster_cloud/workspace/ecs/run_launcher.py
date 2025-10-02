@@ -2,8 +2,7 @@ import dagster._check as check
 from dagster_aws.ecs import EcsRunLauncher
 
 from dagster_cloud.instance import DagsterCloudAgentInstance
-
-from .utils import get_run_task_definition_family
+from dagster_cloud.workspace.ecs.utils import get_run_task_definition_family
 
 
 class CloudEcsRunLauncher(EcsRunLauncher[DagsterCloudAgentInstance]):

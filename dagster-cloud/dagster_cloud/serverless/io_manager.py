@@ -47,7 +47,10 @@ class PickledObjectServerlessIOManager(UPathIOManager):
             self._boto_session_expiration.tzinfo
         ) + datetime.timedelta(minutes=5):
             self._boto_session, self._boto_session_expiration = self._refresh_boto_session()
-        return self._boto_session.client("s3", region_name="us-west-2")
+        return self._boto_session.client(
+            "s3",
+            region_name=os.getenv("DAGSTER_CLOUD_SERVERLESS_REGION", "us-west-2"),
+        )
 
     def load_from_path(self, context: InputContext, path: UPath) -> Any:
         try:

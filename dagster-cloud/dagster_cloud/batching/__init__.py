@@ -1,1 +1,1 @@
-from .batcher import Batcher as Batcher
+from dagster_cloud.batching.batcher import Batcher as Batcher

@@ -12,8 +12,8 @@ from dagster._serdes import serialize_value
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_shared.serdes.serdes import deserialize_value
 
-from .__generated__ import MultiPexApiStub, multi_pex_api_pb2
-from .types import (
+from dagster_cloud.pex.grpc.__generated__ import MultiPexApiStub, multi_pex_api_pb2
+from dagster_cloud.pex.grpc.types import (
     CreatePexServerArgs,
     CreatePexServerResponse,
     GetCrashedPexServersArgs,

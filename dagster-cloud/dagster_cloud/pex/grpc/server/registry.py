@@ -28,7 +28,11 @@ def _download_from_s3(filename: str, local_filepath: str):
 
     config = Config(retries={"max_attempts": 3, "mode": "standard"})
 
-    s3 = boto3.client("s3", region_name="us-west-2", config=config)
+    s3 = boto3.client(
+        "s3",
+        region_name=os.getenv("DAGSTER_CLOUD_SERVERLESS_REGION", "us-west-2"),
+        config=config,
+    )
 
     # TODO: move the bucket and prefix to pex_metdata
     s3_bucket_name = os.environ["DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_BUCKET"]

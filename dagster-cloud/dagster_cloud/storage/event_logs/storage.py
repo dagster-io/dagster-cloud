@@ -68,7 +68,7 @@ if TYPE_CHECKING:
 DEFAULT_RUN_SCOPED_EVENT_TAILER_OFFSET = 20000
 
 
-from .queries import (
+from dagster_cloud.storage.event_logs.queries import (
     ADD_DYNAMIC_PARTITIONS_MUTATION,
     CHECK_CONCURRENCY_CLAIM_QUERY,
     CLAIM_CONCURRENCY_SLOT_MUTATION,

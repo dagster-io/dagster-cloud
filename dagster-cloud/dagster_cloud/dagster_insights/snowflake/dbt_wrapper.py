@@ -13,8 +13,15 @@ from dagster import (
     Output,
 )
 
-from ..insights_utils import extract_asset_info_from_event, handle_raise_on_error
-from .snowflake_utils import OPAQUE_ID_SQL_SIGIL, build_opaque_id_metadata, marker_asset_key_for_job
+from dagster_cloud.dagster_insights.insights_utils import (
+    extract_asset_info_from_event,
+    handle_raise_on_error,
+)
+from dagster_cloud.dagster_insights.snowflake.snowflake_utils import (
+    OPAQUE_ID_SQL_SIGIL,
+    build_opaque_id_metadata,
+    marker_asset_key_for_job,
+)
 
 if TYPE_CHECKING:
     from dagster_dbt import DbtCliInvocation

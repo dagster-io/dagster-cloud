@@ -1,1 +1,1 @@
-from .storage import GraphQLScheduleStorage as GraphQLScheduleStorage
+from dagster_cloud.storage.schedules.storage import GraphQLScheduleStorage as GraphQLScheduleStorage

@@ -18,10 +18,9 @@ from dagster_shared import seven
 from dagster_shared.ipc import open_ipc_subprocess
 from pydantic import BaseModel, Extra
 
+from dagster_cloud.pex.grpc.server.registry import PexS3Registry
+from dagster_cloud.pex.grpc.types import PexServerHandle
 from dagster_cloud.workspace.user_code_launcher.utils import get_grpc_server_env
-
-from ..types import PexServerHandle
-from .registry import PexS3Registry
 
 logger = logging.getLogger("dagster.multipex")
 
