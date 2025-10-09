@@ -277,7 +277,13 @@ CONFIG_SCHEMA_FIELDS = {
         description="Locations that specify an agent queue will only have their requests handled by agents configured to read from a matching queue. By default, requests are placed on a default queue that's handled by all agents.",
     ),
     "defs_state_info": Field(
-        config=Map(str, Shape(fields={"version": str, "create_timestamp": float})),
+        config=Shape(
+            fields={
+                "info_mapping": Map(
+                    str, Noneable(Shape(fields={"version": str, "create_timestamp": float}))
+                )
+            },
+        ),
         is_required=False,
         description="Defs state info for the code location.",
     ),
