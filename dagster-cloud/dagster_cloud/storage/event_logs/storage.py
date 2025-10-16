@@ -957,7 +957,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         ]
 
         # Translate list to tuple
-        return {key: tuple(val) for key, val in result.items()}  # type: ignore
+        return {key: tuple(val) for key, val in result.items()}
 
     def get_event_tags_for_asset(
         self,

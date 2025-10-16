@@ -251,7 +251,7 @@ class OpenTelemetryController:
         )
         self._logging_handler = logs_factory.build_logging_handler(
             self._logger_provider,  # pyright: ignore[reportArgumentType]
-            logging_config.get("handler", {}),  # pyright: ignore[reportArgumentType]
+            logging_config.get("handler", {}),
         )
         self._logger.addHandler(self._logging_handler)
 

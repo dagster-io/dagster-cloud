@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster-cloud==1.11.14",
+    "dagster-cloud==1.11.15",
 ]
 
 [project.license]

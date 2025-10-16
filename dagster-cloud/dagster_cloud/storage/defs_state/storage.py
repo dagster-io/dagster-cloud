@@ -69,7 +69,7 @@ class GraphQLDefsStateStorage(DefsStateStorage["DagsterCloudAgentInstance"], Con
         return (
             self._override_graphql_client
             if self._override_graphql_client
-            else self._instance.graphql_client  # pyright: ignore[reportAttributeAccessIssue]
+            else self._instance.graphql_client
         )
 
     def _execute_query(self, query, variables=None, idempotent_mutation=False):
@@ -78,7 +78,7 @@ class GraphQLDefsStateStorage(DefsStateStorage["DagsterCloudAgentInstance"], Con
         )
 
     def _get_artifact_key(self, key: str, version: str) -> str:
-        return f"__state__/{key}/{version}"
+        return f"__state__/{self._sanitize_key(key)}/{version}"
 
     def download_state_to_path(self, key: str, version: str, path: Path) -> None:
         download_artifact(

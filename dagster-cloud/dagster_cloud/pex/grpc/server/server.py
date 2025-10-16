@@ -235,7 +235,9 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
         return self._query("ExternalPipelineSubsetSnapshot", request, context)
 
     def ExternalRepository(self, request, context):
-        return self._query("ExternalRepository", request, context)
+        return self._query(
+            "ExternalRepository", request, context, timeout=DEFAULT_REPOSITORY_GRPC_TIMEOUT
+        )
 
     def ExternalJob(self, request, context):
         return self._query("ExternalJob", request, context)

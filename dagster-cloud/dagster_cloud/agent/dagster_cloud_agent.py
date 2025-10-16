@@ -163,6 +163,8 @@ class DagsterCloudAgent:
 
         self._last_liveness_check_time = None
 
+        self._warned_about_long_in_progress_reconcile = False
+
     def __enter__(self):
         return self
 
@@ -366,6 +368,8 @@ class DagsterCloudAgent:
                 except Exception:
                     self._logger.exception("Failed to add heartbeat")
 
+            self._check_for_long_running_reconcile(user_code_launcher)
+
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
                 pass
@@ -407,6 +411,26 @@ class DagsterCloudAgent:
         except Exception as e:
             self._logger.error(f"Failed to write liveness sentinel and disabling it: {e}")
             self._last_liveness_check_time = False
+
+    def _check_for_long_running_reconcile(self, user_code_launcher):
+        """Detect from the main thread if the background reconcile thread is running behind or has gotten stuck."""
+        in_progress_reconcile_start_time = user_code_launcher.in_progress_reconcile_start_time
+
+        reconcile_start_time_warning = int(
+            os.getenv("DAGSTER_CLOUD_AGENT_RECONCILE_START_TIME_WARNING", "3600")
+        )
+
+        if (
+            in_progress_reconcile_start_time is not None
+            and (time.time() - in_progress_reconcile_start_time) >= reconcile_start_time_warning
+        ):
+            if not self._warned_about_long_in_progress_reconcile:
+                self._logger.warning(
+                    f"Agent has been redeploying code servers for more than {reconcile_start_time_warning} seconds. This may indicate the background thread that performs the redeploys is stuck."
+                )
+                self._warned_about_long_in_progress_reconcile = True
+        else:
+            self._warned_about_long_in_progress_reconcile = False
 
     def _check_update_workspace(self, user_code_launcher, upload_all):
         curr_time = get_current_datetime()

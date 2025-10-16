@@ -112,7 +112,7 @@ class Client:
             name="serviceLongArnFormat",
             effectiveSettings=True,
         )
-        return settings["settings"][0]["value"] == "enabled"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+        return settings["settings"][0]["value"] == "enabled"
 
     @property
     @cached_method
@@ -160,7 +160,7 @@ class Client:
         ):
             task_definition_arn = (
                 self.ecs.register_task_definition(
-                    **desired_task_definition_config.task_definition_dict()  # pyright: ignore[reportArgumentType]
+                    **desired_task_definition_config.task_definition_dict()
                 )
                 .get("taskDefinition")
                 .get("taskDefinitionArn")
@@ -466,10 +466,10 @@ class Client:
 
         task_arn = (
             self.ecs.run_task(
-                taskDefinition=task_definition_arn,  # pyright: ignore[reportArgumentType]
+                taskDefinition=task_definition_arn,
                 cluster=self.cluster_name,
-                launchType=self.launch_type,  # pyright: ignore[reportArgumentType]
-                networkConfiguration=self.network_configuration,  # pyright: ignore[reportArgumentType]
+                launchType=self.launch_type,
+                networkConfiguration=self.network_configuration,
             )
             .get("tasks", [{}])[0]
             .get("taskArn")
@@ -477,14 +477,14 @@ class Client:
 
         self.ecs.get_waiter("tasks_stopped").wait(
             cluster=self.cluster_name,
-            tasks=[task_arn],  # pyright: ignore[reportArgumentType]
+            tasks=[task_arn],
             WaiterConfig={"Delay": 1, "MaxAttempts": self.timeout},
         )
 
         exit_code = (
             self.ecs.describe_tasks(
                 cluster=self.cluster_name,
-                tasks=[task_arn],  # pyright: ignore[reportArgumentType]
+                tasks=[task_arn],
             )
             .get("tasks", [{}])[0]
             .get("containers", [{}])[0]
@@ -546,7 +546,7 @@ class Client:
                 for key, value in tags.items()
             ]
 
-        arn = self.ecs.create_service(**params).get("service").get("serviceArn")  # pyright: ignore[reportArgumentType]
+        arn = self.ecs.create_service(**params).get("service").get("serviceArn")
 
         return Service(client=self, arn=arn)
 
@@ -721,7 +721,7 @@ class Client:
 
             stopped_tasks = sorted(
                 stopped_tasks,
-                key=lambda task: task["createdAt"].timestamp(),  # pyright: ignore[reportTypedDictNotRequiredAccess]
+                key=lambda task: task["createdAt"].timestamp(),
                 reverse=True,
             )
             return stopped_tasks
@@ -785,14 +785,14 @@ class Client:
         task = self.ecs.describe_tasks(cluster=self.cluster_name, tasks=[task_arn]).get("tasks")[0]
 
         task_definition_arn = task.get("taskDefinitionArn")
-        task_definition = self.ecs.describe_task_definition(taskDefinition=task_definition_arn).get(  # pyright: ignore[reportArgumentType]
+        task_definition = self.ecs.describe_task_definition(taskDefinition=task_definition_arn).get(
             "taskDefinition"
         )
 
         matching_container_definitions = [
             container_definition
             for container_definition in task_definition.get("containerDefinitions", [])
-            if container_definition["name"] == container_name  # pyright: ignore[reportTypedDictNotRequiredAccess]
+            if container_definition["name"] == container_name
         ]
         if not matching_container_definitions:
             raise Exception(f"Could not find container with name {container_name}")
@@ -800,7 +800,7 @@ class Client:
         container_definition = matching_container_definitions[0]
 
         log_stream_prefix = (
-            container_definition.get("logConfiguration").get("options").get("awslogs-stream-prefix")  # pyright: ignore[reportOptionalMemberAccess]
+            container_definition.get("logConfiguration").get("options").get("awslogs-stream-prefix")
         )
         container_name = container_definition.get("name")
         task_id = task_arn.split("/")[-1]

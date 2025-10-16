@@ -401,6 +401,7 @@ class DagsterCloudUserCodeLauncher(
         self._run_worker_statuses_dict: dict[str, list[CloudRunWorkerStatus]] = {}
         self._run_worker_monitoring_lock = threading.Lock()
 
+        self._in_progress_reconcile_start_time = time.time()
         self._reconcile_count = 0
         self._reconcile_grpc_metadata_shutdown_event = threading.Event()
         self._reconcile_grpc_metadata_thread = None
@@ -888,23 +889,32 @@ class DagsterCloudUserCodeLauncher(
             repository_name,
             code_pointer,
         ) in list_repositories_response.repository_code_pointer_dict.items():
-            external_repository_chunks = [
-                chunk
-                async for chunk in client.gen_streaming_external_repository(
+            if os.getenv("DAGSTER_CLOUD_USE_STREAMING_EXTERNAL_REPOSITORY"):
+                external_repository_chunks = [
+                    chunk
+                    async for chunk in client.gen_streaming_external_repository(
+                        remote_repository_origin=RemoteRepositoryOrigin(
+                            location_origin,
+                            repository_name,
+                        ),
+                        defer_snapshots=True,
+                    )
+                ]
+
+                serialized_repository_data = "".join(
+                    [
+                        chunk["serialized_external_repository_chunk"]
+                        for chunk in external_repository_chunks
+                    ]
+                )
+            else:
+                serialized_repository_data = await client.gen_external_repository(
                     remote_repository_origin=RemoteRepositoryOrigin(
                         location_origin,
                         repository_name,
                     ),
                     defer_snapshots=True,
                 )
-            ]
-
-            serialized_repository_data = "".join(
-                [
-                    chunk["serialized_external_repository_chunk"]
-                    for chunk in external_repository_chunks
-                ]
-            )
 
             # Don't deserialize in case there are breaking changes - let the server do it
             upload_repo_datas.append(
@@ -1480,6 +1490,8 @@ class DagsterCloudUserCodeLauncher(
                 self._logger.exception("Failed to refresh actual entries.")
             self._last_refreshed_actual_entries = now
 
+        self._in_progress_reconcile_start_time = time.time()
+
         self._reconcile(
             desired_entries,
             upload_locations,
@@ -1496,6 +1508,7 @@ class DagsterCloudUserCodeLauncher(
                 f"Started polling for requests from {self._instance.dagster_cloud_url}"
             )
 
+        self._in_progress_reconcile_start_time = None
         self._reconcile_count += 1
 
     def _update_metrics_thread(self, shutdown_event):
@@ -1519,6 +1532,10 @@ class DagsterCloudUserCodeLauncher(
     def ready_to_serve_requests(self) -> bool:
         # thread-safe since reconcile_count is an integer
         return self._reconcile_count > 0
+
+    @property
+    def in_progress_reconcile_start_time(self) -> Optional[float]:
+        return self._in_progress_reconcile_start_time
 
     def _make_check_on_running_server_endpoint(
         self, server_endpoint: ServerEndpoint

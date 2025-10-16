@@ -202,7 +202,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return create_agent_graphql_client(
             self.client_managed_retries_requests_session,
             self.dagster_cloud_graphql_url,
-            self._dagster_cloud_api_config_for_deployment(None),  # pyright: ignore[reportArgumentType]
+            self._dagster_cloud_api_config_for_deployment(None),
             scope=DagsterCloudInstanceScope.ORGANIZATION,
         )
 
@@ -210,13 +210,13 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return create_agent_graphql_client(
             self.client_managed_retries_requests_session,
             self.dagster_cloud_graphql_url,
-            self._dagster_cloud_api_config_for_deployment(deployment_name),  # pyright: ignore[reportArgumentType]
+            self._dagster_cloud_api_config_for_deployment(deployment_name),
             scope=DagsterCloudInstanceScope.DEPLOYMENT,
         )
 
     def headers_for_deployment(self, deployment_name: str):
         return get_agent_headers(
-            self._dagster_cloud_api_config_for_deployment(deployment_name),  # pyright: ignore[reportArgumentType]
+            self._dagster_cloud_api_config_for_deployment(deployment_name),
             DagsterCloudInstanceScope.DEPLOYMENT,
         )
 

@@ -28,7 +28,7 @@ def get_url_and_token_from_instance(instance: DagsterInstance) -> tuple[str, str
     if not isinstance(instance, DagsterCloudAgentInstance):
         raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
 
-    return f"{instance.dagit_url}graphql", instance.dagster_cloud_agent_token  # pyright: ignore[reportReturnType]
+    return f"{instance.dagit_url}graphql", instance.dagster_cloud_agent_token
 
 
 def get_insights_upload_request_params(
