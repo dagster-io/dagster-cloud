@@ -19,6 +19,8 @@ DEFAULT_PEX_FILES_DIR = "/tmp/pex-files"
 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/customizations/s3.html
 MULTIPART_DOWNLOAD_THREADS = 20  # Double the boto3 default of 10
 
+logger = logging.getLogger("dagster.multipex")
+
 
 def _download_from_s3(filename: str, local_filepath: str):
     # Lazy import boto3 to avoid a hard dependency during module load
@@ -211,7 +213,7 @@ class PexS3Registry:
         unused_local_paths = all_local_paths - in_use_local_paths
         unused_paths_present = [path for path in unused_local_paths if os.path.exists(path)]
         if unused_paths_present:
-            logging.info(
+            logger.info(
                 "Cleaning up %s unused local paths: %r",
                 len(unused_paths_present),
                 unused_paths_present,
@@ -223,13 +225,13 @@ class PexS3Registry:
                     else:
                         os.remove(path)
                 except OSError:
-                    logging.exception("Ignoring failure to clean up local unused path %s", path)
+                    logger.exception("Ignoring failure to clean up local unused path %s", path)
 
     def venv_for(self, pex_filepath) -> PexVenv:
         _, pex_filename = os.path.split(pex_filepath)
         venv_dir = self.venv_dir_for(pex_filepath)
         if os.path.exists(venv_dir):
-            logging.info("Reusing existing venv %r for %r", venv_dir, pex_filepath)
+            logger.info("Reusing existing venv %r for %r", venv_dir, pex_filepath)
         else:
             self.install_venv(venv_dir, pex_filepath)
             if not os.path.exists(venv_dir):
@@ -272,7 +274,7 @@ class PexS3Registry:
             raise PexInstallationError(
                 f"Could not install venv. Pex output: {e.output}", pex_filepath
             ) from e
-        logging.info(
+        logger.info(
             "Unpacked pex file %r into venv at %r",
             pex_filepath,
             venv_dir,
@@ -288,7 +290,7 @@ class PexS3Registry:
         if not proc.returncode:
             return Path(proc.stdout.decode("utf-8").strip()).absolute()
         else:
-            logging.error(
+            logger.error(
                 "Cannot determine site-packages for venv at %r: %s\n%s",
                 venv_path,
                 proc.stdout.decode("utf-8"),
@@ -320,12 +322,12 @@ class PexS3Registry:
 
         except subprocess.CalledProcessError:
             # working_directory package is optional, just log a message
-            logging.info("Cannot import working_directory package - not setting current directory.")
+            logger.info("Cannot import working_directory package - not setting current directory.")
             return None
         except OSError:
             # some issue with pex not being runnable, log an error but don't fail yet
             # might fail later if we try to run this again
-            logging.exception(
+            logger.exception(
                 "Ignoring failure to run pex file to determine working_directory %r", pex_path
             )
             return None

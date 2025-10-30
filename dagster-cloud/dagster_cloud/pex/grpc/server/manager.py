@@ -400,7 +400,9 @@ class MultiPexManager(AbstractContextManager):
             # - ensure that resources for servers starting up or shutting down are not removed
             # - important to do this while holding the lock to avoid race conditions
             running_server_ids = {
-                proc.pex_server_handle.get_id() for proc in self._pex_servers.values()
+                proc.pex_server_handle.get_id()
+                for proc in self._pex_servers.values()
+                if isinstance(proc, PexProcessEntry)
             }
             in_use_handle_ids = self._pending_startup_pex_servers.union(
                 self._pending_shutdown_pex_servers
