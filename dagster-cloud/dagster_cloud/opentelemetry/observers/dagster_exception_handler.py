@@ -21,7 +21,7 @@ def extract_dagster_error_attributes(error: DagsterError) -> dict[str, str]:
         if type(attr) is list and all(isinstance(item, SerializableErrorInfo) for item in attr):
             serializable_error_infos: list[SerializableErrorInfo] = getattr(error, field)
             for serializable_error_info in serializable_error_infos:
-                if serializable_error_info.cause:
+                if serializable_error_info.cause and serializable_error_info.cause.cls_name:
                     error_attributes["cause"] = serializable_error_info.cause.cls_name
                     return error_attributes
 

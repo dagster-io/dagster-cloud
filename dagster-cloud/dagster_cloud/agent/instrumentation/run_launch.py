@@ -19,5 +19,5 @@ def extract_run_attributes(deployment_name, run: DagsterRun) -> dict[str, str]:
             attributes["location"] = run.remote_job_origin.location_name or "unknown"
     except Exception as e:  # pylint: disable=broad-except
         logging.warning("Failed to extract additional run attributes", exc_info=e)
-    finally:
-        return attributes
+
+    return attributes
