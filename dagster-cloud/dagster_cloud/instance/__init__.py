@@ -10,6 +10,7 @@ import yaml
 from dagster import (
     Array,
     Field,
+    Map,
     String,
     _check as check,
 )
@@ -79,6 +80,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         agent_replicas=None,
         isolated_agents=None,
         agent_queues=None,
+        allowed_full_deployment_locations=None,
+        allowed_branch_deployment_locations=None,
         agent_metrics=None,
         opentelemetry=None,
         **kwargs,
@@ -144,6 +147,13 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             "agent_queues", agent_queues, self._agent_queues_config_schema()
         )
         self.agent_queues_config = AgentQueuesConfig(**processed_agent_queues_config)  # pyright: ignore[reportCallIssue]
+
+        self._allowed_full_deployment_locations: Optional[dict[str, list[str]]] = (
+            allowed_full_deployment_locations
+        )
+        self._allowed_branch_deployment_locations: Optional[list[str]] = (
+            allowed_branch_deployment_locations
+        )
 
         self._opentelemetry_config: Optional[Mapping[str, Any]] = self._get_processed_config(
             "opentelemetry", opentelemetry, opentelemetry_config_schema()
@@ -463,6 +473,32 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._instance_uuid
 
     @property
+    def allowed_full_deployment_locations(self) -> Optional[dict[str, list[str]]]:
+        return self._allowed_full_deployment_locations
+
+    @property
+    def allowed_branch_deployment_locations(self) -> Optional[list[str]]:
+        return self._allowed_branch_deployment_locations
+
+    def is_location_allowed(
+        self, deployment_name: str, location_name: str, is_branch_deployment: bool
+    ) -> bool:
+        """Check if a location should be allowed based on the allowed locations configuration."""
+        if is_branch_deployment:
+            # For branch deployments, check the branch deployment locations list
+            if self._allowed_branch_deployment_locations is not None:
+                return location_name in self._allowed_branch_deployment_locations
+        else:
+            # For full deployments, check the deployment-specific locations map
+            if self._allowed_full_deployment_locations is not None:
+                allowed_locations = self._allowed_full_deployment_locations.get(deployment_name)
+                if allowed_locations is not None:
+                    return location_name in allowed_locations
+
+        # If no restrictions are configured, allow all locations
+        return True
+
+    @property
     def agent_display_name(self) -> str:
         if self.dagster_cloud_api_agent_label:
             return f"Agent {self.instance_uuid[:8]} ({self.dagster_cloud_api_agent_label})"
@@ -536,6 +572,16 @@ instance_class:
                 cls._isolated_agents_config_schema(), is_required=False
             ),  # deprecated in favor of isolated_agents
             "agent_queues": Field(cls._agent_queues_config_schema(), is_required=False),
+            "allowed_full_deployment_locations": Field(
+                Map(String, Array(String)),
+                is_required=False,
+                description="Mapping of full deployment names to allowed location names",
+            ),
+            "allowed_branch_deployment_locations": Field(
+                Array(String),
+                is_required=False,
+                description="List of allowed location names for branch deployments",
+            ),
             "opentelemetry": Field(
                 opentelemetry_config_schema(), is_required=False, default_value={"enabled": False}
             ),

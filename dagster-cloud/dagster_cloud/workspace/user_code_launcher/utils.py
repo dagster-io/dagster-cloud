@@ -46,7 +46,14 @@ def get_instance_ref_for_user_code(instance_ref: InstanceRef) -> InstanceRef:
     if custom_instance_class_data:
         config_dict = custom_instance_class_data.config_dict
         new_config_dict = {
-            key: val for key, val in config_dict.items() if key not in {"agent_queues"}
+            key: val
+            for key, val in config_dict.items()
+            if key
+            not in {
+                "agent_queues",
+                "allowed_full_deployment_locations",
+                "allowed_branch_deployment_locations",
+            }
         }
 
         user_code_launcher_config = config_dict.get("user_code_launcher", {}).get("config")

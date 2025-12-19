@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster-cloud==1.12.6",
+    "dagster-cloud==1.12.7",
 ]
 
 [project.license]
@@ -30,7 +30,6 @@ tests = [
     "mypy",
     "pylint",
     "pytest",
-    "buildkite-test-collector",
 ]
 
 [tool.setuptools]

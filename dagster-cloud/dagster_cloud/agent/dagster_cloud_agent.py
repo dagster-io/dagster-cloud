@@ -505,6 +505,16 @@ class DagsterCloudAgent:
                         if self._instance.user_code_launcher.agent_metrics_enabled
                         else {}
                     },
+                    {
+                        "allowed_full_deployment_locations": self._instance.allowed_full_deployment_locations
+                        if self._instance.allowed_full_deployment_locations
+                        else {},
+                    },
+                    {
+                        "allowed_branch_deployment_locations": self._instance.allowed_branch_deployment_locations
+                        if self._instance.allowed_branch_deployment_locations
+                        else [],
+                    },
                 ),
                 run_worker_statuses=run_worker_statuses_dict[deployment_name],
                 code_server_heartbeats=code_server_heartbeats_dict.get(deployment_name, []),
@@ -599,6 +609,23 @@ class DagsterCloudAgent:
 
         for entry in entries:
             location_name = entry["locationName"]
+
+            # Skip locations not in the allowed list if configured
+            if not self._instance.is_location_allowed(
+                deployment_name, location_name, is_branch_deployment
+            ):
+                deployment_type = (
+                    "for branch deployments"
+                    if is_branch_deployment
+                    else f"in deployment {deployment_name}"
+                )
+                self._logger.error(
+                    f"Skipping location {location_name} {deployment_type} - not in allowed locations list. "
+                    "Either configure this location's dagster_cloud.yaml file to use a different queue, "
+                    "or redeploy this agent with this location in the list of allowed locations."
+                )
+                continue
+
             code_location_deploy_data = deserialize_value(
                 entry["serializedDeploymentMetadata"], CodeLocationDeployData
             )
@@ -730,6 +757,22 @@ class DagsterCloudAgent:
                 for entry in entries:
                     location_name = entry["locationName"]
 
+                    # Skip locations not in the allowed list if configured
+                    if not self._instance.is_location_allowed(
+                        deployment_name, location_name, is_branch_deployment
+                    ):
+                        deployment_type = (
+                            "for branch deployments"
+                            if is_branch_deployment
+                            else f"in deployment {deployment_name}"
+                        )
+                        self._logger.error(
+                            f"Skipping location {location_name} {deployment_type} - not in allowed locations list. "
+                            "Either configure this location's dagster_cloud.yaml file to use a different queue, "
+                            "or redeploy this agent with this location in the list of allowed locations."
+                        )
+                        continue
+
                     location_key = (deployment_name, location_name)
 
                     all_locations.add(location_key)
@@ -832,6 +875,22 @@ class DagsterCloudAgent:
 
         code_location_origin = self._get_location_origin_from_request(request)
         location_name = code_location_origin.location_name if code_location_origin else None
+
+        # Validate that the location is in the allowed list if configured
+        if location_name and not self._instance.is_location_allowed(
+            deployment_name, location_name, is_branch_deployment
+        ):
+            deployment_type = (
+                "for branch deployments"
+                if is_branch_deployment
+                else f"in deployment '{deployment_name}'"
+            )
+            raise Exception(
+                f"Agent is not allowed to serve location '{location_name}' {deployment_type}. "
+                f"Location is not in the alloweupd locations list configured for this agent. "
+                "Either configure this location's dagster_cloud.yaml file to use a different queue, "
+                "or redeploy this agent with this location in the list of allowed locations."
+            )
 
         if api_name == DagsterCloudApi.PING_LOCATION:
             # Do nothing - this request only exists to bump TTL for the location
@@ -1233,7 +1292,9 @@ class DagsterCloudAgent:
                     (deployment_name, location_name, is_branch_deployment)
                 ] = time.time()
 
-                if not user_code_launcher.has_grpc_endpoint(deployment_name, location_name):
+                if self._instance.is_location_allowed(
+                    deployment_name, location_name, is_branch_deployment
+                ) and not user_code_launcher.has_grpc_endpoint(deployment_name, location_name):
                     # Next completed periodic workspace update will make the location up to date
                     # - keep this in the queue until then
                     invalid_requests.append(json_request)
