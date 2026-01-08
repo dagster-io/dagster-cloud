@@ -887,7 +887,7 @@ class DagsterCloudAgent:
             )
             raise Exception(
                 f"Agent is not allowed to serve location '{location_name}' {deployment_type}. "
-                f"Location is not in the alloweupd locations list configured for this agent. "
+                f"Location is not in the allowed locations list configured for this agent. "
                 "Either configure this location's dagster_cloud.yaml file to use a different queue, "
                 "or redeploy this agent with this location in the list of allowed locations."
             )
