@@ -30,6 +30,7 @@ from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import DagsterCloudHTTPError, raise_http_error
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData
+from dagster_shared.record import replace
 
 from dagster_cloud.agent.instrumentation.constants import DAGSTER_CLOUD_AGENT_METRIC_PREFIX
 from dagster_cloud.agent.instrumentation.run_launch import extract_run_attributes
@@ -907,8 +908,9 @@ class DagsterCloudAgent:
                 user_code_launcher, deployment_name, cast("str", location_name)
             )
             serialized_snapshot_or_error = client.execution_plan_snapshot(
-                execution_plan_snapshot_args=request.request_args._replace(
-                    instance_ref=self._get_user_code_instance_ref(deployment_name)
+                execution_plan_snapshot_args=replace(
+                    request.request_args,
+                    instance_ref=self._get_user_code_instance_ref(deployment_name),
                 )
             )
             return DagsterCloudApiGrpcResponse(
@@ -974,8 +976,9 @@ class DagsterCloudAgent:
                 user_code_launcher, deployment_name, cast("str", location_name)
             )
 
-            args = request.request_args._replace(
-                instance_ref=self._get_user_code_instance_ref(deployment_name)
+            args = replace(
+                request.request_args,
+                instance_ref=self._get_user_code_instance_ref(deployment_name),
             )
 
             schedule_attributes = {
@@ -1007,8 +1010,9 @@ class DagsterCloudAgent:
                 user_code_launcher, deployment_name, cast("str", location_name)
             )
 
-            args = request.request_args._replace(
-                instance_ref=self._get_user_code_instance_ref(deployment_name)
+            args = replace(
+                request.request_args,
+                instance_ref=self._get_user_code_instance_ref(deployment_name),
             )
 
             sensor_attributes = {

@@ -40,6 +40,7 @@ from dagster_cloud.workspace.user_code_launcher import (
 from dagster_cloud.workspace.user_code_launcher.user_code_launcher import UserCodeLauncherEntry
 from dagster_cloud.workspace.user_code_launcher.utils import (
     deterministic_label_for_location,
+    get_code_server_port,
     get_grpc_server_env,
 )
 
@@ -293,7 +294,7 @@ class DockerUserCodeLauncher(
 
         has_network = len(self._networks) > 0
         if has_network:
-            grpc_port = 4000
+            grpc_port = get_code_server_port()
             hostname = container_name
         else:
             grpc_port = find_free_port()

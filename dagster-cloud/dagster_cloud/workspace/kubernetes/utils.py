@@ -13,13 +13,13 @@ from kubernetes import client
 from dagster_cloud.instance import DagsterCloudAgentInstance
 from dagster_cloud.workspace.user_code_launcher.utils import (
     deterministic_label_for_location,
+    get_code_server_port,
     get_grpc_server_env,
     get_human_readable_label,
     unique_resource_name,
 )
 
 MANAGED_RESOURCES_LABEL = {"managed_by": "K8sUserCodeLauncher"}
-SERVICE_PORT = 4000
 
 
 def _get_dagster_k8s_labels(
@@ -106,7 +106,7 @@ def construct_code_location_service(
             },
             "spec": {
                 "selector": {"user-deployment": service_name},
-                "ports": [{"name": "grpc", "protocol": "TCP", "port": SERVICE_PORT}],
+                "ports": [{"name": "grpc", "protocol": "TCP", "port": get_code_server_port()}],
             },
         },
     )
@@ -123,7 +123,10 @@ def construct_code_location_deployment(
     server_timestamp: float,
 ):
     env = get_grpc_server_env(
-        metadata, SERVICE_PORT, location_name, instance.ref_for_deployment(deployment_name)
+        metadata,
+        get_code_server_port(),
+        location_name,
+        instance.ref_for_deployment(deployment_name),
     )
 
     user_defined_config = container_context.server_k8s_config

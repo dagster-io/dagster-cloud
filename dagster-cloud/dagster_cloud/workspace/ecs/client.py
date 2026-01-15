@@ -17,7 +17,7 @@ from dagster_aws.ecs.utils import is_transient_task_stopped_reason, task_definit
 
 from dagster_cloud.workspace.ecs.service import Service
 
-DEFAULT_ECS_TIMEOUT = 300
+DEFAULT_ECS_TIMEOUT = 600
 DEFAULT_ECS_GRACE_PERIOD = 30
 
 STOPPED_TASK_GRACE_PERIOD = 30

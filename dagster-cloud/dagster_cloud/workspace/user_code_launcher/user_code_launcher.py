@@ -1558,7 +1558,7 @@ class DagsterCloudUserCodeLauncher(
             del self._multipex_servers[deployment_location]
 
     def _refresh_actual_entries(self) -> None:
-        for deployment_location, multipex_server in self._multipex_servers.items():
+        for deployment_location, multipex_server in self._multipex_servers.copy().items():
             if deployment_location in self._actual_entries:
                 # If a multipex server exists, we query it over gRPC
                 # to make sure the pex server is still available.

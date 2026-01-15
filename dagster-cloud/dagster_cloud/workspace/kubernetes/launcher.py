@@ -34,7 +34,6 @@ from dagster_cloud.constants import RESERVED_ENV_VAR_NAMES
 from dagster_cloud.execution.cloud_run_launcher.k8s import CloudK8sRunLauncher
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.workspace.kubernetes.utils import (
-    SERVICE_PORT,
     construct_code_location_deployment,
     construct_code_location_service,
     get_deployment_failure_debug_info,
@@ -49,7 +48,10 @@ from dagster_cloud.workspace.user_code_launcher import (
     ServerEndpoint,
     UserCodeLauncherEntry,
 )
-from dagster_cloud.workspace.user_code_launcher.utils import deterministic_label_for_location
+from dagster_cloud.workspace.user_code_launcher.utils import (
+    deterministic_label_for_location,
+    get_code_server_port,
+)
 
 DEFAULT_DEPLOYMENT_STARTUP_TIMEOUT = 300
 DEFAULT_IMAGE_PULL_GRACE_PERIOD = 30
@@ -506,7 +508,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
 
         endpoint = ServerEndpoint(
             host=host,
-            port=SERVICE_PORT,
+            port=get_code_server_port(),
             socket=None,
         )
 

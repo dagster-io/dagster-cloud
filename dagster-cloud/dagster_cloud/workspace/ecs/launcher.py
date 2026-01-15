@@ -53,13 +53,13 @@ from dagster_cloud.workspace.user_code_launcher.user_code_launcher import (
 )
 from dagster_cloud.workspace.user_code_launcher.utils import (
     deterministic_label_for_location,
+    get_code_server_port,
     get_grpc_server_env,
 )
 
 EcsServerHandleType = Service
 
 CONTAINER_NAME = "dagster"
-PORT = 4000
 
 
 class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], ConfigurableClass):
@@ -405,7 +405,8 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         if metadata.pex_metadata:
             command = metadata.get_multipex_server_command(
-                PORT, metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
+                get_code_server_port(),
+                metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled,
             )
             additional_env = metadata.get_multipex_server_env()
             tags = {
@@ -418,7 +419,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 metrics_enabled=self._instance.user_code_launcher.code_server_metrics_enabled
             )
             additional_env = get_grpc_server_env(
-                metadata, PORT, location_name, self._instance.ref_for_deployment(deployment_name)
+                metadata,
+                get_code_server_port(),
+                location_name,
+                self._instance.ref_for_deployment(deployment_name),
             )
             tags = {
                 "dagster/grpc_server": "1",
@@ -524,7 +528,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         endpoint = ServerEndpoint(
             host=service.hostname,
-            port=PORT,
+            port=get_code_server_port(),
             socket=None,
         )
 
