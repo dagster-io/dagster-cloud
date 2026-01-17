@@ -84,6 +84,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         runtime_platform: Optional[Mapping[str, Any]] = None,
         mount_points: Optional[Sequence[Mapping[str, Any]]] = None,
         volumes: Optional[Sequence[Mapping[str, Any]]] = None,
+        readonly_root_filesystem: Optional[bool] = None,
         server_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
         run_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
         server_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
@@ -142,6 +143,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         self.mount_points = check.opt_sequence_param(mount_points, "mount_points")
         self.volumes = check.opt_sequence_param(volumes, "volumes")
+        self.readonly_root_filesystem = check.opt_sequence_param(readonly_root_filesystem, "readonly_root_filesystem")
 
         self.server_sidecar_containers = check.opt_sequence_param(
             server_sidecar_containers, "server_sidecar_containers"
@@ -442,6 +444,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             runtime_platform=self.runtime_platform,
             mount_points=self.mount_points,
             volumes=self.volumes,
+            readonly_root_filesystem=self.readonly_root_filesystem,
             server_sidecar_containers=self.server_sidecar_containers,
             run_sidecar_containers=self.run_sidecar_containers,
             server_ecs_tags=self.server_ecs_tags,
@@ -520,6 +523,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             runtime_platform=container_context.runtime_platform,
             mount_points=container_context.mount_points,
             volumes=container_context.volumes,
+            readonly_root_filesystem=container_context.readonly_root_filesystem,
             health_check=container_context.server_health_check,
         )
         self._logger.info(
@@ -726,6 +730,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 **({"runtime_platform": self.runtime_platform} if self.runtime_platform else {}),
                 **({"mount_points": self.mount_points} if self.mount_points else {}),
                 **({"volumes": self.volumes} if self.volumes else {}),
+                **({"readonly_root_filesystem": self.readonly_root_filesystem} if self.readonly_root_filesystem else {}),
                 **(
                     {"linux_parameters": ECS_EXEC_LINUX_PARAMETERS}
                     if self._get_enable_ecs_exec()
