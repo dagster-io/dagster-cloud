@@ -31,13 +31,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.12.11",
-    "dagster-shared==1.12.11",
-    "dagster-cloud-cli==1.12.11",
-    "opentelemetry-api>=1.27.0,<2",
-    "opentelemetry-sdk>=1.27.0,<2",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.27.0,<2",
-    "opentelemetry-exporter-otlp-proto-http>=1.27.0,<2",
+    "dagster==1.12.12",
+    "dagster-shared==1.12.12",
+    "dagster-cloud-cli==1.12.12",
     "pex>=2.1.132,<2.60.0",
     "questionary",
     "requests",
@@ -78,28 +74,33 @@ tests = [
     "pytest",
     "types-PyYAML",
     "types-requests",
-    "dagster-cloud-test-infra",
     "dbt-bigquery>=1.9.0",
     "dbt-core",
     "dbt-snowflake",
     "dbt-duckdb",
     "dagster-dbt",
     "dagster-k8s",
+    "dagster-docker",
     "dagster-cloud-backend",
+    "dagster-test",
+    "dagster-cloud-test-infra",
+    "dagster-cloud-dagit",
+    "dagster-dg-cli",
+    "syrupy",
 ]
 insights = [
     "pyarrow",
 ]
 docker = [
     "docker",
-    "dagster-docker==0.28.11",
+    "dagster-docker==0.28.12",
 ]
 kubernetes = [
     "kubernetes",
-    "dagster-k8s==0.28.11",
+    "dagster-k8s==0.28.12",
 ]
 ecs = [
-    "dagster-aws==0.28.11",
+    "dagster-aws==0.28.12",
     "boto3",
 ]
 sandbox = [

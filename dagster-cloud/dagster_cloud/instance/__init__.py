@@ -1,7 +1,7 @@
 import copy
 import socket
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from contextlib import ExitStack
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -34,11 +34,8 @@ from urllib3 import Retry
 
 from dagster_cloud.agent import AgentQueuesConfig
 from dagster_cloud.auth.constants import decode_agent_token
-from dagster_cloud.opentelemetry.config import opentelemetry_config_schema
-from dagster_cloud.opentelemetry.controller import OpenTelemetryController
 from dagster_cloud.storage.client import dagster_cloud_api_config
 from dagster_cloud.util import get_env_names_from_config, is_isolated_run
-from dagster_cloud.version import __version__
 
 if TYPE_CHECKING:
     from requests import Session
@@ -83,7 +80,6 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         allowed_full_deployment_locations=None,
         allowed_branch_deployment_locations=None,
         agent_metrics=None,
-        opentelemetry=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -154,12 +150,6 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._allowed_branch_deployment_locations: Optional[list[str]] = (
             allowed_branch_deployment_locations
         )
-
-        self._opentelemetry_config: Optional[Mapping[str, Any]] = self._get_processed_config(
-            "opentelemetry", opentelemetry, opentelemetry_config_schema()
-        )
-
-        self._opentelemetry_controller: Optional[OpenTelemetryController] = None
 
         self._instance_uuid = str(uuid.uuid4())
 
@@ -582,9 +572,6 @@ instance_class:
                 is_required=False,
                 description="List of allowed location names for branch deployments",
             ),
-            "opentelemetry": Field(
-                opentelemetry_config_schema(), is_required=False, default_value={"enabled": False}
-            ),
         }
 
     @classmethod
@@ -667,9 +654,6 @@ instance_class:
 
     def dispose(self) -> None:
         super().dispose()
-        if self._opentelemetry_controller:
-            self._opentelemetry_controller.dispose()
-            self._opentelemetry_controller = None
         self._exit_stack.close()
 
     @property
@@ -689,17 +673,6 @@ instance_class:
     def dagster_cloud_run_worker_monitoring_interval_seconds(self) -> int:
         # potentially overridden interval in the serverless user code launcher
         return 30
-
-    @property
-    def opentelemetry(self) -> OpenTelemetryController:
-        if not self._opentelemetry_controller:
-            self._opentelemetry_controller = OpenTelemetryController(
-                instance_id=self.instance_uuid,
-                version=__version__,
-                config=self._opentelemetry_config,
-            )
-
-        return self._opentelemetry_controller
 
 
 @lru_cache(maxsize=100)  # Scales on order of active branch deployments
