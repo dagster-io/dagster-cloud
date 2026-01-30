@@ -17,6 +17,7 @@ from dagster._core.event_api import (
     EventLogRecord,
     EventRecordsFilter,
     EventRecordsResult,
+    PartitionKeyFilter,
     RunShardedEventsCursor,
     RunStatusChangeRecordsFilter,
 )
@@ -27,6 +28,7 @@ from dagster._core.instance.config import PoolConfig, PoolGranularity
 from dagster._core.storage.asset_check_execution_record import (
     AssetCheckExecutionRecord,
     AssetCheckExecutionRecordStatus,
+    AssetCheckPartitionInfo,
 )
 from dagster._core.storage.dagster_run import DagsterRunStatsSnapshot
 from dagster._core.storage.event_log.base import (
@@ -378,6 +380,7 @@ def _asset_check_execution_record_from_graphql(data: dict, key: AssetCheckKey):
         status=AssetCheckExecutionRecordStatus(data["status"]),
         event=_event_log_entry_from_graphql(data["event"]),
         create_timestamp=data["createTimestamp"],
+        partition=data.get("partition"),
     )
 
 
@@ -1232,12 +1235,23 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         limit: int,
         cursor: Optional[int] = None,
         status: Optional[AbstractSet[AssetCheckExecutionRecordStatus]] = None,
+        partition_filter: Optional[PartitionKeyFilter] = None,
     ) -> Sequence[AssetCheckExecutionRecord]:
         raise NotImplementedError("Not callable from user cloud")
 
     def get_latest_asset_check_execution_by_key(
-        self, check_keys: Sequence[AssetCheckKey]
+        self,
+        check_keys: Sequence[AssetCheckKey],
+        partition_filter: Optional[PartitionKeyFilter] = None,
     ) -> Mapping[AssetCheckKey, AssetCheckExecutionRecord]:
+        raise NotImplementedError("Not callable from user cloud")
+
+    def get_asset_check_partition_info(
+        self,
+        keys: Sequence[AssetCheckKey],
+        after_storage_id: Optional[int] = None,
+        partition_keys: Optional[Sequence[str]] = None,
+    ) -> Sequence[AssetCheckPartitionInfo]:
         raise NotImplementedError("Not callable from user cloud")
 
     def fetch_materializations(
