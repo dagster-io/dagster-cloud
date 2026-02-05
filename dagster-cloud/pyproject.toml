@@ -31,9 +31,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.12.13",
-    "dagster-shared==1.12.13",
-    "dagster-cloud-cli==1.12.13",
+    "dagster==1.12.14",
+    "dagster-shared==1.12.14",
+    "dagster-cloud-cli==1.12.14",
     "pex>=2.1.132,<2.60.0",
     "questionary",
     "requests",
@@ -93,14 +93,14 @@ insights = [
 ]
 docker = [
     "docker",
-    "dagster-docker==0.28.13",
+    "dagster-docker==0.28.14",
 ]
 kubernetes = [
     "kubernetes",
-    "dagster-k8s==0.28.13",
+    "dagster-k8s==0.28.14",
 ]
 ecs = [
-    "dagster-aws==0.28.13",
+    "dagster-aws==0.28.14",
     "boto3",
 ]
 sandbox = [
