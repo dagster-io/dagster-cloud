@@ -2,7 +2,6 @@ import base64
 import json
 import time
 from contextlib import contextmanager
-from typing import Optional, Union
 
 # A minimal copy of the standard OTEL API
 
@@ -14,7 +13,7 @@ class Span:
         self._start_time = time.time()
         self._end_time = None
 
-    def set_attribute(self, key: str, value: Union[int, str]):
+    def set_attribute(self, key: str, value: int | str):
         self._attrs[key] = value
 
     def end(self):
@@ -50,7 +49,7 @@ class Tracer:
             span.end()
             self._spans.append(span)
 
-    def pop_serialized_span(self) -> Optional[str]:
+    def pop_serialized_span(self) -> str | None:
         try:
             span = self._spans.pop(0)
         except IndexError:

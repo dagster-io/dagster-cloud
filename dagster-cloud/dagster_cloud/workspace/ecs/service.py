@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from dagster._utils.cached_method import cached_method
 
@@ -77,7 +76,7 @@ class Service:
 
     @property
     @cached_method
-    def create_timestamp(self) -> Optional[float]:
+    def create_timestamp(self) -> float | None:
         response = self.client.ecs.describe_services(
             cluster=self.client.cluster_name, services=[self.name]
         )

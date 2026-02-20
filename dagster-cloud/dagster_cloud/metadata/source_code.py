@@ -1,7 +1,7 @@
 import os
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from dagster import DagsterInvariantViolationError
 from dagster._annotations import beta
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 import sys
 
 
-def _locate_git_root() -> Optional[Path]:
+def _locate_git_root() -> Path | None:
     try:
         code_origin = LoadableTargetOrigin.get()
     except DagsterInvariantViolationError:
@@ -50,9 +50,9 @@ def link_code_references_to_git_if_cloud(
     assets_defs: Sequence[
         Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition", "AssetSpec"]
     ],
-    git_url: Optional[str] = None,
-    git_branch: Optional[str] = None,
-    file_path_mapping: Optional[FilePathMapping] = None,
+    git_url: str | None = None,
+    git_branch: str | None = None,
+    file_path_mapping: FilePathMapping | None = None,
 ) -> Sequence[Union["AssetsDefinition", "SourceAsset", "CacheableAssetsDefinition", "AssetSpec"]]:
     """Wrapper function which converts local file path code references to hosted git URLs
     if running in a Dagster Plus cloud environment. This is determined by the presence of

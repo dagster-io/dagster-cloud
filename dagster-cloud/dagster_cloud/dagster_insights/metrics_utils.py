@@ -1,6 +1,6 @@
 import os
 import tempfile
-from typing import NamedTuple, Optional, Union
+from typing import NamedTuple
 
 import requests
 from dagster import AssetExecutionContext, DagsterInstance, OpExecutionContext
@@ -33,7 +33,7 @@ def get_url_and_token_from_instance(instance: DagsterInstance) -> tuple[str, str
 
 def get_insights_upload_request_params(
     instance: DagsterInstance,
-) -> tuple[requests.Session, str, dict[str, str], int, Optional[dict[str, str]]]:
+) -> tuple[requests.Session, str, dict[str, str], int, dict[str, str] | None]:
     if not isinstance(instance, DagsterCloudAgentInstance):
         raise RuntimeError("This asset only functions in a running Dagster Cloud instance")
 
@@ -47,7 +47,7 @@ def get_insights_upload_request_params(
 
 
 def upload_cost_information(
-    context: Union[OpExecutionContext, AssetExecutionContext],
+    context: OpExecutionContext | AssetExecutionContext,
     metric_name: str,
     cost_information: list[tuple[str, float, str]],
 ):
@@ -88,7 +88,7 @@ def upload_cost_information(
 
 @beta
 def put_cost_information(
-    context: Union[OpExecutionContext, AssetExecutionContext],
+    context: OpExecutionContext | AssetExecutionContext,
     metric_name: str,
     cost_information: list[tuple[str, float, str]],
     start: float,

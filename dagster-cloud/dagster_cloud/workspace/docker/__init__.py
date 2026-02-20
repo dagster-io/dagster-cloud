@@ -1,7 +1,7 @@
 import logging
 import sys
 import time
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 import docker
 import docker.errors
@@ -377,10 +377,10 @@ class DockerUserCodeLauncher(
         container.remove(force=True)
         self._logger.info(f"Removed container {container.id}")
 
-    def get_agent_id_for_server(self, handle: DagsterDockerContainer) -> Optional[str]:
+    def get_agent_id_for_server(self, handle: DagsterDockerContainer) -> str | None:
         return handle.container.labels.get(AGENT_LABEL)
 
-    def get_server_create_timestamp(self, handle: DagsterDockerContainer) -> Optional[float]:
+    def get_server_create_timestamp(self, handle: DagsterDockerContainer) -> float | None:
         created_time_str = handle.container.attrs["Created"]
         return parse(created_time_str).timestamp()  # pyright: ignore[reportAttributeAccessIssue]
 

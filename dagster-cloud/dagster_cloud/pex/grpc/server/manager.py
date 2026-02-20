@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 from contextlib import AbstractContextManager
-from typing import Optional, Union, cast
+from typing import cast
 
 from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
@@ -41,17 +41,17 @@ class PexErrorEntry(BaseModel, frozen=True, extra="forbid", arbitrary_types_allo
 class MultiPexManager(AbstractContextManager):
     def __init__(
         self,
-        local_pex_files_dir: Optional[str] = None,
-        watchdog_run_interval: Optional[int] = 30,
+        local_pex_files_dir: str | None = None,
+        watchdog_run_interval: int | None = 30,
         enable_metrics: bool = False,
     ):
         # Keyed by hash of PexServerHandle
-        self._pex_servers: dict[str, Union[PexProcessEntry, PexErrorEntry]] = {}
+        self._pex_servers: dict[str, PexProcessEntry | PexErrorEntry] = {}
         self._pending_startup_pex_servers: set[str] = set()
         self._pending_shutdown_pex_servers: set[str] = set()
         self._pex_servers_lock = threading.RLock()
         self._pex_metadata_for_handle: dict[
-            str, Optional[PexMetadata]
+            str, PexMetadata | None
         ] = {}  # maps handle id to the pex tag
         self._heartbeat_ttl = 60
         self._registry = PexS3Registry(local_pex_files_dir)
@@ -124,7 +124,7 @@ class MultiPexManager(AbstractContextManager):
 
     def get_pex_grpc_client_or_error(
         self, server_handle: PexServerHandle
-    ) -> Union[DagsterGrpcClient, SerializableErrorInfo]:
+    ) -> DagsterGrpcClient | SerializableErrorInfo:
         handle_id = server_handle.get_id()
         with self._pex_servers_lock:
             if handle_id not in self._pex_servers:
@@ -199,7 +199,7 @@ class MultiPexManager(AbstractContextManager):
         self,
         server_handle: PexServerHandle,
         code_location_deploy_data: CodeLocationDeployData,
-        instance_ref: Optional[InstanceRef],
+        instance_ref: InstanceRef | None,
     ):
         # we keep track of pex metadata in use to help cleanup unused resources over time
         self._pex_metadata_for_handle[server_handle.get_id()] = (

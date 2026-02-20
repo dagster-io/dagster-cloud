@@ -1,6 +1,5 @@
 import hashlib
 import re
-from typing import Optional
 
 from dagster._core.remote_origin import RemoteJobOrigin
 from dagster_aws.ecs.utils import sanitize_family
@@ -37,7 +36,7 @@ def _get_family_hash(name, max_length=32, hash_size=8):
 
 def get_server_task_definition_family(
     task_definition_prefix: str,
-    organization_name: Optional[str],
+    organization_name: str | None,
     deployment_name: str,
     location_name: str,
 ) -> str:
@@ -61,7 +60,7 @@ def get_server_task_definition_family(
 
 def get_run_task_definition_family(
     task_definition_prefix: str,
-    organization_name: Optional[str],
+    organization_name: str | None,
     deployment_name: str,
     job_origin: RemoteJobOrigin,
 ) -> str:

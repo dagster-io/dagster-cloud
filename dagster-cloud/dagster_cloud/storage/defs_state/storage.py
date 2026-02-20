@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import dagster._check as check
 from dagster._core.storage.defs_state.base import DefsStateStorage
@@ -32,7 +32,7 @@ SET_LATEST_VERSION_MUTATION = """
 
 class GraphQLDefsStateStorage(DefsStateStorage["DagsterCloudAgentInstance"], ConfigurableClass):
     def __init__(
-        self, inst_data: Optional[ConfigurableClassData] = None, override_graphql_client=None
+        self, inst_data: ConfigurableClassData | None = None, override_graphql_client=None
     ):
         """Initialize this class directly only for test (using `override_graphql_client`).
         Use the ConfigurableClass machinery to init from instance yaml.
@@ -101,7 +101,7 @@ class GraphQLDefsStateStorage(DefsStateStorage["DagsterCloudAgentInstance"], Con
         )
         self.set_latest_version(key, version)
 
-    def get_latest_defs_state_info(self) -> Optional[DefsStateInfo]:
+    def get_latest_defs_state_info(self) -> DefsStateInfo | None:
         res = self._execute_query(GET_LATEST_DEFS_STATE_INFO_QUERY)
         result = res["data"]["latestDefsStateInfo"]
         if result is not None:

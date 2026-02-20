@@ -2,7 +2,7 @@ import datetime
 import io
 import os
 import pickle
-from typing import Any, Union
+from typing import Any
 
 import boto3
 import dagster._check as check
@@ -80,7 +80,7 @@ class PickledObjectServerlessIOManager(UPathIOManager):
         # It is not necessary to create directories in S3
         return None
 
-    def get_op_output_relative_path(self, context: Union[InputContext, OutputContext]):
+    def get_op_output_relative_path(self, context: InputContext | OutputContext):
         from upath import UPath
 
         return UPath(*["storage", *context.get_identifier()])

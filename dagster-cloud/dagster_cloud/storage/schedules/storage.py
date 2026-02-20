@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import dagster._check as check
 from dagster._core.definitions.asset_key import EntityKey
@@ -74,10 +74,10 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
 
     def all_instigator_state(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,
-        repository_origin_id: Optional[str] = None,
-        repository_selector_id: Optional[str] = None,
-        instigator_type: Optional[InstigatorType] = None,
-        instigator_statuses: Optional[set[InstigatorStatus]] = None,
+        repository_origin_id: str | None = None,
+        repository_selector_id: str | None = None,
+        instigator_type: InstigatorType | None = None,
+        instigator_statuses: set[InstigatorStatus] | None = None,
     ) -> Iterable[InstigatorState]:
         res = self._execute_query(
             ALL_STORED_JOB_STATE_QUERY,
@@ -98,7 +98,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
             for state in res["data"]["schedules"]["jobStates"]
         ]
 
-    def get_instigator_state(self, origin_id: str, selector_id: str) -> Optional[InstigatorState]:
+    def get_instigator_state(self, origin_id: str, selector_id: str) -> InstigatorState | None:
         res = self._execute_query(
             GET_JOB_STATE_QUERY,
             variables={
@@ -143,10 +143,10 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         self,
         origin_id: str,
         selector_id: str,
-        before: Optional[float] = None,
-        after: Optional[float] = None,
-        limit: Optional[int] = None,
-        statuses: Optional[Sequence[TickStatus]] = None,
+        before: float | None = None,
+        after: float | None = None,
+        limit: int | None = None,
+        statuses: Sequence[TickStatus] | None = None,
     ) -> Iterable[InstigatorTick]:
         status_strs = [status.value for status in statuses] if statuses else None
         res = self._execute_query(
@@ -195,7 +195,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         origin_id: str,
         selector_id: str,
         before: float,
-        tick_statuses: Optional[Sequence[TickStatus]] = None,
+        tick_statuses: Sequence[TickStatus] | None = None,
     ):
         raise NotImplementedError("Not callable from user cloud")
 
@@ -207,7 +207,7 @@ class GraphQLScheduleStorage(ScheduleStorage["DagsterCloudAgentInstance"], Confi
         raise NotImplementedError("Not callable from user cloud")
 
     def get_auto_materialize_asset_evaluations(
-        self, key: EntityKey, limit: int, cursor: Optional[int] = None
+        self, key: EntityKey, limit: int, cursor: int | None = None
     ) -> Sequence[AutoMaterializeAssetEvaluationRecord]:
         raise NotImplementedError("Not callable from user cloud")
 

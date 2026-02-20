@@ -1,4 +1,4 @@
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from dagster import (
     Enum as DagsterEnum,
@@ -21,7 +21,7 @@ from dagster_cloud.workspace.config_schema.ecs import (
 from dagster_cloud.workspace.config_schema.kubernetes import SHARED_K8S_CONFIG
 
 
-def validate_workspace_location(workspace_location) -> Optional[list[str]]:
+def validate_workspace_location(workspace_location) -> list[str] | None:
     """Processes a single workspace location config. Returns a list of error
     messages if any.
     """
@@ -29,7 +29,7 @@ def validate_workspace_location(workspace_location) -> Optional[list[str]]:
     return [error.message for error in validation.errors or []]
 
 
-def validate_workspace_config(workspace_config) -> Optional[list[str]]:
+def validate_workspace_config(workspace_config) -> list[str] | None:
     """Processes an entire workspace location config. Returns a list of
     error messages, if any.
     """

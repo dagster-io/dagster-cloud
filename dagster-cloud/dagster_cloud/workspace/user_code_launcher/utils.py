@@ -2,7 +2,6 @@ import hashlib
 import json
 import os
 import uuid
-from typing import Optional
 
 import yaml
 from dagster._core.instance.ref import InstanceRef
@@ -87,10 +86,10 @@ def get_instance_ref_for_user_code(instance_ref: InstanceRef) -> InstanceRef:
 
 def get_grpc_server_env(
     code_location_deploy_data: CodeLocationDeployData,
-    port: Optional[int],
+    port: int | None,
     location_name: str,
-    instance_ref: Optional[InstanceRef],
-    socket: Optional[str] = None,
+    instance_ref: InstanceRef | None,
+    socket: str | None = None,
 ) -> dict[str, str]:
     return {
         **{

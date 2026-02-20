@@ -10,7 +10,6 @@ import shutil
 import subprocess
 import sys
 
-import pkg_resources
 from dagster._utils import file_relative_path, safe_tempfile_path
 
 PROTOS_DIR = file_relative_path(__file__, "protos")
@@ -96,11 +95,9 @@ def protoc(generated_dir: str):
                 for line in generated.readlines():
                     rewritten.write(line)
 
-    installed_pkgs = {pkg.key for pkg in pkg_resources.working_set}
-
     # Run ruff if it's available. This is under a conditional because ruff may not be available in
     # a test environment.
-    if "ruff" in installed_pkgs:
+    if shutil.which("ruff"):
         subprocess.check_output(
             [
                 "ruff",

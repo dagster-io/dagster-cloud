@@ -5,7 +5,7 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Optional, cast
+from typing import cast
 
 import dagster._check as check
 import yaml
@@ -38,7 +38,7 @@ def agent_home_exception():
     return ui.error(f"No Dagster config found.\n\n{dagster_home_loc}")
 
 
-def run_local_agent(agent_logging_config: Optional[Mapping[str, object]]) -> None:
+def run_local_agent(agent_logging_config: Mapping[str, object] | None) -> None:
     try:
         with DagsterCloudAgentInstance.get() as inst:
             instance = check.inst(inst, DagsterCloudAgentInstance)
@@ -69,7 +69,7 @@ def run_local_agent(agent_logging_config: Optional[Mapping[str, object]]) -> Non
 
 
 def run_local_agent_in_environment(
-    dagster_home: Optional[Path], agent_logging_config: Optional[Mapping[str, object]]
+    dagster_home: Path | None, agent_logging_config: Mapping[str, object] | None
 ):
     with capture_interrupts():
         old_env = None
@@ -87,12 +87,12 @@ def run_local_agent_in_environment(
 def run_local_agent_in_temp_environment(
     agent_token: str,
     deployment: str,
-    agent_label: Optional[str],
-    instance_config: Optional[str],
-    user_code_launcher_module: Optional[str],
-    user_code_launcher_class: Optional[str],
-    user_code_launcher_config: Optional[str],
-    agent_logging_config: Optional[Mapping[str, object]],
+    agent_label: str | None,
+    instance_config: str | None,
+    user_code_launcher_module: str | None,
+    user_code_launcher_class: str | None,
+    user_code_launcher_config: str | None,
+    agent_logging_config: Mapping[str, object] | None,
 ):
     config = {
         "instance_class": {
@@ -141,7 +141,7 @@ def run_local_agent_in_temp_environment(
     short_help="Run the Dagster Cloud agent.",
 )
 def run(
-    dagster_home: Optional[Path] = Argument(None),
+    dagster_home: Path | None = Argument(None),
     agent_token: str = Option(
         None, "--agent-token", "-a", help="Agent token, if running ephemerally."
     ),
@@ -168,7 +168,7 @@ def run(
         help="Config to supply the User Code Launcher, in JSON format.",
         hidden=True,
     ),
-    agent_logging_config_path: Optional[Path] = Option(
+    agent_logging_config_path: Path | None = Option(
         None,
         "--agent-logging-config-path",
         help=(
@@ -177,7 +177,7 @@ def run(
         ),
         exists=True,
     ),
-    agent_logging_config_string: Optional[str] = Option(
+    agent_logging_config_string: str | None = Option(
         None,
         "--agent-logging-config-string",
         help=(
@@ -233,10 +233,10 @@ def run(
 
 
 def _get_agent_logging_config(
-    agent_logging_config_path: Optional[Path],
-    agent_logging_config_string: Optional[str],
-) -> Optional[Mapping[str, object]]:
-    agent_logging_config: Optional[Mapping[str, object]] = None
+    agent_logging_config_path: Path | None,
+    agent_logging_config_string: str | None,
+) -> Mapping[str, object] | None:
+    agent_logging_config: Mapping[str, object] | None = None
     if agent_logging_config_path:
         agent_logging_config = cast(
             "Mapping[str, object]",

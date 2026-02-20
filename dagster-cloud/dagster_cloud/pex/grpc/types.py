@@ -1,4 +1,4 @@
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import dagster._check as check
 from dagster._core.instance.ref import InstanceRef
@@ -39,7 +39,7 @@ class CreatePexServerArgs(
         [
             ("server_handle", PexServerHandle),
             ("code_location_deploy_data", CodeLocationDeployData),
-            ("instance_ref", Optional[InstanceRef]),
+            ("instance_ref", InstanceRef | None),
         ],
     )
 ):
@@ -47,7 +47,7 @@ class CreatePexServerArgs(
         cls,
         server_handle: PexServerHandle,
         code_location_deploy_data: CodeLocationDeployData,
-        instance_ref: Optional[InstanceRef] = None,
+        instance_ref: InstanceRef | None = None,
     ):
         return super().__new__(
             cls,

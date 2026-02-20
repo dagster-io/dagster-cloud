@@ -1,6 +1,6 @@
 import os
 from collections.abc import Sequence
-from typing import IO, TYPE_CHECKING, Any, Optional
+from typing import IO, TYPE_CHECKING, Any
 
 import requests
 from dagster import (
@@ -71,11 +71,11 @@ class CloudComputeLogManager(
         return self._local_manager
 
     @property
-    def upload_interval(self) -> Optional[int]:
+    def upload_interval(self) -> int | None:
         return self._upload_interval
 
     def delete_logs(
-        self, log_key: Optional[Sequence[str]] = None, prefix: Optional[Sequence[str]] = None
+        self, log_key: Sequence[str] | None = None, prefix: Sequence[str] | None = None
     ):
         raise NotImplementedError("User Agent should not need to delete compute logs")
 

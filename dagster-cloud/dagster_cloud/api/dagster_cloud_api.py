@@ -2,7 +2,7 @@ import enum
 from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from enum import Enum
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, TypeAlias, TypedDict
 
 from dagster._core.code_pointer import CodePointer
 from dagster._core.definitions.selector import JobSelector
@@ -54,9 +54,9 @@ class DagsterCloudUploadLocationData:
     """
 
     upload_repository_datas: list[DagsterCloudUploadRepositoryData]
-    container_image: Optional[str]
-    executable_path: Optional[str]
-    dagster_library_versions: Optional[Mapping[str, str]] = None
+    container_image: str | None
+    executable_path: str | None
+    dagster_library_versions: Mapping[str, str] | None = None
 
 
 @whitelist_for_serdes(storage_field_names={"code_location_deploy_data": "deployment_metadata"})
@@ -70,8 +70,8 @@ class DagsterCloudUploadWorkspaceEntry:
 
     location_name: str
     code_location_deploy_data: CodeLocationDeployData
-    upload_location_data: Optional[DagsterCloudUploadLocationData]
-    serialized_error_info: Optional[SerializableErrorInfo]
+    upload_location_data: DagsterCloudUploadLocationData | None
+    serialized_error_info: SerializableErrorInfo | None
 
 
 @whitelist_for_serdes
@@ -79,7 +79,7 @@ class DagsterCloudUploadWorkspaceEntry:
 class DagsterCloudUploadWorkspaceResponse:
     updated: bool
     message: str
-    missing_job_snapshots: Optional[Sequence[JobSelector]]
+    missing_job_snapshots: Sequence[JobSelector] | None
 
 
 @whitelist_for_serdes
@@ -131,7 +131,7 @@ class DagsterCloudApiThreadTelemetry:
 @whitelist_for_serdes(old_storage_names={"CheckForCodeLocationUpdatesRequest"})
 @record
 class DagsterCloudApiSuccess:
-    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
+    thread_telemetry: DagsterCloudApiThreadTelemetry | None = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
         return copy(self, thread_telemetry=thread_telemetry)
@@ -141,7 +141,7 @@ class DagsterCloudApiSuccess:
 @record
 class DagsterCloudApiUnknownCommandResponse:
     request_api: str
-    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
+    thread_telemetry: DagsterCloudApiThreadTelemetry | None = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
         return copy(self, thread_telemetry=thread_telemetry)
@@ -151,7 +151,7 @@ class DagsterCloudApiUnknownCommandResponse:
 @record
 class DagsterCloudApiErrorResponse:
     error_infos: list[SerializableErrorInfo]
-    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
+    thread_telemetry: DagsterCloudApiThreadTelemetry | None = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
         return copy(self, thread_telemetry=thread_telemetry)
@@ -166,7 +166,7 @@ class DagsterCloudApiGrpcResponse:
     # be up-to-date enough to know how to deserialize it (but the host cloud always
     # should, since it will always be up to date).
     serialized_response_or_error: str
-    thread_telemetry: Optional[DagsterCloudApiThreadTelemetry] = None
+    thread_telemetry: DagsterCloudApiThreadTelemetry | None = None
 
     def with_thread_telemetry(self, thread_telemetry: DagsterCloudApiThreadTelemetry):
         return copy(self, thread_telemetry=thread_telemetry)
@@ -190,10 +190,10 @@ class DagsterCloudRepositoryData:
 @record
 class LoadRepositoriesResponse:
     repository_datas: Sequence[DagsterCloudRepositoryData]
-    container_image: Optional[str]
-    executable_path: Optional[str]
-    code_location_deploy_data: Optional[CodeLocationDeployData] = None
-    dagster_library_versions: Optional[Mapping[str, str]] = None
+    container_image: str | None
+    executable_path: str | None
+    code_location_deploy_data: CodeLocationDeployData | None = None
+    dagster_library_versions: Mapping[str, str] | None = None
 
 
 @whitelist_for_serdes
@@ -230,8 +230,8 @@ class DagsterCloudApiRequest(IHaveNew):
         request_api: DagsterCloudApi,
         request_args: Any,
         deployment_name: str,
-        expire_at: Optional[float] = None,
-        is_branch_deployment: Optional[bool] = None,
+        expire_at: float | None = None,
+        is_branch_deployment: bool | None = None,
     ):
         return super().__new__(
             cls,
@@ -252,19 +252,19 @@ class DagsterCloudApiRequest(IHaveNew):
         return get_current_timestamp() > self.expire_at
 
     @staticmethod
-    def format_request(request_id: str, request_api: Union[str, DagsterCloudApi]) -> str:
+    def format_request(request_id: str, request_api: str | DagsterCloudApi) -> str:
         return f"[{request_id}: {request_api}]"
 
     def __str__(self) -> str:
         return DagsterCloudApiRequest.format_request(self.request_id, self.request_api)
 
 
-DagsterCloudApiResponse = Union[
-    DagsterCloudApiSuccess,
-    DagsterCloudApiGrpcResponse,
-    DagsterCloudApiErrorResponse,
-    DagsterCloudApiUnknownCommandResponse,
-]
+DagsterCloudApiResponse: TypeAlias = (
+    DagsterCloudApiSuccess
+    | DagsterCloudApiGrpcResponse
+    | DagsterCloudApiErrorResponse
+    | DagsterCloudApiUnknownCommandResponse
+)
 
 DagsterCloudApiResponseTypesTuple = (
     DagsterCloudApiSuccess,
@@ -297,7 +297,7 @@ class BatchDagsterCloudUploadApiResponse:
 @whitelist_for_serdes
 @record
 class TimestampedError:
-    timestamp: Optional[float]
+    timestamp: float | None
     error: SerializableErrorInfo
 
 
@@ -337,11 +337,11 @@ class AgentHeartbeatMetadata(TypedDict):
 class AgentHeartbeat(IHaveNew):
     timestamp: float
     agent_id: str
-    agent_label: Optional[str]
-    agent_type: Optional[str]
-    errors: Optional[Sequence[TimestampedError]]
+    agent_label: str | None
+    agent_type: str | None
+    errors: Sequence[TimestampedError] | None
     metadata: AgentHeartbeatMetadata
-    run_worker_statuses: Optional[CloudRunWorkerStatuses]
+    run_worker_statuses: CloudRunWorkerStatuses | None
     code_server_heartbeats: Sequence[CloudCodeServerHeartbeat]
     agent_queues_config: AgentQueuesConfig
 
@@ -349,13 +349,13 @@ class AgentHeartbeat(IHaveNew):
         cls,
         timestamp: float,
         agent_id: str,
-        agent_label: Optional[str],
-        agent_type: Optional[str],
-        errors: Optional[Sequence[TimestampedError]] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
-        run_worker_statuses: Optional[CloudRunWorkerStatuses] = None,
-        code_server_heartbeats: Optional[Sequence[CloudCodeServerHeartbeat]] = None,
-        agent_queues_config: Optional[AgentQueuesConfig] = None,
+        agent_label: str | None,
+        agent_type: str | None,
+        errors: Sequence[TimestampedError] | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        run_worker_statuses: CloudRunWorkerStatuses | None = None,
+        code_server_heartbeats: Sequence[CloudCodeServerHeartbeat] | None = None,
+        agent_queues_config: AgentQueuesConfig | None = None,
     ):
         return super().__new__(
             cls,
@@ -385,7 +385,7 @@ class AgentHeartbeat(IHaveNew):
             },
         )
 
-    def get_agent_utilization_metrics(self) -> Optional[AgentUtilizationMetrics]:
+    def get_agent_utilization_metrics(self) -> AgentUtilizationMetrics | None:
         metrics = self.metadata.get("utilization_metrics")
         if metrics and keys_not_none(["container_utilization", "request_utilization"], metrics):
             return metrics
@@ -426,8 +426,8 @@ class SnapshotUploadData:
 @whitelist_for_serdes
 @record
 class CheckSnapshotResult:
-    stored_snapshot: Optional[StoredSnapshot]
-    upload_data: Optional[SnapshotUploadData]
+    stored_snapshot: StoredSnapshot | None
+    upload_data: SnapshotUploadData | None
 
 
 @whitelist_for_serdes
@@ -448,9 +448,9 @@ class DagsterCloudRepositoryManifest:
 @record
 class DagsterCloudCodeLocationManifest:
     repositories: Sequence[DagsterCloudRepositoryManifest]
-    container_image: Optional[str]
-    executable_path: Optional[str]
-    dagster_library_versions: Optional[Mapping[str, str]]
+    container_image: str | None
+    executable_path: str | None
+    dagster_library_versions: Mapping[str, str] | None
     code_location_deploy_data: CodeLocationDeployData
 
 
@@ -458,8 +458,8 @@ class DagsterCloudCodeLocationManifest:
 @record
 class DagsterCloudCodeLocationUpdateResult:
     location_name: str
-    manifest: Optional[DagsterCloudCodeLocationManifest]
-    error_snapshot: Optional[StoredSnapshot]
+    manifest: DagsterCloudCodeLocationManifest | None
+    error_snapshot: StoredSnapshot | None
 
 
 @whitelist_for_serdes
@@ -467,4 +467,4 @@ class DagsterCloudCodeLocationUpdateResult:
 class DagsterCloudCodeLocationUpdateResponse:
     updated: bool
     message: str
-    missing_job_snapshots: Optional[Sequence[JobSelector]]
+    missing_job_snapshots: Sequence[JobSelector] | None

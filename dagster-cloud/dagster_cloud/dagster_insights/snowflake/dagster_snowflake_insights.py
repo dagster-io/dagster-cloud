@@ -2,7 +2,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from dagster import AssetKey, AssetsDefinition, ScheduleDefinition
 
@@ -18,7 +18,7 @@ EVENT_RECORDS_LIMIT = 10000
 class AssetMaterializationId:
     run_id: str
     asset_key: AssetKey
-    partition: Optional[str]
+    partition: str | None
     step_key: str
 
 

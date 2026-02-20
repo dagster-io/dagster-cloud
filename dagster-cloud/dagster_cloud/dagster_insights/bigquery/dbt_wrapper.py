@@ -1,7 +1,7 @@
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import yaml
 from dagster import (
@@ -41,8 +41,8 @@ BIGQUERY_COST_ERROR_MESSAGE = "Could not query information_schema for BigQuery c
 @dataclass
 class BigQueryCostInfo:
     asset_key: AssetKey
-    partition: Optional[str]
-    job_id: Optional[str]
+    partition: str | None
+    job_id: str | None
     slots_ms: int
     bytes_billed: int
 
@@ -57,23 +57,16 @@ class BigQueryCostInfo:
 
 @handle_raise_on_error("dbt_cli_invocation")
 def dbt_with_bigquery_insights(
-    context: Union[OpExecutionContext, AssetExecutionContext],
+    context: OpExecutionContext | AssetExecutionContext,
     dbt_cli_invocation: DbtCliInvocation,
-    dagster_events: Optional[
-        Iterable[
-            Union[
-                Output,
-                AssetMaterialization,
-                AssetObservation,
-                AssetCheckResult,
-                AssetCheckEvaluation,
-            ]
-        ]
-    ] = None,
+    dagster_events: Iterable[
+        Output | AssetMaterialization | AssetObservation | AssetCheckResult | AssetCheckEvaluation
+    ]
+    | None = None,
     skip_config_check=False,
     record_observation_usage: bool = True,
 ) -> Iterator[
-    Union[Output, AssetMaterialization, AssetObservation, AssetCheckResult, AssetCheckEvaluation]
+    Output | AssetMaterialization | AssetObservation | AssetCheckResult | AssetCheckEvaluation
 ]:
     """Wraps a dagster-dbt invocation to associate each BigQuery query with the produced
     asset materializations. This allows the cost of each query to be associated with the asset
@@ -158,7 +151,7 @@ def dbt_with_bigquery_insights(
     invocation_id = run_results_json["metadata"]["invocation_id"]
 
     # backcompat-proof in case the invocation does not have an instantiated adapter on it
-    adapter: Optional[BaseAdapter] = getattr(dbt_cli_invocation, "adapter", None)
+    adapter: BaseAdapter | None = getattr(dbt_cli_invocation, "adapter", None)
     if not adapter:
         if version.parse(dagster_dbt_version) < version.parse(MIN_DAGSTER_DBT_VERSION):
             upgrade_message = f" Extracting cost information requires dagster_dbt>={MIN_DAGSTER_DBT_VERSION} (found {dagster_dbt_version}). "

@@ -1,5 +1,4 @@
 from dataclasses import replace
-from typing import Optional, Union
 
 import dagster._check as check
 from dagster import (
@@ -17,7 +16,7 @@ from dagster._core.errors import DagsterInvalidPropertyError
 
 
 def get_current_context_and_asset_key() -> tuple[
-    Union[OpExecutionContext, AssetExecutionContext], Optional[AssetKey]
+    OpExecutionContext | AssetExecutionContext, AssetKey | None
 ]:
     asset_key = None
     try:
@@ -31,8 +30,8 @@ def get_current_context_and_asset_key() -> tuple[
 
 
 def get_asset_key_for_output(
-    context: Union[OpExecutionContext, AssetExecutionContext], output_name: str
-) -> Optional[AssetKey]:
+    context: OpExecutionContext | AssetExecutionContext, output_name: str
+) -> AssetKey | None:
     asset_key = context.job_def.asset_layer.get_asset_key_for_node_output(
         node_handle=context.op_handle, output_name=output_name
     )
@@ -43,9 +42,11 @@ def get_asset_key_for_output(
 
 def extract_asset_info_from_event(
     context,
-    dagster_event: Union[
-        Output, AssetMaterialization, AssetObservation, AssetCheckResult, AssetCheckEvaluation
-    ],
+    dagster_event: Output
+    | AssetMaterialization
+    | AssetObservation
+    | AssetCheckResult
+    | AssetCheckEvaluation,
     record_observation_usage,
 ):
     if isinstance(dagster_event, AssetMaterialization):

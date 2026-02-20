@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from dagster import DagsterEvent
 from dagster._core.events import (
@@ -23,9 +22,9 @@ def _get_maximum_event_message_characters() -> int:
 
 
 def _truncate_dagster_event_error(
-    error_info: Optional[SerializableErrorInfo],
+    error_info: SerializableErrorInfo | None,
     truncations: list[str],
-) -> Optional[SerializableErrorInfo]:
+) -> SerializableErrorInfo | None:
     if not error_info:
         return error_info
 
@@ -38,9 +37,9 @@ def _truncate_dagster_event_error(
 
 
 def _truncate_dagster_event(
-    dagster_event: Optional[DagsterEvent],
+    dagster_event: DagsterEvent | None,
     truncations: list[str],
-) -> Optional[DagsterEvent]:
+) -> DagsterEvent | None:
     if not dagster_event:
         return dagster_event
     event_specific_data = dagster_event.event_specific_data
@@ -73,7 +72,7 @@ def _truncate_dagster_event(
 def truncate_event(
     event: EventLogEntry,
     maximum_length=None,
-    truncations: Optional[list[str]] = None,
+    truncations: list[str] | None = None,
 ) -> EventLogEntry:
     truncations = [] if truncations is None else truncations
 

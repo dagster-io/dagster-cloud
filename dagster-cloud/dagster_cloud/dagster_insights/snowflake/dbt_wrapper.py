@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Iterator
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from dagster import (
@@ -29,23 +29,16 @@ if TYPE_CHECKING:
 
 @handle_raise_on_error("dbt_cli_invocation")
 def dbt_with_snowflake_insights(
-    context: Union[OpExecutionContext, AssetExecutionContext],
+    context: OpExecutionContext | AssetExecutionContext,
     dbt_cli_invocation: "DbtCliInvocation",
-    dagster_events: Optional[
-        Iterable[
-            Union[
-                Output,
-                AssetMaterialization,
-                AssetObservation,
-                AssetCheckResult,
-                AssetCheckEvaluation,
-            ]
-        ]
-    ] = None,
+    dagster_events: Iterable[
+        Output | AssetMaterialization | AssetObservation | AssetCheckResult | AssetCheckEvaluation
+    ]
+    | None = None,
     skip_config_check=False,
     record_observation_usage: bool = True,
 ) -> Iterator[
-    Union[Output, AssetMaterialization, AssetObservation, AssetCheckResult, AssetCheckEvaluation]
+    Output | AssetMaterialization | AssetObservation | AssetCheckResult | AssetCheckEvaluation
 ]:
     """Wraps a dagster-dbt invocation to associate each Snowflake query with the produced
     asset materializations. This allows the cost of each query to be associated with the asset
@@ -108,7 +101,7 @@ def dbt_with_snowflake_insights(
     if dagster_events is None:
         dagster_events = dbt_cli_invocation.stream()
 
-    asset_and_partition_key_to_unique_id: list[tuple[AssetKey, Optional[str], Any]] = []
+    asset_and_partition_key_to_unique_id: list[tuple[AssetKey, str | None, Any]] = []
     for dagster_event in dagster_events:
         if isinstance(
             dagster_event,

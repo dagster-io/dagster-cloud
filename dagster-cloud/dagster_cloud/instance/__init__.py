@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Sequence
 from contextlib import ExitStack
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from dagster import (
@@ -63,7 +63,7 @@ class DagsterCloudInstance(DagsterInstance):
         )
 
     @property
-    def defs_state_storage(self) -> Optional[DefsStateStorage]:
+    def defs_state_storage(self) -> DefsStateStorage | None:
         # only DeploymentScopedHostInstance / DagsterCloudAgentInstance have a defs state storage
         return None
 
@@ -115,8 +115,8 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         self._exit_stack = ExitStack()
 
         self._user_code_launcher = None
-        self._graphql_requests_session: Optional[Session] = None
-        self._rest_requests_session: Optional[Session] = None
+        self._graphql_requests_session: Session | None = None
+        self._rest_requests_session: Session | None = None
         self._graphql_client = None
         self._http_client = None
 
@@ -144,17 +144,17 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         )
         self.agent_queues_config = AgentQueuesConfig(**processed_agent_queues_config)  # pyright: ignore[reportCallIssue]
 
-        self._allowed_full_deployment_locations: Optional[dict[str, list[str]]] = (
+        self._allowed_full_deployment_locations: dict[str, list[str]] | None = (
             allowed_full_deployment_locations
         )
-        self._allowed_branch_deployment_locations: Optional[list[str]] = (
+        self._allowed_branch_deployment_locations: list[str] | None = (
             allowed_branch_deployment_locations
         )
 
         self._instance_uuid = str(uuid.uuid4())
 
     @property
-    def defs_state_storage(self) -> Optional[DefsStateStorage]:
+    def defs_state_storage(self) -> DefsStateStorage | None:
         # temporary hack to avoid cases where the default BlobStorageStateStorage is used
         from dagster_cloud.storage.defs_state.storage import GraphQLDefsStateStorage
 
@@ -165,7 +165,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         )
 
     def _get_processed_config(
-        self, name: str, config: Optional[dict[str, Any]], config_type: dict[str, Any]
+        self, name: str, config: dict[str, Any] | None, config_type: dict[str, Any]
     ):
         config_dict = check.opt_dict_param(config, "config", key_type=str)
         processed_config = process_config(config_type, config_dict)
@@ -177,7 +177,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             )
         return processed_config.value
 
-    def _dagster_cloud_api_config_for_deployment(self, deployment_name: Optional[str]):
+    def _dagster_cloud_api_config_for_deployment(self, deployment_name: str | None):
         new_api_config = dict(copy.deepcopy(self._dagster_cloud_api_config))
         if deployment_name:
             new_api_config["deployment"] = deployment_name
@@ -206,7 +206,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             scope=DagsterCloudInstanceScope.ORGANIZATION,
         )
 
-    def graphql_client_for_deployment(self, deployment_name: Optional[str]):
+    def graphql_client_for_deployment(self, deployment_name: str | None):
         return create_agent_graphql_client(
             self.client_managed_retries_requests_session,
             self.dagster_cloud_graphql_url,
@@ -230,7 +230,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
             scope=scope,
         )
 
-    def _translate_socket_param(self, socket_option: Union[str, int]):
+    def _translate_socket_param(self, socket_option: str | int):
         if isinstance(socket_option, str):
             check.invariant(
                 hasattr(socket, socket_option),
@@ -334,12 +334,12 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         )
 
     @property
-    def organization_name(self) -> Optional[str]:
+    def organization_name(self) -> str | None:
         organization, _ = decode_agent_token(self.dagster_cloud_agent_token)
         return organization
 
     @property
-    def deployment_name(self) -> Optional[str]:
+    def deployment_name(self) -> str | None:
         deployment_names = self.deployment_names
         check.invariant(
             len(deployment_names) <= 1,
@@ -442,7 +442,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._dagster_cloud_api_config["timeout"]
 
     @property
-    def dagster_cloud_api_proxies(self) -> Optional[dict[str, str]]:
+    def dagster_cloud_api_proxies(self) -> dict[str, str] | None:
         # Requests library modifies the proxies key so create a copy
         return (
             self._dagster_cloud_api_config.get("proxies").copy()  # pyright: ignore[reportOptionalMemberAccess]
@@ -451,7 +451,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         )
 
     @property
-    def dagster_cloud_api_agent_label(self) -> Optional[str]:
+    def dagster_cloud_api_agent_label(self) -> str | None:
         return self._dagster_cloud_api_config.get("agent_label")
 
     @property
@@ -463,11 +463,11 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return self._instance_uuid
 
     @property
-    def allowed_full_deployment_locations(self) -> Optional[dict[str, list[str]]]:
+    def allowed_full_deployment_locations(self) -> dict[str, list[str]] | None:
         return self._allowed_full_deployment_locations
 
     @property
-    def allowed_branch_deployment_locations(self) -> Optional[list[str]]:
+    def allowed_branch_deployment_locations(self) -> list[str] | None:
         return self._allowed_branch_deployment_locations
 
     def is_location_allowed(

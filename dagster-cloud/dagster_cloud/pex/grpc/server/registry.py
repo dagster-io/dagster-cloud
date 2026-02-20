@@ -9,7 +9,7 @@ import threading
 from dataclasses import dataclass
 from os.path import expanduser
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 from uuid import uuid4
 
 from dagster import _check as check
@@ -60,7 +60,7 @@ class PexExecutable(
             ("source_path", str),
             ("all_paths", list[str]),
             ("environ", dict[str, str]),
-            ("working_directory", Optional[str]),
+            ("working_directory", str | None),
             ("venv_dirs", list[str]),
         ],
     )
@@ -70,7 +70,7 @@ class PexExecutable(
         source_path: str,
         all_paths: list[str],
         environ: dict[str, str],
-        working_directory: Optional[str],
+        working_directory: str | None,
         venv_dirs: list[str],
     ):
         return super().__new__(
@@ -97,7 +97,7 @@ class PexInstallationError(Exception):
 
 
 class PexS3Registry:
-    def __init__(self, local_pex_files_dir: Optional[str] = None):
+    def __init__(self, local_pex_files_dir: str | None = None):
         self._local_pex_files_dir = (
             local_pex_files_dir if local_pex_files_dir else DEFAULT_PEX_FILES_DIR
         )
@@ -298,7 +298,7 @@ class PexS3Registry:
             )
             raise PexInstallationError("Cannot determine site-packages", venv_path, proc.stderr)
 
-    def get_working_dir_for_pex(self, pex_path: str) -> Optional[str]:
+    def get_working_dir_for_pex(self, pex_path: str) -> str | None:
         # A special 'working_directory' package may be included the source package.
         # If so we use site-packages/working_directory/root as the working dir.
         # This allows shipping arbitrary files to the server - also used for python_file support.

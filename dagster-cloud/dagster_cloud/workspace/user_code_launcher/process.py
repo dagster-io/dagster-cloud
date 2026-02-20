@@ -5,7 +5,7 @@ import sys
 import threading
 from collections import defaultdict
 from collections.abc import Collection, Mapping
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, NamedTuple
 
 from dagster import (
     BoolSource,
@@ -90,7 +90,7 @@ class MultipexUserCodeEntry(
 class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     def __init__(
         self,
-        inst_data: Optional[ConfigurableClassData] = None,
+        inst_data: ConfigurableClassData | None = None,
         wait_for_processes: bool = False,
         **kwargs,
     ):
@@ -99,7 +99,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         # map from pid to server being spun up
         # (including old servers in the process of being shut down)
-        self._process_entries: dict[int, Union[ProcessUserCodeEntry, MultipexUserCodeEntry]] = {}
+        self._process_entries: dict[int, ProcessUserCodeEntry | MultipexUserCodeEntry] = {}
 
         # map from locationname to the pid(s) for that location-metadata combination.
         # Generally there should be only one pid per location unless an exception was raised partway
@@ -114,7 +114,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         self._cleanup_zombies_shutdown_event = threading.Event()
         self._cleanup_zombies_thread = None
 
-        self._run_launcher: Optional[CloudProcessRunLauncher] = None
+        self._run_launcher: CloudProcessRunLauncher | None = None
 
         super().__init__(**kwargs)
 
@@ -171,7 +171,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
                     break
 
     @property
-    def inst_data(self) -> Optional[ConfigurableClassData]:
+    def inst_data(self) -> ConfigurableClassData | None:
         return self._inst_data
 
     @classmethod
@@ -227,10 +227,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
 
         key = (deployment_name, location_name)
 
-        client: Union[MultiPexGrpcClient, DagsterGrpcClient]
+        client: MultiPexGrpcClient | DagsterGrpcClient
 
-        port: Optional[int] = None
-        socket: Optional[str] = None
+        port: int | None = None
+        socket: str | None = None
 
         if seven.IS_WINDOWS:
             port = find_free_port()
@@ -389,10 +389,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
     def _list_server_handles(self) -> list[int]:
         return list(self._process_entries.keys())
 
-    def get_agent_id_for_server(self, handle: int) -> Optional[str]:
+    def get_agent_id_for_server(self, handle: int) -> str | None:
         return self._instance.instance_uuid
 
-    def get_server_create_timestamp(self, handle: int) -> Optional[float]:
+    def get_server_create_timestamp(self, handle: int) -> float | None:
         return None
 
     def __exit__(self, exception_type, exception_value, traceback):

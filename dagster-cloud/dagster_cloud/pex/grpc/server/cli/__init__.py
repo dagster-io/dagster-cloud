@@ -2,7 +2,6 @@ import logging
 import os
 import signal
 import subprocess
-from typing import Optional
 
 from dagster._serdes import deserialize_value
 from dagster._utils.interrupts import setup_interrupt_handlers
@@ -18,13 +17,13 @@ app = Typer(hidden=True)
 @app.command(short_help="Run multi-pex server to spin up subprocesses via PEX files")
 def grpc(
     host: str = Option(default="localhost"),
-    port: Optional[int] = Option(default=None),
-    socket: Optional[str] = Option(default=None),
-    max_workers: Optional[int] = Option(default=None),
-    local_pex_files_dir: Optional[str] = Option(
+    port: int | None = Option(default=None),
+    socket: str | None = Option(default=None),
+    max_workers: int | None = Option(default=None),
+    local_pex_files_dir: str | None = Option(
         default="/tmp/pex-files", envvar="LOCAL_PEX_FILES_DIR"
     ),
-    watchdog_run_interval: Optional[int] = Option(default=30, envvar="WATCHDOG_RUN_INTERVAL"),
+    watchdog_run_interval: int | None = Option(default=30, envvar="WATCHDOG_RUN_INTERVAL"),
     enable_metrics: bool = Option(default=False, envvar="PEX_ENABLE_METRICS"),
 ):
     logger = logging.getLogger("dagster.multipex_server")
@@ -45,7 +44,7 @@ def grpc(
 def execute_run(
     input_json: str,
     pex_metadata_json: str,
-    local_pex_files_dir: Optional[str] = Option(
+    local_pex_files_dir: str | None = Option(
         default="/tmp/pex-files", envvar="LOCAL_PEX_FILES_DIR"
     ),
 ):

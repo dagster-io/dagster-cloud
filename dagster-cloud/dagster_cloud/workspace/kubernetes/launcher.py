@@ -3,7 +3,7 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
 
 import kubernetes
 import kubernetes.client as client
@@ -63,7 +63,7 @@ class K8sHandle(NamedTuple):
     namespace: str
     name: str
     labels: Mapping[str, str]
-    creation_timestamp: Optional[float]
+    creation_timestamp: float | None
 
     def __str__(self):
         return f"{self.namespace}/{self.name}"
@@ -643,10 +643,10 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self._logger.info(f"Listing server handles: {handles}")
         return handles
 
-    def get_agent_id_for_server(self, handle: K8sHandle) -> Optional[str]:
+    def get_agent_id_for_server(self, handle: K8sHandle) -> str | None:
         return handle.labels.get("agent_id")
 
-    def get_server_create_timestamp(self, handle: K8sHandle) -> Optional[float]:
+    def get_server_create_timestamp(self, handle: K8sHandle) -> float | None:
         return handle.creation_timestamp
 
     def _remove_server_handle(self, server_handle: K8sHandle) -> None:

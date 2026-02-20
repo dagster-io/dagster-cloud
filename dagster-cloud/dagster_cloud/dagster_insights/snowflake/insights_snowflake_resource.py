@@ -2,7 +2,7 @@ import warnings
 from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from io import StringIO
-from typing import Any, Optional, Union, cast
+from typing import Any, cast
 
 import snowflake.connector
 from dagster import (
@@ -24,7 +24,7 @@ from dagster_cloud.dagster_insights.snowflake.snowflake_utils import meter_snowf
 
 
 def get_current_context_and_asset_key_or_warn() -> tuple[
-    Union[OpExecutionContext, AssetExecutionContext, None], Optional[AssetKey]
+    OpExecutionContext | AssetExecutionContext | None, AssetKey | None
 ]:
     try:
         return get_current_context_and_asset_key()
@@ -41,7 +41,7 @@ class InsightsSnowflakeCursor(SnowflakeCursor):
         self._asset_key = None
         super().__init__(*args, **kwargs)
 
-    def set_asset_key(self, asset_key: Optional[AssetKey]):
+    def set_asset_key(self, asset_key: AssetKey | None):
         self._asset_key = asset_key
 
     def execute(self, command: str, *args, **kwargs):
@@ -59,7 +59,7 @@ class InsightsSnowflakeCursor(SnowflakeCursor):
 
 
 class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
-    def __init__(self, *args, asset_key: Optional[AssetKey] = None, **kwargs) -> None:
+    def __init__(self, *args, asset_key: AssetKey | None = None, **kwargs) -> None:
         self._asset_key = asset_key
         super().__init__(*args, **kwargs)
 
@@ -155,7 +155,7 @@ class InsightsSnowflakeResource(SnowflakeResource):
     @contextmanager
     def get_connection(
         self, raw_conn: bool = True
-    ) -> Iterator[Union[SqlDbConnection, WrappedSnowflakeConnection]]:
+    ) -> Iterator[SqlDbConnection | WrappedSnowflakeConnection]:
         if self.connector == "sqlalchemy":
             from snowflake.sqlalchemy import URL
             from sqlalchemy import create_engine, event
@@ -196,7 +196,7 @@ class InsightsSnowflakeResource(SnowflakeResource):
     @contextmanager
     def get_connection_for_asset(
         self, asset_key: AssetKey, raw_conn: bool = True
-    ) -> Iterator[Union[SqlDbConnection, WrappedSnowflakeConnection]]:
+    ) -> Iterator[SqlDbConnection | WrappedSnowflakeConnection]:
         if self.connector == "sqlalchemy":
             from snowflake.sqlalchemy import URL
             from sqlalchemy import create_engine, event
@@ -238,7 +238,7 @@ class InsightsSnowflakeConnection(SnowflakeConnection):
     def execute_query(
         self,
         sql: str,
-        parameters: Union[Sequence[Any], Mapping[Any, Any], None] = None,
+        parameters: Sequence[Any] | Mapping[Any, Any] | None = None,
         fetch_results: bool = False,
         use_pandas_result: bool = False,
     ):
@@ -256,10 +256,10 @@ class InsightsSnowflakeConnection(SnowflakeConnection):
     def execute_queries(
         self,
         sql_queries: Sequence[str],
-        parameters: Union[Sequence[Any], Mapping[Any, Any], None] = None,
+        parameters: Sequence[Any] | Mapping[Any, Any] | None = None,
         fetch_results: bool = False,
         use_pandas_result: bool = False,
-    ) -> Union[Sequence[Any], None]:
+    ) -> Sequence[Any] | None:
         context, asset_key = get_current_context_and_asset_key_or_warn()
 
         if not context:

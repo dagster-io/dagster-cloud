@@ -1,9 +1,9 @@
 import zlib
 from collections import namedtuple
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from io import BytesIO
-from typing import Any, Callable
+from typing import Any
 
 from dagster import (
     Field,

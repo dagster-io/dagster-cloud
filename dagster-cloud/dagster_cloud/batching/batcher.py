@@ -1,11 +1,11 @@
 import logging
 import os
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from concurrent.futures import Future, TimeoutError
 from contextlib import contextmanager
 from queue import Empty, Full, Queue
 from threading import Lock
-from typing import Callable, Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 import dagster._check as check
 
@@ -23,7 +23,7 @@ DEFAULT_MAX_BATCH_SIZE = 100
 DEFAULT_MAX_QUEUE_SIZE = 1000
 
 
-def _get_override_for_name(setting: str, name: str) -> Optional[int]:
+def _get_override_for_name(setting: str, name: str) -> int | None:
     env_name = f"DAGSTER_BATCHING__{name.upper().replace('-', '_')}__{setting.upper()}"
     value = os.getenv(env_name)
     if value is None:
@@ -44,9 +44,7 @@ def _get_override_for_name(setting: str, name: str) -> Optional[int]:
         return None
 
 
-def _get_config(
-    setting: str, name: str, passed_in_default: Optional[int], global_default: int
-) -> int:
+def _get_config(setting: str, name: str, passed_in_default: int | None, global_default: int) -> int:
     override = _get_override_for_name(setting, name)
     if override is not None:
         return override
@@ -87,10 +85,10 @@ class Batcher(Generic[I, O]):
         self,
         name: str,
         batcher_fn: Callable[[list[I]], list[O]],
-        max_queue_size: Optional[int] = None,
-        max_batch_size: Optional[int] = None,
-        max_wait_ms: Optional[int] = None,
-        instrumentation: Optional[Instrumentation] = None,
+        max_queue_size: int | None = None,
+        max_batch_size: int | None = None,
+        max_wait_ms: int | None = None,
+        instrumentation: Instrumentation | None = None,
     ) -> None:
         check.invariant(
             max_wait_ms is None or max_wait_ms > 0,

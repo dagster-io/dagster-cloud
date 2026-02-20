@@ -2,7 +2,7 @@ import asyncio
 import os
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import boto3
 import grpc
@@ -70,29 +70,29 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         execution_role_arn: str,
         log_group: str,
         service_discovery_namespace_id: str,
-        task_role_arn: Optional[str] = None,
-        security_group_ids: Optional[list[str]] = None,
-        inst_data: Optional[ConfigurableClassData] = None,
+        task_role_arn: str | None = None,
+        security_group_ids: list[str] | None = None,
+        inst_data: ConfigurableClassData | None = None,
         secrets=None,
         secrets_tag=None,
         env_vars=None,
         ecs_timeout=None,
         ecs_grace_period=None,
-        launch_type: Optional[str] = None,
-        server_resources: Optional[Mapping[str, Any]] = None,
-        run_resources: Optional[Mapping[str, Any]] = None,
-        runtime_platform: Optional[Mapping[str, Any]] = None,
-        mount_points: Optional[Sequence[Mapping[str, Any]]] = None,
-        volumes: Optional[Sequence[Mapping[str, Any]]] = None,
-        server_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
-        run_sidecar_containers: Optional[Sequence[Mapping[str, Any]]] = None,
-        server_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
-        run_ecs_tags: Optional[Sequence[Mapping[str, Optional[str]]]] = None,
-        server_health_check: Optional[Mapping[str, Any]] = None,
+        launch_type: str | None = None,
+        server_resources: Mapping[str, Any] | None = None,
+        run_resources: Mapping[str, Any] | None = None,
+        runtime_platform: Mapping[str, Any] | None = None,
+        mount_points: Sequence[Mapping[str, Any]] | None = None,
+        volumes: Sequence[Mapping[str, Any]] | None = None,
+        server_sidecar_containers: Sequence[Mapping[str, Any]] | None = None,
+        run_sidecar_containers: Sequence[Mapping[str, Any]] | None = None,
+        server_ecs_tags: Sequence[Mapping[str, str | None]] | None = None,
+        run_ecs_tags: Sequence[Mapping[str, str | None]] | None = None,
+        server_health_check: Mapping[str, Any] | None = None,
         enable_ecs_exec=False,
         server_task_definition_prefix: str = "server",
         run_task_definition_prefix: str = "run",
-        assign_public_ip: Optional[bool] = None,
+        assign_public_ip: bool | None = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -321,7 +321,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property
-    def inst_data(self) -> Optional[ConfigurableClassData]:
+    def inst_data(self) -> ConfigurableClassData | None:
         return self._inst_data
 
     @property
@@ -339,28 +339,28 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
     def _get_grpc_server_sidecars(
         self, container_context: EcsContainerContext
-    ) -> Optional[Sequence[Mapping[str, Any]]]:
+    ) -> Sequence[Mapping[str, Any]] | None:
         return container_context.server_sidecar_containers
 
-    def _get_service_cpu_override(self, container_context: EcsContainerContext) -> Optional[str]:
+    def _get_service_cpu_override(self, container_context: EcsContainerContext) -> str | None:
         return container_context.server_resources.get("cpu")
 
-    def _get_service_memory_override(self, container_context: EcsContainerContext) -> Optional[str]:
+    def _get_service_memory_override(self, container_context: EcsContainerContext) -> str | None:
         return container_context.server_resources.get("memory")
 
     def _get_service_ephemeral_storage_override(
         self, container_context: EcsContainerContext
-    ) -> Optional[int]:
+    ) -> int | None:
         return container_context.server_resources.get("ephemeral_storage")
 
     def _get_service_code_server_replicas_count_override(
         self, container_context: EcsContainerContext
-    ) -> Optional[int]:
+    ) -> int | None:
         return container_context.server_resources.get("replica_count")
 
     def _get_service_repository_credentials_override(
         self, container_context: EcsContainerContext
-    ) -> Optional[str]:
+    ) -> str | None:
         return container_context.repository_credentials
 
     def _get_enable_ecs_exec(self) -> bool:
@@ -651,7 +651,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 )
 
         if metadata.pex_metadata:
-            additional_check = lambda: _assert_new_pex_server_did_not_crash()
+            additional_check = _assert_new_pex_server_did_not_crash
         else:
             additional_check = lambda: self.client.assert_task_not_stopped(
                 task_arn, CONTAINER_NAME, self._logger
@@ -704,11 +704,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             if "dagster/location_name" in service.tags.keys()
         ]
 
-    def get_agent_id_for_server(self, handle: EcsServerHandleType) -> Optional[str]:
+    def get_agent_id_for_server(self, handle: EcsServerHandleType) -> str | None:
         # Need to get container for server handle, then get the agent tag from that.
         return handle.tags.get("dagster/agent_id")
 
-    def get_server_create_timestamp(self, handle: EcsServerHandleType) -> Optional[float]:
+    def get_server_create_timestamp(self, handle: EcsServerHandleType) -> float | None:
         return handle.create_timestamp
 
     def _run_launcher_kwargs(self) -> dict[str, Any]:

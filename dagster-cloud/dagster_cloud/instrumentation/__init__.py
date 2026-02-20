@@ -1,6 +1,6 @@
 from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
-from typing import Optional, Protocol
+from typing import Protocol
 
 
 class Instrumentation(Protocol):
@@ -11,7 +11,7 @@ class Instrumentation(Protocol):
     def increment(self, name: str) -> None: ...
 
     def instrument_context(
-        self, name: str, buckets_ms: Optional[list[int]]
+        self, name: str, buckets_ms: list[int] | None
     ) -> AbstractContextManager[None]: ...
 
 
@@ -27,6 +27,6 @@ class NoOpInstrumentation(Instrumentation):
 
     @contextmanager
     def instrument_context(
-        self, name: str, buckets_ms: Optional[list[int]]
+        self, name: str, buckets_ms: list[int] | None
     ) -> Generator[None, None, None]:
         yield

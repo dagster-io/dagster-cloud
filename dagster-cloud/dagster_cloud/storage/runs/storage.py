@@ -1,7 +1,7 @@
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 import dagster._check as check
 from dagster._core.errors import (
@@ -67,7 +67,7 @@ from dagster_cloud.storage.runs.queries import (
 )
 
 
-def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[dict[str, Any]]:
+def _get_filters_input(filters: RunsFilter | None) -> dict[str, Any] | None:
     filters = check.opt_inst_param(filters, "filters", RunsFilter)
 
     if filters is None:
@@ -98,8 +98,8 @@ def _get_filters_input(filters: Optional[RunsFilter]) -> Optional[dict[str, Any]
 
 
 def _get_bulk_actions_filters_input(
-    filters: Optional[BulkActionsFilter],
-) -> Optional[dict[str, Any]]:
+    filters: BulkActionsFilter | None,
+) -> dict[str, Any] | None:
     filters = check.opt_inst_param(filters, "filters", BulkActionsFilter)
     unsupported_filters = []
     if filters and filters.job_name:
@@ -142,7 +142,7 @@ def _run_record_from_graphql(graphene_run_record: dict) -> RunRecord:
     )
 
 
-def _get_bucket_input(bucket_by: Optional[Union[JobBucket, TagBucket]]) -> Optional[dict[str, Any]]:
+def _get_bucket_input(bucket_by: JobBucket | TagBucket | None) -> dict[str, Any] | None:
     if not bucket_by:
         return None
 
@@ -159,7 +159,7 @@ def _get_bucket_input(bucket_by: Optional[Union[JobBucket, TagBucket]]) -> Optio
 
 class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def __init__(
-        self, inst_data: Optional[ConfigurableClassData] = None, override_graphql_client=None
+        self, inst_data: ConfigurableClassData | None = None, override_graphql_client=None
     ):
         """Initialize this class directly only for test (using `override_graphql_client`).
         Use the ConfigurableClass machinery to init from instance yaml.
@@ -237,7 +237,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return dagster_run
 
     def handle_run_event(
-        self, run_id: str, event: DagsterEvent, update_timestamp: Optional[datetime] = None
+        self, run_id: str, event: DagsterEvent, update_timestamp: datetime | None = None
     ):
         raise NotImplementedError("Should never be called by an agent client")
 
@@ -247,10 +247,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_runs(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,
-        filters: Optional[RunsFilter] = None,
-        cursor: Optional[str] = None,
-        limit: Optional[int] = None,
-        bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
+        filters: RunsFilter | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        bucket_by: JobBucket | TagBucket | None = None,
         ascending: bool = False,
     ) -> Iterable[DagsterRun]:
         res = self._execute_query(
@@ -267,9 +267,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_run_ids(
         self,
-        filters: Optional[RunsFilter] = None,
-        cursor: Optional[str] = None,
-        limit: Optional[int] = None,
+        filters: RunsFilter | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
     ) -> Sequence[str]:
         res = self._execute_query(
             GET_RUN_IDS_QUERY,
@@ -281,7 +281,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["getRunIds"]
 
-    def get_runs_count(self, filters: Optional[RunsFilter] = None) -> int:
+    def get_runs_count(self, filters: RunsFilter | None = None) -> int:
         res = self._execute_query(
             GET_RUNS_COUNT_QUERY,
             variables={
@@ -290,7 +290,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["getRunsCount"]
 
-    def get_run_group(self, run_id: str) -> Optional[tuple[str, Iterable[DagsterRun]]]:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_run_group(self, run_id: str) -> tuple[str, Iterable[DagsterRun]] | None:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         res = self._execute_query(
             GET_RUN_GROUP_QUERY, variables={"runId": check.str_param(run_id, "run_id")}
         )
@@ -308,7 +308,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         else:
             raise DagsterInvariantViolationError(f"Unexpected getRunGroupOrError response {res}")
 
-    def get_run_by_id(self, run_id: str) -> Optional[DagsterRun]:
+    def get_run_by_id(self, run_id: str) -> DagsterRun | None:
         res = self._execute_query(
             GET_RUN_BY_ID_QUERY, variables={"runId": check.str_param(run_id, "run_id")}
         )
@@ -320,12 +320,12 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_run_records(
         self,
-        filters: Optional[RunsFilter] = None,
-        limit: Optional[int] = None,
-        order_by: Optional[str] = None,
+        filters: RunsFilter | None = None,
+        limit: int | None = None,
+        order_by: str | None = None,
         ascending: bool = False,
-        cursor: Optional[str] = None,
-        bucket_by: Optional[Union[JobBucket, TagBucket]] = None,
+        cursor: str | None = None,
+        bucket_by: JobBucket | TagBucket | None = None,
     ) -> list[RunRecord]:
         res = self._execute_query(
             GET_RUN_RECORDS_QUERY,
@@ -343,8 +343,8 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def get_run_tags(
         self,
         tag_keys: Sequence[str],
-        value_prefix: Optional[str] = None,
-        limit: Optional[int] = None,
+        value_prefix: str | None = None,
+        limit: int | None = None,
     ) -> Sequence[tuple[str, set[str]]]:
         res = self._execute_query(
             GET_RUN_TAGS_QUERY,
@@ -391,7 +391,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return res["data"]["runs"]["hasPipelineSnapshot"]
 
     def add_job_snapshot(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
-        self, pipeline_snapshot: JobSnap, snapshot_id: Optional[str] = None
+        self, pipeline_snapshot: JobSnap, snapshot_id: str | None = None
     ) -> str:
         self._execute_query(
             ADD_PIPELINE_SNAPSHOT_MUTATION,
@@ -425,7 +425,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return res["data"]["runs"]["hasExecutionPlanSnapshot"]
 
     def add_execution_plan_snapshot(
-        self, execution_plan_snapshot: ExecutionPlanSnapshot, snapshot_id: Optional[str] = None
+        self, execution_plan_snapshot: ExecutionPlanSnapshot, snapshot_id: str | None = None
     ) -> str:
         self._execute_query(
             ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION,
@@ -485,7 +485,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def add_run_telemetry(
         self,
         run_telemetry: RunTelemetryData,
-        tags: Optional[dict[str, str]] = None,
+        tags: dict[str, str] | None = None,
     ) -> None:
         if tags is None:
             tags = {}
@@ -528,10 +528,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
 
     def get_backfills(
         self,
-        filters: Optional[BulkActionsFilter] = None,
-        cursor: Optional[str] = None,
-        limit: Optional[int] = None,
-        status: Optional[BulkActionStatus] = None,
+        filters: BulkActionsFilter | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        status: BulkActionStatus | None = None,
     ):
         """Get a list of partition backfills."""
         res = self._execute_query(
@@ -548,7 +548,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             for backfill in res["data"]["runs"]["getBackfills"]
         ]
 
-    def get_backfills_count(self, filters: Optional[BulkActionsFilter] = None) -> int:
+    def get_backfills_count(self, filters: BulkActionsFilter | None = None) -> int:
         raise NotImplementedError("get_backfills_count is not callable from user cloud.")
 
     def get_backfill(self, backfill_id: str) -> PartitionBackfill:

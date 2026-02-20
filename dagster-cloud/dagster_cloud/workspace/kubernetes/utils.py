@@ -3,7 +3,6 @@ import copy
 import re
 import time
 from collections.abc import Mapping
-from typing import Optional
 
 import kubernetes
 from dagster_k8s.client import DagsterKubernetesClient
@@ -196,7 +195,7 @@ def construct_code_location_deployment(
     )
 
 
-def get_container_waiting_reason(pod) -> Optional[str]:
+def get_container_waiting_reason(pod) -> str | None:
     if (not pod.status.container_statuses) or len(pod.status.container_statuses) == 0:
         return None
 

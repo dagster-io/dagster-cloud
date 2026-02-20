@@ -2,7 +2,7 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from dagster import (
     AssetExecutionContext,
@@ -60,9 +60,9 @@ def _build_run_request_for_partition_key_range(
 
 
 def create_snowflake_insights_asset_and_schedule(
-    start_date: Union[datetime, date, str],
-    name: Optional[str] = None,
-    group_name: Optional[str] = None,
+    start_date: datetime | date | str,
+    name: str | None = None,
+    group_name: str | None = None,
     job_name: str = "snowflake_insights_import",
     dry_run=False,
     allow_partial_partitions=True,

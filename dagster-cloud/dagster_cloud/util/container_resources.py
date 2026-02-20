@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 # Number-only regex.
 NUMBERS_ONLY_REGEX = re.compile(r"^\d+$")
@@ -15,7 +14,7 @@ ECS_MEM_GB_REGEX = re.compile(r"^(\d*\.?\d+)(\s+)?GB$")
 ECS_CPU_VCPU_REGEX = re.compile(r"^(\d*\.?\d+)(\s+)?(v)?CPU$", flags=re.IGNORECASE)
 
 
-def interpret_k8s_mem_str_as_bytes(mem_str: Optional[str]) -> Optional[int]:
+def interpret_k8s_mem_str_as_bytes(mem_str: str | None) -> int | None:
     """Interpret a k8s memory quantity string as bytes."""
     # If the string is not provided, return None.
     if mem_str is None:
@@ -51,7 +50,7 @@ def interpret_k8s_mem_str_as_bytes(mem_str: Optional[str]) -> Optional[int]:
         raise Exception(f"Invalid k8s memory quantity string {mem_str}")
 
 
-def interpret_k8s_cpu_str_as_millicpus(cpu_str: Optional[str]) -> Optional[int]:
+def interpret_k8s_cpu_str_as_millicpus(cpu_str: str | None) -> int | None:
     """Interpret a k8s CPU quantity string as millicpus."""
     # If the string is not provided, return None.
     if cpu_str is None:
@@ -72,7 +71,7 @@ def interpret_k8s_cpu_str_as_millicpus(cpu_str: Optional[str]) -> Optional[int]:
     return int(match.group(1))
 
 
-def interpret_ecs_mem_str_as_bytes(mem_str: Optional[str]) -> Optional[int]:
+def interpret_ecs_mem_str_as_bytes(mem_str: str | None) -> int | None:
     """Interpret an ECS memory string as bytes."""
     # If the string is not provided, return None.
     if mem_str is None:
@@ -92,7 +91,7 @@ def interpret_ecs_mem_str_as_bytes(mem_str: Optional[str]) -> Optional[int]:
     return num * 1024**3
 
 
-def interpret_ecs_cpu_str_as_millicpus(cpu_str: Optional[str]) -> Optional[float]:
+def interpret_ecs_cpu_str_as_millicpus(cpu_str: str | None) -> float | None:
     """Interpret an ECS CPU string as millicpus."""
     # If the string is not provided, return None.
     if cpu_str is None:

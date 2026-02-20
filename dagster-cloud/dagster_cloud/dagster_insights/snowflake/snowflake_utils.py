@@ -1,4 +1,3 @@
-from typing import Optional, Union
 from uuid import uuid4 as uuid
 
 from dagster import (
@@ -21,11 +20,11 @@ def build_opaque_id_metadata(opaque_id: str) -> dict:
 
 
 def meter_snowflake_query(
-    context: Union[OpExecutionContext, AssetExecutionContext],
+    context: OpExecutionContext | AssetExecutionContext,
     sql: str,
     comment_factory=lambda comment: f"\n-- {comment}\n",
     opaque_id=None,
-    associated_asset_key: Optional[AssetKey] = None,
+    associated_asset_key: AssetKey | None = None,
 ):
     """A utility function that takes a SQL query and returns a modified version of the query
     that includes a comment that will be used to identify the query when attributing cost.

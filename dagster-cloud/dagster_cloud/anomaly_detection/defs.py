@@ -1,6 +1,6 @@
 import datetime
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING, Optional, Union, cast
+from typing import TYPE_CHECKING, cast
 
 from dagster import (
     AssetCheckExecutionContext,
@@ -202,8 +202,8 @@ def _anomaly_detection_inner(
 
 def build_anomaly_detection_freshness_checks(
     *,
-    assets: Sequence[Union[CoercibleToAssetKey, AssetsDefinition, SourceAsset]],
-    params: Optional[AnomalyDetectionModelParams],
+    assets: Sequence[CoercibleToAssetKey | AssetsDefinition | SourceAsset],
+    params: AnomalyDetectionModelParams | None,
     severity: AssetCheckSeverity = AssetCheckSeverity.WARN,
 ) -> Sequence[AssetChecksDefinition]:
     """Builds a list of asset checks which utilize anomaly detection algorithms to

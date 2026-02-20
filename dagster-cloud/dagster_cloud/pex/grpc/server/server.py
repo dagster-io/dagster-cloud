@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, cast
+from typing import cast
 
 import dagster._check as check
 import grpc
@@ -359,8 +359,8 @@ def run_multipex_server(
     logger: logging.Logger,
     host="localhost",
     max_workers=None,
-    local_pex_files_dir: Optional[str] = "/tmp/pex-files",
-    watchdog_run_interval: Optional[int] = 30,
+    local_pex_files_dir: str | None = "/tmp/pex-files",
+    watchdog_run_interval: int | None = 30,
     enable_metrics: bool = False,
 ):
     server = grpc.server(

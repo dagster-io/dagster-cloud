@@ -4,7 +4,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import timezone
-from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Optional, Union, cast  # noqa: UP035
+from typing import TYPE_CHECKING, AbstractSet, Any, Callable, cast  # noqa: UP035
 from uuid import uuid4
 
 import dagster._check as check
@@ -139,7 +139,7 @@ def _input_for_event(event: EventLogEntry):
     }
 
 
-def _input_for_serializable_error_info(serializable_error_info: Optional[SerializableErrorInfo]):
+def _input_for_serializable_error_info(serializable_error_info: SerializableErrorInfo | None):
     check.opt_inst_param(serializable_error_info, "serializable_error_info", SerializableErrorInfo)
 
     if serializable_error_info is None:
@@ -153,7 +153,7 @@ def _input_for_serializable_error_info(serializable_error_info: Optional[Seriali
     }
 
 
-def _input_for_dagster_event(dagster_event: Optional[DagsterEvent]):
+def _input_for_dagster_event(dagster_event: DagsterEvent | None):
     if dagster_event is None:
         return None
 
@@ -207,7 +207,7 @@ def _event_log_entry_from_graphql(graphene_event_log_entry: dict) -> EventLogEnt
 
 def _get_event_records_filter_input(
     event_records_filter,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     check.opt_inst_param(event_records_filter, "event_records_filter", EventRecordsFilter)
 
     if event_records_filter is None:
@@ -258,7 +258,7 @@ def _get_event_records_filter_input(
 
 
 def _get_asset_records_filter_input(
-    records_filter: Union[AssetKey, AssetRecordsFilter],
+    records_filter: AssetKey | AssetRecordsFilter,
 ) -> dict[str, Any]:
     check.opt_inst_param(records_filter, "records_filter", (AssetKey, AssetRecordsFilter))
 
@@ -489,16 +489,16 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             idempotent_mutation=idempotent_mutation,
         )
 
-    def get_maximum_record_id(self) -> Optional[int]:
+    def get_maximum_record_id(self) -> int | None:
         res = self._execute_query(GET_MAXIMUM_RECORD_ID)
         return res["data"]["eventLogs"]["getMaximumRecordId"]
 
     def get_records_for_run(
         self,
         run_id: str,
-        cursor: Optional[str] = None,
-        of_type: Optional[Union[DagsterEventType, set[DagsterEventType]]] = None,
-        limit: Optional[int] = None,
+        cursor: str | None = None,
+        of_type: DagsterEventType | set[DagsterEventType] | None = None,
+        limit: int | None = None,
         ascending: bool = True,
     ) -> EventLogConnection:
         check.invariant(not of_type or isinstance(of_type, (DagsterEventType, frozenset, set)))
@@ -550,7 +550,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
 
     def get_step_stats_for_run(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
-        self, run_id: str, step_keys: Optional[list[str]] = None
+        self, run_id: str, step_keys: list[str] | None = None
     ) -> list[RunStepKeyStatsSnapshot]:
         res = self._execute_query(
             GET_STEP_STATS_FOR_RUN_QUERY,
@@ -675,12 +675,12 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def upgrade(self):
         return self._execute_query(UPGRADE_EVENT_LOG_STORAGE_MUTATION)
 
-    def reindex_assets(self, print_fn: Optional[Callable] = lambda _: None, force: bool = False):
+    def reindex_assets(self, print_fn: Callable | None = lambda _: None, force: bool = False):
         return self._execute_query(
             REINDEX_MUTATION, variables={"force": check.bool_param(force, "force")}
         )
 
-    def reindex_events(self, print_fn: Optional[Callable] = lambda _: None, force: bool = False):
+    def reindex_events(self, print_fn: Callable | None = lambda _: None, force: bool = False):
         return self._execute_query(
             REINDEX_MUTATION, variables={"force": check.bool_param(force, "force")}
         )
@@ -694,7 +694,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def end_watch(self, run_id: str, handler: Callable):
         raise NotImplementedError("Not callable from user cloud")
 
-    def enable_secondary_index(self, name: str, run_id: Optional[str] = None):
+    def enable_secondary_index(self, name: str, run_id: str | None = None):
         return self._execute_query(
             ENABLE_SECONDARY_INDEX_MUTATION,
             variables={
@@ -715,9 +715,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_event_records(
         self,
-        event_records_filter: Optional[EventRecordsFilter] = None,
-        limit: Optional[int] = None,
-        ascending: Optional[bool] = False,
+        event_records_filter: EventRecordsFilter | None = None,
+        limit: int | None = None,
+        ascending: bool | None = False,
     ) -> Sequence[EventLogRecord]:
         check.opt_inst_param(event_records_filter, "event_records_filter", EventRecordsFilter)
         check.opt_int_param(limit, "limit")
@@ -767,7 +767,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return records
 
     def get_asset_records(
-        self, asset_keys: Optional[Sequence[AssetKey]] = None
+        self, asset_keys: Sequence[AssetKey] | None = None
     ) -> Sequence[AssetRecord]:
         res = self._execute_query(
             GET_ASSET_RECORDS_QUERY,
@@ -805,7 +805,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_latest_materialization_events(
         self, asset_keys: Iterable[AssetKey]
-    ) -> Mapping[AssetKey, Optional[EventLogEntry]]:
+    ) -> Mapping[AssetKey, EventLogEntry | None]:
         check.iterable_param(asset_keys, "asset_keys", AssetKey)
 
         res = self._execute_query(
@@ -842,8 +842,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def get_materialized_partitions(
         self,
         asset_key: AssetKey,
-        before_cursor: Optional[int] = None,
-        after_cursor: Optional[int] = None,
+        before_cursor: int | None = None,
+        after_cursor: int | None = None,
     ) -> set[str]:
         check.inst_param(asset_key, "asset_key", AssetKey)
         check.opt_int_param(before_cursor, "before_cursor")
@@ -862,7 +862,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def get_materialization_count_by_partition(
         self,
         asset_keys: Sequence[AssetKey],
-        after_cursor: Optional[int] = None,
+        after_cursor: int | None = None,
     ) -> Mapping[AssetKey, Mapping[str, int]]:
         check.list_param(asset_keys, "asset_keys", of_type=AssetKey)
         check.opt_int_param(after_cursor, "after_cursor")
@@ -895,7 +895,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         self,
         asset_key: AssetKey,
         event_type: DagsterEventType,
-        partitions: Optional[set[str]] = None,
+        partitions: set[str] | None = None,
     ) -> Mapping[str, int]:
         res = self._execute_query(
             GET_LATEST_STORAGE_ID_BY_PARTITION,
@@ -919,10 +919,10 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         self,
         asset_key: AssetKey,
         event_type: DagsterEventType,
-        tag_keys: Optional[Sequence[str]] = None,
-        asset_partitions: Optional[Sequence[str]] = None,
-        before_cursor: Optional[int] = None,
-        after_cursor: Optional[int] = None,
+        tag_keys: Sequence[str] | None = None,
+        asset_partitions: Sequence[str] | None = None,
+        before_cursor: int | None = None,
+        after_cursor: int | None = None,
     ) -> Mapping[str, Mapping[str, str]]:
         res = self._execute_query(
             GET_LATEST_TAGS_BY_PARTITION,
@@ -946,7 +946,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return dict(latest_tags_by_partition)
 
     def get_latest_asset_partition_materialization_attempts_without_materializations(
-        self, asset_key: AssetKey, after_storage_id: Optional[int] = None
+        self, asset_key: AssetKey, after_storage_id: int | None = None
     ) -> Mapping[str, tuple[str, int]]:
         res = self._execute_query(
             GET_LATEST_ASSET_PARTITION_MATERIALIZATION_ATTEMPTS_WITHOUT_MATERIALIZATIONS,
@@ -965,8 +965,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def get_event_tags_for_asset(
         self,
         asset_key: AssetKey,
-        filter_tags: Optional[Mapping[str, str]] = None,
-        filter_event_id: Optional[int] = None,
+        filter_tags: Mapping[str, str] | None = None,
+        filter_event_id: int | None = None,
     ) -> Sequence[Mapping[str, str]]:
         check.inst_param(asset_key, "asset_key", AssetKey)
         filter_tags = check.opt_mapping_param(
@@ -996,7 +996,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return res["data"]["eventLogs"]["getDynamicPartitions"]
 
     def get_paginated_dynamic_partitions(
-        self, partitions_def_name: str, limit: int, ascending: bool, cursor: Optional[str] = None
+        self, partitions_def_name: str, limit: int, ascending: bool, cursor: str | None = None
     ) -> PaginatedResults[str]:
         check.str_param(partitions_def_name, "partitions_def_name")
         check.int_param(limit, "limit")
@@ -1143,7 +1143,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
 
     def claim_concurrency_slot(
-        self, concurrency_key: str, run_id: str, step_key: str, priority: Optional[int] = None
+        self, concurrency_key: str, run_id: str, step_key: str, priority: int | None = None
     ) -> ConcurrencyClaimStatus:
         check.str_param(concurrency_key, "concurrency_key")
         check.str_param(run_id, "run_id")
@@ -1233,32 +1233,32 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         self,
         check_key: AssetCheckKey,
         limit: int,
-        cursor: Optional[int] = None,
-        status: Optional[AbstractSet[AssetCheckExecutionRecordStatus]] = None,
-        partition_filter: Optional[PartitionKeyFilter] = None,
+        cursor: int | None = None,
+        status: AbstractSet[AssetCheckExecutionRecordStatus] | None = None,
+        partition_filter: PartitionKeyFilter | None = None,
     ) -> Sequence[AssetCheckExecutionRecord]:
         raise NotImplementedError("Not callable from user cloud")
 
     def get_latest_asset_check_execution_by_key(
         self,
         check_keys: Sequence[AssetCheckKey],
-        partition_filter: Optional[PartitionKeyFilter] = None,
+        partition_filter: PartitionKeyFilter | None = None,
     ) -> Mapping[AssetCheckKey, AssetCheckExecutionRecord]:
         raise NotImplementedError("Not callable from user cloud")
 
     def get_asset_check_partition_info(
         self,
         keys: Sequence[AssetCheckKey],
-        after_storage_id: Optional[int] = None,
-        partition_keys: Optional[Sequence[str]] = None,
+        after_storage_id: int | None = None,
+        partition_keys: Sequence[str] | None = None,
     ) -> Sequence[AssetCheckPartitionInfo]:
         raise NotImplementedError("Not callable from user cloud")
 
     def fetch_materializations(
         self,
-        records_filter: Union[AssetKey, AssetRecordsFilter],
+        records_filter: AssetKey | AssetRecordsFilter,
         limit: int,
-        cursor: Optional[str] = None,
+        cursor: str | None = None,
         ascending: bool = False,
     ) -> EventRecordsResult:
         res = self._execute_query(
@@ -1274,9 +1274,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def fetch_failed_materializations(
         self,
-        records_filter: Union[AssetKey, AssetRecordsFilter],
+        records_filter: AssetKey | AssetRecordsFilter,
         limit: int,
-        cursor: Optional[str] = None,
+        cursor: str | None = None,
         ascending: bool = False,
     ) -> EventRecordsResult:
         res = self._execute_query(
@@ -1294,9 +1294,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def fetch_observations(
         self,
-        records_filter: Union[AssetKey, AssetRecordsFilter],
+        records_filter: AssetKey | AssetRecordsFilter,
         limit: int,
-        cursor: Optional[str] = None,
+        cursor: str | None = None,
         ascending: bool = False,
     ) -> EventRecordsResult:
         res = self._execute_query(
@@ -1312,9 +1312,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def fetch_planned_materializations(
         self,
-        records_filter: Union[AssetKey, AssetRecordsFilter],
+        records_filter: AssetKey | AssetRecordsFilter,
         limit: int,
-        cursor: Optional[str] = None,
+        cursor: str | None = None,
         ascending: bool = False,
     ) -> EventRecordsResult:
         res = self._execute_query(
@@ -1336,9 +1336,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def fetch_run_status_changes(
         self,
-        records_filter: Union[DagsterEventType, RunStatusChangeRecordsFilter],
+        records_filter: DagsterEventType | RunStatusChangeRecordsFilter,
         limit: int,
-        cursor: Optional[str] = None,
+        cursor: str | None = None,
         ascending: bool = False,
     ) -> EventRecordsResult:
         res = self._execute_query(
@@ -1357,8 +1357,8 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def get_latest_planned_materialization_info(
         self,
         asset_key: AssetKey,
-        partition: Optional[str] = None,
-    ) -> Optional[PlannedMaterializationInfo]:
+        partition: str | None = None,
+    ) -> PlannedMaterializationInfo | None:
         res = self._execute_query(
             GET_LATEST_PLANNED_MATERIALIZATION_INFO,
             variables={
@@ -1397,9 +1397,9 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
 
     def get_asset_status_cache_values(
         self,
-        partitions_defs_by_key: Iterable[tuple[AssetKey, Optional[PartitionsDefinition]]],
+        partitions_defs_by_key: Iterable[tuple[AssetKey, PartitionsDefinition | None]],
         context,
-    ) -> Sequence[Optional[AssetStatusCacheValue]]:
+    ) -> Sequence[AssetStatusCacheValue | None]:
         asset_keys = [key for key, _ in partitions_defs_by_key]
         res = self._execute_query(
             GET_ASSET_STATUS_CACHE_VALUES,

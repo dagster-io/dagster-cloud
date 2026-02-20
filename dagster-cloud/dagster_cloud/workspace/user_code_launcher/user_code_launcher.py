@@ -13,11 +13,11 @@ import time
 import zlib
 from abc import abstractmethod, abstractproperty
 from collections import defaultdict
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from contextlib import AbstractContextManager
 from io import BytesIO
-from typing import Any, Callable, Generic, NamedTuple, Optional, TypeVar, Union, cast
+from typing import Any, Generic, NamedTuple, TypeAlias, TypeVar, cast
 
 import dagster._check as check
 import grpc
@@ -54,7 +54,7 @@ from dagster._utils.merger import merge_dicts
 from dagster._utils.typed_dict import init_optional_typeddict
 from dagster_cloud_cli.core.errors import raise_http_error
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData
-from typing_extensions import Self, TypeAlias
+from typing_extensions import Self
 
 from dagster_cloud.agent.queries import GET_AGENTS_QUERY
 from dagster_cloud.api.dagster_cloud_api import (
@@ -280,9 +280,9 @@ class ServerEndpoint(
         "_ServerEndpoint",
         [
             ("host", str),
-            ("port", Optional[int]),
-            ("socket", Optional[str]),
-            ("metadata", Optional[list[tuple[str, str]]]),
+            ("port", int | None),
+            ("socket", str | None),
+            ("metadata", list[tuple[str, str]] | None),
         ],
     )
 ):
@@ -303,7 +303,7 @@ class ServerEndpoint(
     def create_multipex_client(self) -> MultiPexGrpcClient:
         return MultiPexGrpcClient(port=self.port, socket=self.socket, host=self.host)
 
-    def with_metadata(self, metadata: Optional[list[tuple[str, str]]]):
+    def with_metadata(self, metadata: list[tuple[str, str]] | None):
         return self._replace(metadata=metadata)
 
 
@@ -350,18 +350,18 @@ class DagsterCloudUserCodeLauncher(
 ):
     def __init__(
         self,
-        server_ttl: Optional[dict] = None,
+        server_ttl: dict | None = None,
         server_process_startup_timeout=None,
         upload_snapshots_on_startup: bool = True,
         requires_healthcheck: bool = False,
-        code_server_metrics: Optional[Mapping[str, Any]] = None,
-        agent_metrics: Optional[Mapping[str, Any]] = None,
+        code_server_metrics: Mapping[str, Any] | None = None,
+        agent_metrics: Mapping[str, Any] | None = None,
         direct_snapshot_uploads: bool = False,
         # ignored old setting, allowed to flow through to avoid breakage
         defer_job_snapshots: bool = True,
     ):
         self._grpc_servers: dict[
-            DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
+            DeploymentAndLocation, DagsterCloudGrpcServer | SerializableErrorInfo
         ] = {}
         self._first_unavailable_times: dict[DeploymentAndLocation, float] = {}
 
@@ -424,7 +424,7 @@ class DagsterCloudUserCodeLauncher(
                 if not isinstance(s, SerializableErrorInfo)
             ] + list(self._pending_delete_grpc_server_handles)
 
-    def get_active_agent_ids(self) -> Optional[set[str]]:
+    def get_active_agent_ids(self) -> set[str] | None:
         try:
             result = self._instance.organization_scoped_graphql_client().execute(
                 GET_AGENTS_QUERY,
@@ -593,7 +593,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         workspace_entry: DagsterCloudUploadWorkspaceEntry,
-        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
+        server_or_error: DagsterCloudGrpcServer | SerializableErrorInfo,
     ) -> None:
         if self._direct_snapshot_uploads:
             self._update_workspace_entry_direct_upload(
@@ -663,7 +663,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         workspace_entry: DagsterCloudUploadWorkspaceEntry,
-        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
+        server_or_error: DagsterCloudGrpcServer | SerializableErrorInfo,
     ) -> None:
         # updated scheme, uploading definitions to blob storage via signed urls
         error_snap = None
@@ -779,7 +779,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         workspace_entry: DagsterCloudUploadWorkspaceEntry,
-        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
+        server_or_error: DagsterCloudGrpcServer | SerializableErrorInfo,
     ) -> None:
         # legacy scheme, uploading definitions blobs to web server
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -965,7 +965,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
+        server_or_error: DagsterCloudGrpcServer | SerializableErrorInfo,
         metadata: CodeLocationDeployData,
     ):
         try:
@@ -985,7 +985,7 @@ class DagsterCloudUserCodeLauncher(
         self,
         deployment_name: str,
         location_name: str,
-        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
+        server_or_error: DagsterCloudGrpcServer | SerializableErrorInfo,
         metadata: CodeLocationDeployData,
     ) -> None:
         """Attempt to update Dagster Cloud with snapshots for this code location. If there's a failure
@@ -1036,7 +1036,7 @@ class DagsterCloudUserCodeLauncher(
     def requires_images(self) -> bool:
         pass
 
-    def _resolve_image(self, metadata: CodeLocationDeployData) -> Optional[str]:
+    def _resolve_image(self, metadata: CodeLocationDeployData) -> str | None:
         return metadata.image
 
     def _get_existing_pex_servers(
@@ -1116,7 +1116,7 @@ class DagsterCloudUserCodeLauncher(
     async def _wait_for_new_server_ready_and_possibly_upload(
         self,
         to_update_key: DeploymentAndLocation,
-        server_or_error: Union[DagsterCloudGrpcServer, SerializableErrorInfo],
+        server_or_error: DagsterCloudGrpcServer | SerializableErrorInfo,
         desired_entry: UserCodeLauncherEntry,
         should_upload: bool,
     ):
@@ -1229,7 +1229,7 @@ class DagsterCloudUserCodeLauncher(
                 self._pending_delete_grpc_server_handles.discard(server_handle)
 
     def _cleanup_servers(
-        self, active_agent_ids: Optional[set[str]], include_own_servers: bool
+        self, active_agent_ids: set[str] | None, include_own_servers: bool
     ) -> None:
         """Remove all servers, across all deployments and locations."""
         with ThreadPoolExecutor() as executor:
@@ -1256,15 +1256,15 @@ class DagsterCloudUserCodeLauncher(
         """Return a list of all server handles across all deployments and locations."""
 
     @abstractmethod
-    def get_agent_id_for_server(self, handle: ServerHandle) -> Optional[str]:
+    def get_agent_id_for_server(self, handle: ServerHandle) -> str | None:
         """Returns the agent_id that created a particular GRPC server."""
 
     @abstractmethod
-    def get_server_create_timestamp(self, handle: ServerHandle) -> Optional[float]:
+    def get_server_create_timestamp(self, handle: ServerHandle) -> float | None:
         """Returns the update_timestamp value from the given code server."""
 
     def _can_cleanup_server(
-        self, handle: ServerHandle, active_agent_ids: Optional[set[str]], include_own_servers: bool
+        self, handle: ServerHandle, active_agent_ids: set[str] | None, include_own_servers: bool
     ) -> bool:
         """Returns true if we can clean up the server identified by the handle without issues (server was started by this agent, or agent is no longer active)."""
         agent_id_for_server = self.get_agent_id_for_server(handle)
@@ -1514,12 +1514,12 @@ class DagsterCloudUserCodeLauncher(
         return self._reconcile_count > 0
 
     @property
-    def in_progress_reconcile_start_time(self) -> Optional[float]:
+    def in_progress_reconcile_start_time(self) -> float | None:
         return self._in_progress_reconcile_start_time
 
     def _make_check_on_running_server_endpoint(
         self, server_endpoint: ServerEndpoint
-    ) -> Callable[[], Union[ListRepositoriesResponse, SerializableErrorInfo]]:
+    ) -> Callable[[], ListRepositoriesResponse | SerializableErrorInfo]:
         return lambda: deserialize_value(
             server_endpoint.create_client().list_repositories(),
             (ListRepositoriesResponse, SerializableErrorInfo),
@@ -1763,7 +1763,7 @@ class DagsterCloudUserCodeLauncher(
         # Dagster grpc servers created in this loop (including both standalone grpc servers
         # and pex servers on a multipex server) - or an error that explains why it couldn't load
         new_dagster_servers: dict[
-            DeploymentAndLocation, Union[DagsterCloudGrpcServer, SerializableErrorInfo]
+            DeploymentAndLocation, DagsterCloudGrpcServer | SerializableErrorInfo
         ] = {}
 
         # Multipex servers created in this loop (a new multipex server might not always
@@ -2086,7 +2086,7 @@ class DagsterCloudUserCodeLauncher(
         deployment_name,
         location_name,
         code_location_deploy_data,
-    ) -> Optional[DagsterCloudGrpcServer]:
+    ) -> DagsterCloudGrpcServer | None:
         if not code_location_deploy_data.pex_metadata:
             return None
 
@@ -2266,7 +2266,7 @@ class DagsterCloudUserCodeLauncher(
 
     def get_grpc_endpoints(
         self,
-    ) -> dict[DeploymentAndLocation, Union[ServerEndpoint, SerializableErrorInfo]]:
+    ) -> dict[DeploymentAndLocation, ServerEndpoint | SerializableErrorInfo]:
         with self._grpc_servers_lock:
             return {
                 key: val if isinstance(val, SerializableErrorInfo) else val.server_endpoint
@@ -2291,8 +2291,8 @@ class DagsterCloudUserCodeLauncher(
         self,
         client: DagsterGrpcClient,
         timeout,
-        additional_check: Optional[Callable[[], None]] = None,
-        get_timeout_debug_info: Optional[Callable[[], Any]] = None,
+        additional_check: Callable[[], None] | None = None,
+        get_timeout_debug_info: Callable[[], Any] | None = None,
     ) -> None:
         await self._wait_for_server_process(
             client, timeout, additional_check, get_timeout_debug_info=get_timeout_debug_info
@@ -2302,11 +2302,11 @@ class DagsterCloudUserCodeLauncher(
 
     async def _wait_for_server_process(
         self,
-        client: Union[DagsterGrpcClient, MultiPexGrpcClient],
+        client: DagsterGrpcClient | MultiPexGrpcClient,
         timeout,
-        additional_check: Optional[Callable[[], None]] = None,
+        additional_check: Callable[[], None] | None = None,
         additional_check_interval: int = 5,
-        get_timeout_debug_info: Optional[Callable[[], None]] = None,
+        get_timeout_debug_info: Callable[[], None] | None = None,
     ) -> None:
         start_time = time.time()
 

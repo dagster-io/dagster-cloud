@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import dagster._check as check
 from dagster import DagsterInstance
@@ -137,7 +137,7 @@ class DagsterCloudAgent:
         self._request_ids_to_futures: dict[str, Future] = {}
         self._utilization_metrics = init_optional_typeddict(AgentUtilizationMetrics)
 
-        self._last_heartbeat_time: Optional[datetime.datetime] = None
+        self._last_heartbeat_time: datetime.datetime | None = None
 
         self._last_workspace_check_time = None
 
@@ -831,7 +831,7 @@ class DagsterCloudAgent:
     def _get_location_origin_from_request(
         self,
         request: DagsterCloudApiRequest,
-    ) -> Optional[CodeLocationOrigin]:
+    ) -> CodeLocationOrigin | None:
         """Derive the location from the specific argument passed in to a dagster_cloud_api call."""
         api_name = request.request_api
         if api_name in {
@@ -866,7 +866,7 @@ class DagsterCloudAgent:
         deployment_name: str,
         is_branch_deployment: bool,
         user_code_launcher: DagsterCloudUserCodeLauncher,
-    ) -> Union[DagsterCloudApiSuccess, DagsterCloudApiGrpcResponse]:
+    ) -> DagsterCloudApiSuccess | DagsterCloudApiGrpcResponse:
         api_name = request.request_api
 
         code_location_origin = self._get_location_origin_from_request(request)
@@ -1114,10 +1114,10 @@ class DagsterCloudAgent:
         json_request: dict,
         user_code_launcher: DagsterCloudUserCodeLauncher,
         submitted_to_executor_timestamp: float,
-    ) -> Optional[SerializableErrorInfo]:
+    ) -> SerializableErrorInfo | None:
         thread_start_run_timestamp = get_current_timestamp()
-        api_result: Optional[DagsterCloudApiResponse] = None
-        error_info: Optional[SerializableErrorInfo] = None
+        api_result: DagsterCloudApiResponse | None = None
+        error_info: SerializableErrorInfo | None = None
 
         request_id = json_request["requestId"]
         request_api = json_request["requestApi"]
@@ -1125,7 +1125,7 @@ class DagsterCloudAgent:
         deployment_name = json_request["deploymentName"]
         is_branch_deployment = json_request["isBranchDeployment"]
 
-        request: Union[str, DagsterCloudApiRequest] = DagsterCloudApiRequest.format_request(
+        request: str | DagsterCloudApiRequest = DagsterCloudApiRequest.format_request(
             request_id, request_api
         )
 
@@ -1190,7 +1190,7 @@ class DagsterCloudAgent:
         )
         return [None for _ in upload_response_batch]
 
-    def _get_location_from_request(self, json_request: dict[str, Any]) -> Optional[str]:
+    def _get_location_from_request(self, json_request: dict[str, Any]) -> str | None:
         request_api = json_request["requestApi"]
         request_body = json_request["requestBody"]
         if request_api not in DagsterCloudApi.__members__:
@@ -1205,7 +1205,7 @@ class DagsterCloudAgent:
 
     def run_iteration(
         self, user_code_launcher: DagsterCloudUserCodeLauncher
-    ) -> Iterator[Optional[SerializableErrorInfo]]:
+    ) -> Iterator[SerializableErrorInfo | None]:
         if not user_code_launcher.ready_to_serve_requests:
             return
 
@@ -1285,7 +1285,7 @@ class DagsterCloudAgent:
         # Create a shallow copy of the futures dict to modify it while iterating
         for request_id, future in self._request_ids_to_futures.copy().items():
             if future.done():
-                response: Optional[SerializableErrorInfo] = None
+                response: SerializableErrorInfo | None = None
 
                 try:
                     response = future.result(timeout=0)

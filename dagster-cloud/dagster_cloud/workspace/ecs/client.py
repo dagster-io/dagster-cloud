@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import time
-from typing import Optional
 
 import boto3
 import botocore
@@ -57,14 +56,14 @@ class Client:
         cluster_name: str,
         service_discovery_namespace_id: str,
         log_group: str,
-        subnet_ids: Optional[list[str]] = None,
-        security_group_ids: Optional[list[str]] = None,
+        subnet_ids: list[str] | None = None,
+        security_group_ids: list[str] | None = None,
         ecs_client=None,
         timeout: int = DEFAULT_ECS_TIMEOUT,
         grace_period: int = DEFAULT_ECS_GRACE_PERIOD,
         launch_type: str = "FARGATE",
         show_debug_cluster_info: bool = True,
-        assign_public_ip: Optional[bool] = None,
+        assign_public_ip: bool | None = None,
     ):
         self.ecs = ecs_client if ecs_client else boto3.client("ecs", config=config)
         self.logs = boto3.client("logs", config=config)
@@ -85,7 +84,7 @@ class Client:
         self.timeout = check.int_param(timeout, "timeout")
         self.grace_period = check.int_param(grace_period, "grace_period")
         self.launch_type = check.str_param(launch_type, "launch_type")
-        self._namespace: Optional[str] = None
+        self._namespace: str | None = None
         self._assign_public_ip_override = assign_public_ip
 
     @property
