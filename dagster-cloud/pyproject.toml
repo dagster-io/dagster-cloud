@@ -31,9 +31,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.12.15",
-    "dagster-shared==1.12.15",
-    "dagster-cloud-cli==1.12.15",
+    "dagster==1.12.16",
+    "dagster-shared==1.12.16",
+    "dagster-cloud-cli==1.12.16",
     "pex>=2.1.132,<2.60.0",
     "questionary",
     "requests",
@@ -78,14 +78,14 @@ tests = [
     "dbt-core",
     "dbt-snowflake",
     "dbt-duckdb",
-    "dagster-dbt==0.28.15",
-    "dagster-k8s==0.28.15",
-    "dagster-docker==0.28.15",
+    "dagster-dbt==0.28.16",
+    "dagster-k8s==0.28.16",
+    "dagster-docker==0.28.16",
     "dagster-cloud-backend",
     "dagster-test",
     "dagster-cloud-test-infra",
     "dagster-cloud-dagit",
-    "dagster-dg-cli==1.12.15",
+    "dagster-dg-cli==1.12.16",
     "syrupy",
 ]
 insights = [
@@ -93,14 +93,14 @@ insights = [
 ]
 docker = [
     "docker",
-    "dagster-docker==0.28.15",
+    "dagster-docker==0.28.16",
 ]
 kubernetes = [
     "kubernetes",
-    "dagster-k8s==0.28.15",
+    "dagster-k8s==0.28.16",
 ]
 ecs = [
-    "dagster-aws==0.28.15",
+    "dagster-aws==0.28.16",
     "boto3",
 ]
 sandbox = [
