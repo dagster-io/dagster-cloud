@@ -602,6 +602,8 @@ class DagsterCloudAgent:
         entries = result["data"]["deployments"][0]["workspaceEntries"]
 
         upload_metadata = {}
+        control_plane_error_locations: set[tuple[str, str]] = set()
+        control_plane_outdated_locations: set[tuple[str, str]] = set()
 
         for entry in entries:
             location_name = entry["locationName"]
@@ -622,6 +624,13 @@ class DagsterCloudAgent:
                 )
                 continue
 
+            location_key = (deployment_name, location_name)
+
+            if entry["hasLoadError"]:
+                control_plane_error_locations.add(location_key)
+            if entry["hasOutdatedData"]:
+                control_plane_outdated_locations.add(location_key)
+
             code_location_deploy_data = deserialize_value(
                 entry["serializedDeploymentMetadata"], CodeLocationDeployData
             )
@@ -632,12 +641,17 @@ class DagsterCloudAgent:
                 self._location_query_times[
                     (deployment_name, location_name, is_branch_deployment)
                 ] = time.time()
-                upload_metadata[(deployment_name, location_name)] = UserCodeLauncherEntry(
+                upload_metadata[location_key] = UserCodeLauncherEntry(
                     code_location_deploy_data=code_location_deploy_data,
                     update_timestamp=float(entry["metadataTimestamp"]),
                 )
 
-        user_code_launcher.add_upload_metadata(upload_metadata)
+        user_code_launcher.add_upload_metadata_for_deployment(
+            deployment_name,
+            upload_metadata,
+            control_plane_error_locations=control_plane_error_locations,
+            control_plane_outdated_locations=control_plane_outdated_locations,
+        )
 
     def _has_ttl(self, user_code_launcher, is_branch_deployment):
         # branch deployments always have TTLs, other deployments only if you asked for it specifically
@@ -731,6 +745,8 @@ class DagsterCloudAgent:
         all_locations: set[tuple[str, str]] = set()
 
         self._active_deployments = set()
+        control_plane_error_locations: set[tuple[str, str]] = set()
+        control_plane_outdated_locations: set[tuple[str, str]] = set()
 
         if deployments_to_query or self._instance.include_all_serverless_deployments:
             result = self._instance.organization_scoped_graphql_client().execute(
@@ -772,6 +788,12 @@ class DagsterCloudAgent:
                     location_key = (deployment_name, location_name)
 
                     all_locations.add(location_key)
+
+                    if entry["hasLoadError"]:
+                        control_plane_error_locations.add(location_key)
+                    if entry["hasOutdatedData"]:
+                        control_plane_outdated_locations.add(location_key)
+
                     code_location_deploy_data = deserialize_value(
                         entry["serializedDeploymentMetadata"], CodeLocationDeployData
                     )
@@ -797,10 +819,17 @@ class DagsterCloudAgent:
         else:
             self._logger.debug("Reconciling with no locations")
 
-        if upload_all:
-            user_code_launcher.add_upload_metadata(deployment_map)
-        else:
-            user_code_launcher.update_grpc_metadata(deployment_map)
+        tracked_error_locations = control_plane_error_locations.intersection(deployment_map.keys())
+        tracked_outdated_locations = control_plane_outdated_locations.intersection(
+            deployment_map.keys()
+        )
+
+        user_code_launcher.update_grpc_metadata(
+            deployment_map,
+            control_plane_error_locations=tracked_error_locations,
+            control_plane_outdated_locations=tracked_outdated_locations,
+            upload_all=upload_all,
+        )
 
         # Tell run worker monitoring which deployments it should care about
         user_code_launcher.update_run_worker_monitoring_deployments(self._active_deployment_names)

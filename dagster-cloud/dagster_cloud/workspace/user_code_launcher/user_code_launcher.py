@@ -388,6 +388,8 @@ class DagsterCloudUserCodeLauncher(
         self._metadata_lock = threading.Lock()
 
         self._upload_locations: set[DeploymentAndLocation] = set()
+        self._control_plane_error_locations: set[DeploymentAndLocation] = set()
+        self._control_plane_outdated_locations: set[DeploymentAndLocation] = set()
 
         self._logger = logging.getLogger("dagster_cloud.user_code_launcher")
         self._event_logger = logging.getLogger("cloud-events")
@@ -1345,17 +1347,36 @@ class DagsterCloudUserCodeLauncher(
 
         super().__exit__(exception_value, exception_value, traceback)  # pyright: ignore[reportAbstractUsage]
 
-    def add_upload_metadata(
-        self, upload_metadata: dict[DeploymentAndLocation, UserCodeLauncherEntry]
+    def add_upload_metadata_for_deployment(
+        self,
+        deployment_name: str,
+        upload_metadata: dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        *,
+        control_plane_error_locations: set[DeploymentAndLocation],
+        control_plane_outdated_locations: set[DeploymentAndLocation],
     ):
-        """Add a set of locations to be uploaded in the next reconcilation loop."""
+        """Add locations from a single deployment to be uploaded in the next reconciliation loop.
+
+        Only replaces error/outdated state for the given deployment, preserving
+        state for other deployments.
+        """
         with self._metadata_lock:
             self._upload_locations = self._upload_locations.union(upload_metadata)
             self._desired_entries = merge_dicts(self._desired_entries, upload_metadata)
+            self._control_plane_error_locations = {
+                k for k in self._control_plane_error_locations if k[0] != deployment_name
+            } | control_plane_error_locations
+            self._control_plane_outdated_locations = {
+                k for k in self._control_plane_outdated_locations if k[0] != deployment_name
+            } | control_plane_outdated_locations
 
     def update_grpc_metadata(
         self,
         desired_metadata: dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        *,
+        control_plane_error_locations: set[DeploymentAndLocation],
+        control_plane_outdated_locations: set[DeploymentAndLocation],
+        upload_all: bool = False,
     ):
         check.dict_param(
             desired_metadata,
@@ -1373,6 +1394,10 @@ class DagsterCloudUserCodeLauncher(
                 key_to_keep: self._desired_entries[key_to_keep] for key_to_keep in keys_to_keep
             }
             self._desired_entries = merge_dicts(metadata_to_keep, desired_metadata)
+            self._control_plane_error_locations = control_plane_error_locations
+            self._control_plane_outdated_locations = control_plane_outdated_locations
+            if upload_all:
+                self._upload_locations = self._upload_locations.union(desired_metadata)
 
     @abstractmethod
     def get_code_server_resource_limits(
@@ -1438,6 +1463,8 @@ class DagsterCloudUserCodeLauncher(
             )
             upload_locations = self._upload_locations.copy()
             self._upload_locations = set()
+            control_plane_error_locations = self._control_plane_error_locations.copy()
+            control_plane_outdated_locations = self._control_plane_outdated_locations.copy()
 
         if desired_entries is None:
             # Wait for the first time the desired metadata is set before reconciling
@@ -1465,7 +1492,12 @@ class DagsterCloudUserCodeLauncher(
 
         if now - self._last_refreshed_actual_entries > ACTUAL_ENTRIES_REFRESH_INTERVAL:
             try:
-                self._refresh_actual_entries()
+                self._refresh_actual_entries(
+                    desired_entries,
+                    control_plane_error_locations,
+                    control_plane_outdated_locations,
+                    upload_locations,
+                )
             except:
                 self._logger.exception("Failed to refresh actual entries.")
             self._last_refreshed_actual_entries = now
@@ -1525,76 +1557,11 @@ class DagsterCloudUserCodeLauncher(
             (ListRepositoriesResponse, SerializableErrorInfo),
         )
 
-    def _trigger_recovery_server_restart(self, deployment_location: DeploymentAndLocation):
-        del self._actual_entries[deployment_location]
-
-        if deployment_location in self._first_unavailable_times:
-            del self._first_unavailable_times[deployment_location]
-
-        # redeploy the multipex server in this case as well to ensure a fresh start
-        # if it resource contrained (and ensure that we don't try to create the same
-        # PexServerHandle again and delete the code location in a loop)
-        if deployment_location in self._multipex_servers:
-            del self._multipex_servers[deployment_location]
-
-    def _refresh_actual_entries(self) -> None:
-        for deployment_location, multipex_server in self._multipex_servers.copy().items():
-            if deployment_location in self._actual_entries:
-                # If a multipex server exists, we query it over gRPC
-                # to make sure the pex server is still available.
-
-                # First verify that the multipex server is running
-                try:
-                    multipex_server.server_endpoint.create_multipex_client().ping("")
-                except:
-                    # If it isn't, this is expected if ECS is currently spinning up this service
-                    # after it crashed. In this case, we want to wait for it to fully come up
-                    # before we remove actual entries. This ensures the recon loop uses the ECS
-                    # replacement multipex server and not try to spin up a new multipex server.
-                    self._logger.info(
-                        "Multipex server entry exists but server is not running. "
-                        "Will wait for server to come up."
-                    )
-                    return
-                deployment_name, location_name = deployment_location
-
-                # If we expect there to be a running code location here but there is none,
-                if not self._get_existing_pex_servers(deployment_name, location_name):
-                    with self._grpc_servers_lock:
-                        grpc_server_or_error = self._grpc_servers.get(deployment_location)
-
-                    if isinstance(grpc_server_or_error, DagsterCloudGrpcServer):
-                        self._logger.warning(
-                            "Pex servers disappeared for running code location %s:%s. Removing actual entries to"
-                            " activate reconciliation logic and deploy a new code server and multipex server.",
-                            deployment_name,
-                            location_name,
-                        )
-                        self._trigger_recovery_server_restart(deployment_location)
-
-        # Check to see if any servers have become unresponsive
-        unavailable_server_timeout = int(
-            os.getenv(
-                "DAGSTER_CLOUD_CODE_SERVER_HEALTH_CHECK_REDEPLOY_TIMEOUT",
-                str(self._server_process_startup_timeout),
-            )
-        )
-
-        if unavailable_server_timeout < 0:
-            return
-
-        running_locations = {
-            deployment_location: endpoint_or_error
-            for deployment_location, endpoint_or_error in self.get_grpc_endpoints().items()
-            if (
-                isinstance(endpoint_or_error, ServerEndpoint)
-                and deployment_location in self._actual_entries
-            )
-        }
-
-        if not running_locations:
-            return
-
+    def _check_server_health(
+        self,
+        running_locations: dict[DeploymentAndLocation, ServerEndpoint],
+        unavailable_server_timeout: int,
+    ) -> None:
         with ThreadPoolExecutor(
             max_workers=max(
                 len(running_locations),
@@ -1653,6 +1620,138 @@ class DagsterCloudUserCodeLauncher(
                             f"Code server for {deployment_name}:{location_name} health check failed, but the error did not indicate that the server was unavailable."
                         )
                         self._first_unavailable_times.pop(deployment_location, None)
+
+    def _should_trigger_recovery(
+        self,
+        location_key: DeploymentAndLocation,
+        server_or_error: DagsterCloudGrpcServer | SerializableErrorInfo,
+        desired_entries: dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        control_plane_error_locations: set[DeploymentAndLocation],
+        control_plane_outdated_locations: set[DeploymentAndLocation],
+        upload_locations: set[DeploymentAndLocation],
+    ) -> bool:
+        """Whether a location needs a recovery redeploy.
+
+        Returns True when the agent has a local error for a location but the
+        server reports it as healthy and up-to-date, and the normal
+        reconciliation diff would not already handle the location
+        (actual == desired with matching timestamps).
+        """
+        if not isinstance(server_or_error, SerializableErrorInfo):
+            return False  # local code server is healthy, no recovery needed
+        if location_key in control_plane_error_locations:
+            return False  # control plane agrees there is an error, don't retry
+        if location_key in control_plane_outdated_locations:
+            return False  # control plane is still being updated - wait to see if there is an error
+        if location_key in upload_locations:
+            return False  # the result is about to be uploaded by us
+        actual_entry = self._actual_entries.get(location_key)
+        desired_entry = desired_entries.get(location_key)
+        if actual_entry is None or desired_entry is None:
+            return False  # about to be added or removed in normal reconciliation, no need to retry
+        if actual_entry.update_timestamp != desired_entry.update_timestamp:
+            return False  # about to be updated in normal reconciliation, no need to retry
+        return True
+
+    def _trigger_recovery_server_restart(self, deployment_location: DeploymentAndLocation):
+        del self._actual_entries[deployment_location]
+
+        if deployment_location in self._first_unavailable_times:
+            del self._first_unavailable_times[deployment_location]
+
+        # redeploy the multipex server in this case as well to ensure a fresh start
+        # if it resource contrained (and ensure that we don't try to create the same
+        # PexServerHandle again and delete the code location in a loop)
+        if deployment_location in self._multipex_servers:
+            del self._multipex_servers[deployment_location]
+
+    def _refresh_actual_entries(
+        self,
+        desired_entries: dict[DeploymentAndLocation, UserCodeLauncherEntry],
+        control_plane_error_locations: set[DeploymentAndLocation],
+        control_plane_outdated_locations: set[DeploymentAndLocation],
+        upload_locations: set[DeploymentAndLocation],
+    ) -> None:
+        for deployment_location, multipex_server in self._multipex_servers.copy().items():
+            if deployment_location in self._actual_entries:
+                # If a multipex server exists, we query it over gRPC
+                # to make sure the pex server is still available.
+
+                # First verify that the multipex server is running
+                try:
+                    multipex_server.server_endpoint.create_multipex_client().ping("")
+                except:
+                    # If it isn't, this is expected if ECS is currently spinning up this service
+                    # after it crashed. In this case, we want to wait for it to fully come up
+                    # before we remove actual entries. This ensures the recon loop uses the ECS
+                    # replacement multipex server and not try to spin up a new multipex server.
+                    self._logger.info(
+                        "Multipex server entry exists but server is not running. "
+                        "Will wait for server to come up."
+                    )
+                    return
+                deployment_name, location_name = deployment_location
+
+                # If we expect there to be a running code location here but there is none,
+                if not self._get_existing_pex_servers(deployment_name, location_name):
+                    with self._grpc_servers_lock:
+                        grpc_server_or_error = self._grpc_servers.get(deployment_location)
+
+                    if isinstance(grpc_server_or_error, DagsterCloudGrpcServer):
+                        self._logger.warning(
+                            "Pex servers disappeared for running code location %s:%s. Removing actual entries to"
+                            " activate reconciliation logic and deploy a new code server and multipex server.",
+                            deployment_name,
+                            location_name,
+                        )
+                        self._trigger_recovery_server_restart(deployment_location)
+
+        # Check to see if any servers have become unresponsive
+        unavailable_server_timeout = int(
+            os.getenv(
+                "DAGSTER_CLOUD_CODE_SERVER_HEALTH_CHECK_REDEPLOY_TIMEOUT",
+                str(self._server_process_startup_timeout),
+            )
+        )
+
+        if unavailable_server_timeout >= 0:
+            running_locations = {
+                deployment_location: endpoint_or_error
+                for deployment_location, endpoint_or_error in self.get_grpc_endpoints().items()
+                if (
+                    isinstance(endpoint_or_error, ServerEndpoint)
+                    and deployment_location in self._actual_entries
+                )
+            }
+
+            if running_locations:
+                self._check_server_health(running_locations, unavailable_server_timeout)
+
+        # Recovery: if the server has no error for a location but we have a local
+        # error, force a redeploy to resolve transient failures. Only trigger recovery
+        # when the normal reconciliation diff would not already handle the location
+        # (i.e. the location is in both actual and desired with matching timestamps).
+        if os.environ.get("DAGSTER_CLOUD_DISABLE_LOCAL_ERROR_SERVER_RECOVERY"):
+            return
+
+        with self._grpc_servers_lock:
+            for location_key, server_or_error in self._grpc_servers.items():
+                if self._should_trigger_recovery(
+                    location_key,
+                    server_or_error,
+                    desired_entries,
+                    control_plane_error_locations,
+                    control_plane_outdated_locations,
+                    upload_locations,
+                ):
+                    deployment_name, location_name = location_key
+                    self._logger.warning(
+                        "Triggering recovery redeploy for %s:%s - server has no error "
+                        "but agent has a local error from a previous failed deployment.",
+                        deployment_name,
+                        location_name,
+                    )
+                    self._trigger_recovery_server_restart(location_key)
 
     def _write_readiness_sentinel(self) -> None:
         """Write a sentinel file to indicate that the agent is alive and grpc servers have been spun up."""

@@ -1,15 +1,13 @@
 [build-system]
 requires = [
-    "setuptools>=61.2",
+    "hatchling>=1.19.0",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "hatchling.build"
 
 [project]
 name = "dagster-cloud"
 requires-python = ">=3.9,<3.15"
-dynamic = [
-    "version",
-]
+version = "1.12.19"
 authors = [
     { name = "Elementl", email = "support@elementl.com" },
 ]
@@ -31,9 +29,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.12.18",
-    "dagster-shared==1.12.18",
-    "dagster-cloud-cli==1.12.18",
+    "dagster==1.12.19",
+    "dagster-shared==1.12.19",
+    "dagster-cloud-cli==1.12.19",
     "pex>=2.1.132,<2.60.0",
     "questionary",
     "requests",
@@ -78,14 +76,14 @@ tests = [
     "dbt-core",
     "dbt-snowflake",
     "dbt-duckdb",
-    "dagster-dbt==0.28.18",
-    "dagster-k8s==0.28.18",
-    "dagster-docker==0.28.18",
+    "dagster-dbt==0.28.19",
+    "dagster-k8s==0.28.19",
+    "dagster-docker==0.28.19",
     "dagster-cloud-backend",
     "dagster-test",
     "dagster-cloud-test-infra",
     "dagster-cloud-dagit",
-    "dagster-dg-cli==1.12.18",
+    "dagster-dg-cli==1.12.19",
     "syrupy",
 ]
 insights = [
@@ -93,14 +91,14 @@ insights = [
 ]
 docker = [
     "docker",
-    "dagster-docker==0.28.18",
+    "dagster-docker==0.28.19",
 ]
 kubernetes = [
     "kubernetes",
-    "dagster-k8s==0.28.18",
+    "dagster-k8s==0.28.19",
 ]
 ecs = [
-    "dagster-aws==0.28.18",
+    "dagster-aws==0.28.19",
     "boto3",
 ]
 sandbox = [
@@ -112,15 +110,3 @@ pex = [
 serverless = [
     "boto3",
 ]
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.dynamic.version]
-attr = "dagster_cloud.version.__version__"
-
-[tool.setuptools.packages.find]
-exclude = [
-    "dagster_cloud_tests*",
-]
-namespaces = false

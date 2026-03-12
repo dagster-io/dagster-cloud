@@ -95,7 +95,7 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
         **kwargs,
     ):
         self._inst_data = inst_data
-        self._logger = logging.getLogger("dagster_cloud")
+        self._logger = logging.getLogger("ProcessUserCodeLauncher")
 
         # map from pid to server being spun up
         # (including old servers in the process of being shut down)
@@ -299,6 +299,10 @@ class ProcessUserCodeLauncher(DagsterCloudUserCodeLauncher, ConfigurableClass):
             heartbeat_thread.start()
 
             pid = server_process.pid
+
+            self._logger.info(
+                f"Created new code server (pid {pid}) for {deployment_name}:{location_name}"
+            )
 
             self._process_entries[server_process.pid] = ProcessUserCodeEntry(
                 server_process,

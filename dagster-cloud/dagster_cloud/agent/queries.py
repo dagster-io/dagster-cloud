@@ -30,6 +30,7 @@ WORKSPACE_ENTRIES_QUERY = """
                 locationName
                 serializedDeploymentMetadata
                 hasOutdatedData
+                hasLoadError
                 metadataTimestamp
             }
         }

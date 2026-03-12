@@ -1,15 +1,13 @@
 [build-system]
 requires = [
-    "setuptools>=61.2",
+    "hatchling>=1.19.0",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "hatchling.build"
 
 [project]
 name = "dagster-cloud-examples"
 requires-python = ">=3.9,<3.13"
-dynamic = [
-    "version",
-]
+version = "1.12.19"
 authors = [
     { name = "Elementl", email = "hello@elementl.com" },
 ]
@@ -19,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster-cloud==1.12.18",
+    "dagster-cloud==1.12.19",
 ]
 
 [project.license]
@@ -31,15 +29,3 @@ tests = [
     "pylint",
     "pytest",
 ]
-
-[tool.setuptools]
-include-package-data = false
-
-[tool.setuptools.dynamic.version]
-attr = "dagster_cloud_examples.version.__version__"
-
-[tool.setuptools.packages.find]
-exclude = [
-    "dagster_cloud_examples_tests*",
-]
-namespaces = false
