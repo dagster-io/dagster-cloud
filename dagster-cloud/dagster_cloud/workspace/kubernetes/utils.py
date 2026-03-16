@@ -88,6 +88,8 @@ def construct_code_location_service(
     user_defined_service_metadata = copy.deepcopy(dict(user_defined_k8s_config.service_metadata))
     user_defined_service_labels = user_defined_service_metadata.pop("labels", {})
 
+    service_spec_config = copy.deepcopy(dict(user_defined_k8s_config.service_spec_config))
+
     return k8s_model_from_dict(
         client.V1Service,
         {
@@ -104,6 +106,7 @@ def construct_code_location_service(
                 },
             },
             "spec": {
+                **service_spec_config,
                 "selector": {"user-deployment": service_name},
                 "ports": [{"name": "grpc", "protocol": "TCP", "port": get_code_server_port()}],
             },
