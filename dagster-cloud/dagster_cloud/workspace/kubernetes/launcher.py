@@ -209,7 +209,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 {
                     key: val
                     for key, val in only_allow_user_defined_k8s_config_fields.items()
-                    if key not in {"service_metadata", "deployment_metadata"}
+                    if key not in {"service_metadata", "service_spec_config", "deployment_metadata"}
                 }
                 if only_allow_user_defined_k8s_config_fields
                 else only_allow_user_defined_k8s_config_fields
@@ -302,6 +302,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                             "pod_template_spec_metadata": Permissive(),
                             "deployment_metadata": Permissive(),
                             "service_metadata": Permissive(),
+                            "service_spec_config": Permissive(),
                         }
                     ),
                     is_required=False,
@@ -329,6 +330,9 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                                 Map(key_type=str, inner_type=bool), is_required=False
                             ),
                             "service_metadata": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "service_spec_config": Field(
                                 Map(key_type=str, inner_type=bool), is_required=False
                             ),
                             "namespace": Field(bool, is_required=False),
