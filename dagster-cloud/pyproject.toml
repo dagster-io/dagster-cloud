@@ -101,6 +101,10 @@ ecs = [
     "dagster-aws==0.28.19",
     "boto3",
 ]
+aca = [
+    "azure-identity>=1.15.0",
+    "azure-mgmt-appcontainers>=3.0.0",
+]
 sandbox = [
     "supervisor",
 ]

@@ -4,6 +4,8 @@ import re
 NUMBERS_ONLY_REGEX = re.compile(r"^\d+$")
 # Fractional decimal-allowed number regex.
 FRACTIONAL_REGEX = re.compile(r"^\d*\.?\d+$")
+# ACA memory uses K8s-style binary suffixes but allows fractional values (e.g. "0.5Gi", "1.5Gi").
+ACA_MEM_QUANTITY_REGEX = re.compile(r"^(\d*\.?\d+)([EPTGMK])i$")
 # K8s memory is in bytes when a plain number is provided, and in quantity strings when a string is provided.
 K8S_MEM_QUANTITY_REGEX = re.compile(r"^(\d+)([EPTGMK])(i)?$")
 # K8s CPU is in vCPUs when a number is provided, and in CPU units when a string ending in "m" is provided.
@@ -89,6 +91,46 @@ def interpret_ecs_mem_str_as_bytes(mem_str: str | None) -> int | None:
     # The first group is the number.
     num = int(match.group(1))
     return num * 1024**3
+
+
+def interpret_aca_mem_str_as_bytes(mem_str: str | None) -> int | None:
+    """Interpret an ACA memory string as bytes.
+
+    ACA uses K8s-style binary suffixes but allows fractional values,
+    e.g. "0.5Gi", "1.0Gi", "2Gi".
+    """
+    if mem_str is None:
+        return None
+
+    if NUMBERS_ONLY_REGEX.match(mem_str):
+        return int(mem_str)
+
+    match = ACA_MEM_QUANTITY_REGEX.match(mem_str)
+    if match is None:
+        raise Exception(f"Invalid ACA memory string {mem_str!r}. Expected format: '1.0Gi', '512Mi', etc.")
+
+    num = float(match.group(1))
+    unit = match.group(2)
+
+    binary_units = {"E": 2**60, "P": 2**50, "T": 2**40, "G": 2**30, "M": 2**20, "K": 2**10}
+    if unit not in binary_units:
+        raise Exception(f"Invalid ACA memory string {mem_str!r}")
+
+    return int(num * binary_units[unit])
+
+
+def interpret_aca_cpu_str_as_millicpus(cpu_str: str | None) -> int | None:
+    """Interpret an ACA CPU string as millicpus.
+
+    ACA uses fractional vCPUs, e.g. 0.25, 0.5, 1.0, 2.0.
+    """
+    if cpu_str is None:
+        return None
+
+    if FRACTIONAL_REGEX.match(cpu_str):
+        return int(float(cpu_str) * 1000)
+
+    raise Exception(f"Invalid ACA CPU string {cpu_str!r}. Expected fractional vCPU value, e.g. '0.5', '1.0'.")
 
 
 def interpret_ecs_cpu_str_as_millicpus(cpu_str: str | None) -> float | None:
