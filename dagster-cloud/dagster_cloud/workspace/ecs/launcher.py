@@ -93,12 +93,14 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         server_task_definition_prefix: str = "server",
         run_task_definition_prefix: str = "run",
         assign_public_ip: bool | None = None,
+        service_discovery_role_arn: str | None = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
         self.logs = boto3.client("logs")
         self.service_discovery = boto3.client("servicediscovery")
         self.secrets_manager = boto3.client("secretsmanager")
+        self.service_discovery_role_arn = service_discovery_role_arn
 
         self.cluster = cluster
         self.subnets = subnets
@@ -186,6 +188,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             grace_period=self._ecs_grace_period,
             launch_type=self.launch_type,
             assign_public_ip=assign_public_ip,
+            service_discovery_role_arn=self.service_discovery_role_arn,
         )
         super().__init__(**kwargs)
 
@@ -309,6 +312,17 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                         "When using the FARGATE launch type, the launcher will attempt to automatically determine if it is "
                         "necessary to assign a public IP to the ECS task. In complex network topologies, this automatic "
                         "determination may not be accurate. In this case, you can explicitly set this value to True or False."
+                    ),
+                ),
+                "service_discovery_role_arn": Field(
+                    StringSource,
+                    is_required=False,
+                    description=(
+                        "An optional IAM role ARN to assume when making AWS Cloud Map (service discovery) "
+                        "API calls. Use this when the Cloud Map namespace lives in a different AWS account "
+                        "than the ECS agent (e.g., centralized networking in AWS Organizations). The agent's "
+                        "task role must have sts:AssumeRole permission for this role, and the target role "
+                        "must trust the agent's task role."
                     ),
                 ),
             },

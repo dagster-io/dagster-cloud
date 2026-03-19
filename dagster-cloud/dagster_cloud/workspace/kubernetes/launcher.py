@@ -77,6 +77,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         inst_data=None,
         namespace=None,
         kubeconfig_file=None,
+        k8s_api_ssl_ca_cert_file=None,
         pull_policy=None,
         env_config_maps=None,
         env_secrets=None,
@@ -147,6 +148,13 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         else:
             kubernetes.config.load_incluster_config()
 
+        # Override the SSL CA cert if a custom CA bundle is provided
+        if k8s_api_ssl_ca_cert_file:
+            # Get the active configuration and override the ssl_ca_cert
+            config = kubernetes.client.Configuration.get_default_copy()
+            config.ssl_ca_cert = k8s_api_ssl_ca_cert_file
+            kubernetes.client.Configuration.set_default(config)
+
         self._k8s_apps_api_client = k8s_apps_api_client
         self._k8s_core_api_client = k8s_core_api_client
 
@@ -202,6 +210,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             run_k8s_config=self._run_k8s_config,
             fail_pod_on_run_failure=fail_pod_on_run_failure,
             kubeconfig_file=kubeconfig_file,
+            k8s_api_ssl_ca_cert_file=k8s_api_ssl_ca_cert_file,
             load_incluster_config=not kubeconfig_file,
             security_context=self._security_context,
             # leave out the code server specific fields from only_allow_user_defined_k8s_config_fields
@@ -209,7 +218,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 {
                     key: val
                     for key, val in only_allow_user_defined_k8s_config_fields.items()
-                    if key not in {"service_metadata", "deployment_metadata"}
+                    if key not in {"service_metadata", "deployment_metadata", "service_spec_config"}
                 }
                 if only_allow_user_defined_k8s_config_fields
                 else only_allow_user_defined_k8s_config_fields
@@ -244,6 +253,15 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 "dagster_home": Field(StringSource, is_required=True),
                 "instance_config_map": Field(StringSource, is_required=True),
                 "kubeconfig_file": Field(StringSource, is_required=False),
+                "k8s_api_ssl_ca_cert_file": Field(
+                    StringSource,
+                    is_required=False,
+                    description=(
+                        "Path to a custom CA bundle file for TLS verification when connecting to "
+                        "the Kubernetes API. Use this in enterprise environments with custom CA "
+                        "chains where the default service account CA cert is not sufficient."
+                    ),
+                ),
                 "deployment_startup_timeout": Field(
                     IntSource,
                     is_required=False,
@@ -302,6 +320,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                             "pod_template_spec_metadata": Permissive(),
                             "deployment_metadata": Permissive(),
                             "service_metadata": Permissive(),
+                            "service_spec_config": Permissive(),
                         }
                     ),
                     is_required=False,
@@ -329,6 +348,9 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                                 Map(key_type=str, inner_type=bool), is_required=False
                             ),
                             "service_metadata": Field(
+                                Map(key_type=str, inner_type=bool), is_required=False
+                            ),
+                            "service_spec_config": Field(
                                 Map(key_type=str, inner_type=bool), is_required=False
                             ),
                             "namespace": Field(bool, is_required=False),

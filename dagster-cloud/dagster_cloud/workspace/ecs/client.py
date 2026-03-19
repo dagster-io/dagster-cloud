@@ -1,8 +1,10 @@
 import asyncio
+import datetime
 import json
 import logging
 import os
 import time
+import uuid
 
 import boto3
 import botocore
@@ -64,11 +66,19 @@ class Client:
         launch_type: str = "FARGATE",
         show_debug_cluster_info: bool = True,
         assign_public_ip: bool | None = None,
+        service_discovery_role_arn: str | None = None,
     ):
         self.ecs = ecs_client if ecs_client else boto3.client("ecs", config=config)
         self.logs = boto3.client("logs", config=config)
-        self.service_discovery = boto3.client("servicediscovery", config=config)
         self.tags_client = boto3.client("resourcegroupstaggingapi", config=config)
+
+        self._service_discovery_role_arn = service_discovery_role_arn
+        if service_discovery_role_arn:
+            self._sts = boto3.client("sts", config=config)
+            self._sd_session_expires: datetime.datetime | None = None
+            self._create_service_discovery_session()
+        else:
+            self._service_discovery = boto3.client("servicediscovery", config=config)
         self._use_legacy_tag_filtering = False
 
         self.cluster_name = cluster_name.split("/")[-1]
@@ -86,6 +96,35 @@ class Client:
         self.launch_type = check.str_param(launch_type, "launch_type")
         self._namespace: str | None = None
         self._assign_public_ip_override = assign_public_ip
+
+    def _create_service_discovery_session(self) -> None:
+        """Assume cross-account role and create a servicediscovery client with temporary credentials."""
+        response = self._sts.assume_role(
+            RoleArn=check.not_none(self._service_discovery_role_arn),
+            RoleSessionName=f"dagster-ecs-sd-{uuid.uuid4()}",
+            DurationSeconds=3600,
+        )
+        self._sd_session_expires = response["Credentials"]["Expiration"]
+        session = boto3.Session(
+            aws_access_key_id=response["Credentials"]["AccessKeyId"],
+            aws_secret_access_key=response["Credentials"]["SecretAccessKey"],
+            aws_session_token=response["Credentials"]["SessionToken"],
+        )
+        self._service_discovery = session.client("servicediscovery", config=config)
+
+    def _refresh_service_discovery_session(self) -> None:
+        """Refresh the cross-account session if it's within 5 minutes of expiration."""
+        if self._sd_session_expires is None:
+            return
+        now = datetime.datetime.now(self._sd_session_expires.tzinfo)
+        if self._sd_session_expires <= now + datetime.timedelta(minutes=5):
+            self._create_service_discovery_session()
+
+    @property
+    def service_discovery(self):
+        if self._service_discovery_role_arn:
+            self._refresh_service_discovery_session()
+        return self._service_discovery
 
     @property
     def ec2(self):

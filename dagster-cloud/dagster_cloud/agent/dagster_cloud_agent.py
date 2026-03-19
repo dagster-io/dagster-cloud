@@ -319,7 +319,7 @@ class DagsterCloudAgent:
 
         self._check_update_workspace(
             user_code_launcher,
-            upload_all=user_code_launcher.upload_snapshots_on_startup,
+            upload_outdated=user_code_launcher.upload_outdated_snapshots_on_startup,
         )
 
         self._logger.info(
@@ -371,7 +371,7 @@ class DagsterCloudAgent:
                 pass
 
             try:
-                self._check_update_workspace(user_code_launcher, upload_all=False)
+                self._check_update_workspace(user_code_launcher, upload_outdated=False)
 
             except Exception:
                 self._logger.error(
@@ -428,7 +428,7 @@ class DagsterCloudAgent:
         else:
             self._warned_about_long_in_progress_reconcile = False
 
-    def _check_update_workspace(self, user_code_launcher, upload_all):
+    def _check_update_workspace(self, user_code_launcher, upload_outdated):
         curr_time = get_current_datetime()
 
         if (
@@ -439,7 +439,7 @@ class DagsterCloudAgent:
             return
 
         self._last_workspace_check_time = curr_time
-        self._query_for_workspace_updates(user_code_launcher, upload_all=upload_all)
+        self._query_for_workspace_updates(user_code_launcher, upload_outdated=upload_outdated)
 
     def _check_add_heartbeat(
         self,
@@ -723,7 +723,7 @@ class DagsterCloudAgent:
     def _query_for_workspace_updates(
         self,
         user_code_launcher: DagsterCloudUserCodeLauncher,
-        upload_all: bool,
+        upload_outdated: bool,
     ):
         locations_with_ttl_to_query = self._get_locations_with_ttl_to_query(user_code_launcher)
 
@@ -828,7 +828,7 @@ class DagsterCloudAgent:
             deployment_map,
             control_plane_error_locations=tracked_error_locations,
             control_plane_outdated_locations=tracked_outdated_locations,
-            upload_all=upload_all,
+            upload_outdated=upload_outdated,
         )
 
         # Tell run worker monitoring which deployments it should care about

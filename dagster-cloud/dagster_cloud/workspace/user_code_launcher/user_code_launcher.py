@@ -255,8 +255,9 @@ SHARED_USER_CODE_LAUNCHER_CONFIG = {
         is_required=False,
         default_value=True,
         description=(
-            "Upload information about code locations to Dagster Cloud whenever the "
-            "agent starts up, even if the code location has not changed since the last upload."
+            "Upload information about outdated code locations to Dagster Cloud whenever the "
+            "agent starts up. Only locations where the control plane indicates data is outdated "
+            "will be uploaded."
         ),
     ),
     "requires_healthcheck": Field(
@@ -375,7 +376,7 @@ class DagsterCloudUserCodeLauncher(
 
         self._server_ttl_config = check.opt_dict_param(server_ttl, "server_ttl")
         self._direct_snapshot_uploads = direct_snapshot_uploads
-        self.upload_snapshots_on_startup = check.bool_param(
+        self.upload_outdated_snapshots_on_startup = check.bool_param(
             upload_snapshots_on_startup, "upload_snapshots_on_startup"
         )
         self._requires_healthcheck = check.bool_param(requires_healthcheck, "requires_healthcheck")
@@ -1376,7 +1377,7 @@ class DagsterCloudUserCodeLauncher(
         *,
         control_plane_error_locations: set[DeploymentAndLocation],
         control_plane_outdated_locations: set[DeploymentAndLocation],
-        upload_all: bool = False,
+        upload_outdated: bool = False,
     ):
         check.dict_param(
             desired_metadata,
@@ -1396,8 +1397,10 @@ class DagsterCloudUserCodeLauncher(
             self._desired_entries = merge_dicts(metadata_to_keep, desired_metadata)
             self._control_plane_error_locations = control_plane_error_locations
             self._control_plane_outdated_locations = control_plane_outdated_locations
-            if upload_all:
-                self._upload_locations = self._upload_locations.union(desired_metadata)
+            if upload_outdated:
+                self._upload_locations = self._upload_locations.union(
+                    control_plane_outdated_locations
+                )
 
     @abstractmethod
     def get_code_server_resource_limits(

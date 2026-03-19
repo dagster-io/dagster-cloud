@@ -1,4 +1,7 @@
-def pytest_addoption(parser):
+import pytest
+
+
+def pytest_addoption(parser: pytest.Parser):
     parser.addoption("--force-shard1", action="store_true", default=False, help="Enable sharding")
 
 
