@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 [project]
 name = "dagster-cloud-examples"
 requires-python = ">=3.9,<3.13"
-version = "1.12.21"
+version = "1.12.22"
 authors = [
     { name = "Elementl", email = "hello@elementl.com" },
 ]
@@ -17,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster-cloud==1.12.21",
+    "dagster-cloud==1.12.22",
 ]
 
 [project.license]

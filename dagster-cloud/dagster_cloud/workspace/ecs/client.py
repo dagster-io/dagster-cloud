@@ -508,6 +508,7 @@ class Client:
                 cluster=self.cluster_name,
                 launchType=self.launch_type,
                 networkConfiguration=self.network_configuration,
+                clientToken=str(uuid.uuid4()),
             )
             .get("tasks", [{}])[0]
             .get("taskArn")
@@ -572,6 +573,7 @@ class Client:
             desiredCount=replica_count or 1,
             enableExecuteCommand=allow_ecs_exec,
             propagateTags="SERVICE",
+            clientToken=str(uuid.uuid4()),
         )
         params["networkConfiguration"] = self.network_configuration
 
