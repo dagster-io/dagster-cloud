@@ -1,4 +1,3 @@
-cat > dagster_cloud/asset/cli/__init__.py << 'EOF'
 import json
 import time
 from typing import Any
@@ -86,7 +85,6 @@ def materialize(
       dagster-cloud asset materialize -l my_location --select my_asset --partition 2024-01-15
       dagster-cloud asset materialize -l my_location --select my_asset --wait
     """
-    # Parse and validate tags
     loaded_tags: dict[str, Any] = {}
     if tags:
         try:
@@ -96,13 +94,11 @@ def materialize(
         except Exception as e:
             raise ui.error(f"Invalid --tags value: {e}")
 
-    # Partitions are passed as a standard Dagster run tag
     if partition:
         loaded_tags["dagster/partition"] = partition
 
     repo_name = repository or _SINGLETON_REPOSITORY_NAME
 
-    # Parse comma-separated asset keys; '/' separates path components within each key
     asset_keys = [k.strip() for k in select.split(",") if k.strip()]
     if not asset_keys:
         raise ui.error("--select requires at least one asset key.")
@@ -142,4 +138,3 @@ def materialize(
             )
     else:
         ui.print(run_id)
-EOF
