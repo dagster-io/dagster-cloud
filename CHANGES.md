@@ -4,6 +4,17 @@
 > This changelog is deprecated. New releases will be documented in the main [Dagster Changelog](https://github.com/dagster-io/dagster/blob/master/CHANGES.md).
 
 
+# Unreleased
+
+### New
+
+- Added `dagster-cloud asset materialize` CLI command for triggering asset
+  materialization on Dagster Cloud deployments. Supports `--select` for
+  comma-separated asset keys, `--partition` for partitioned assets, `--location`
+  for targeting a specific code location, and `--wait` to block until the run
+  finishes. Follows the same authentication and URL resolution patterns as
+  `dagster-cloud job launch`.
+
 # 1.2.7
 
 ### New
