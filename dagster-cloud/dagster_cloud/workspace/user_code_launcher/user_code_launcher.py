@@ -17,6 +17,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed, wait
 from contextlib import AbstractContextManager
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Generic, NamedTuple, TypeAlias, TypeVar, cast
 
 import dagster._check as check
@@ -1756,9 +1757,33 @@ class DagsterCloudUserCodeLauncher(
                     )
                     self._trigger_recovery_server_restart(location_key)
 
+    SENTINEL_BASE_DIR_ENV_VAR = "DAGSTER_CLOUD_AGENT_SENTINEL_DIR"
+
+    @property
+    def _default_sentinel_dir(self) -> str | None:
+        """Override in subclasses to set the default sentinel directory.
+
+        Returns None (no sentinels) in this base class. ECS returns '/opt', K8s returns '/tmp'.
+        Can always be overridden via the DAGSTER_CLOUD_AGENT_SENTINEL_DIR env var.
+        """
+        return None
+
+    @property
+    def sentinel_dir(self) -> str | None:
+        env_val = os.environ.get(self.SENTINEL_BASE_DIR_ENV_VAR)
+        if env_val is not None:
+            return env_val or None  # empty string disables sentinels
+        return self._default_sentinel_dir
+
     def _write_readiness_sentinel(self) -> None:
         """Write a sentinel file to indicate that the agent is alive and grpc servers have been spun up."""
-        pass
+        sentinel_dir = self.sentinel_dir
+        if not sentinel_dir:
+            return
+        Path(sentinel_dir, "finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
+        self._logger.info(
+            "Wrote readiness sentinel: indicating that agent is ready to serve requests"
+        )
 
     def _check_for_image(self, metadata: CodeLocationDeployData):
         image = self._resolve_image(metadata)

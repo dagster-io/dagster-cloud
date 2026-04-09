@@ -1,7 +1,6 @@
 import asyncio
 import os
 from collections.abc import Collection, Mapping, Sequence
-from pathlib import Path
 from typing import Any, cast
 
 import boto3
@@ -342,14 +341,9 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
     def user_code_deployment_type(self) -> UserCodeDeploymentType:
         return UserCodeDeploymentType.ECS
 
-    def _write_readiness_sentinel(self) -> None:
-        # Write to a sentinel file to indicate that we've finished our initial
-        # reconciliation - this is used to indicate that we're ready to
-        # serve requests
-        Path("/opt/finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
-        self._logger.info(
-            "Wrote readiness sentinel: indicating that agent is ready to serve requests"
-        )
+    @property
+    def _default_sentinel_dir(self) -> str:
+        return "/opt"
 
     def _get_grpc_server_sidecars(
         self, container_context: EcsContainerContext

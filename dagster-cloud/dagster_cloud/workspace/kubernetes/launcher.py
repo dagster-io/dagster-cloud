@@ -2,7 +2,6 @@ import logging
 from collections import defaultdict
 from collections.abc import Collection, Mapping
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, NamedTuple
 
 import kubernetes
@@ -569,14 +568,9 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 apps_api_client=apps_api_client,
             )
 
-    def _write_readiness_sentinel(self) -> None:
-        # Write to a sentinel file to indicate that we've finished our initial
-        # reconciliation - this is used to indicate that we're ready to
-        # serve requests
-        Path("/tmp/finished_initial_reconciliation_sentinel.txt").touch(exist_ok=True)
-        self._logger.info(
-            "Wrote readiness sentinel: indicating that agent is ready to serve requests"
-        )
+    @property
+    def _default_sentinel_dir(self) -> str:
+        return "/tmp"
 
     async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
         self,

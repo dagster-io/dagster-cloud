@@ -378,14 +378,16 @@ class DagsterCloudAgent:
                     f"Failed to check for workspace updates: \n{serializable_error_info_from_exc_info(sys.exc_info())}"
                 )
 
-            self._write_liveness_sentinel_if_overdue()
+            self._write_liveness_sentinel_if_overdue(user_code_launcher.sentinel_dir)
 
             # Check for any received interrupts
             with raise_interrupts_as(KeyboardInterrupt):
                 time.sleep(SLEEP_INTERVAL_SECONDS)
 
-    def _write_liveness_sentinel_if_overdue(self):
+    def _write_liveness_sentinel_if_overdue(self, sentinel_dir: str | None):
         if self._last_liveness_check_time is False:
+            return
+        if not sentinel_dir:
             return
 
         now = time.time()
@@ -394,15 +396,14 @@ class DagsterCloudAgent:
         elif self._last_liveness_check_time + LIVENESS_CHECK_INTERVAL_SECONDS > now:
             return
 
-        # Write to a sentinel file to indicate that we've finished our initial
-        # reconciliation - this is used to indicate that we're ready to
-        # serve requests
         try:
-            if not os.access("/opt", os.W_OK):
-                self._logger.warning("Disabling liveness sentinel - /opt is not writable")
+            if not os.access(sentinel_dir, os.W_OK):
+                self._logger.warning(
+                    f"Disabling liveness sentinel - {sentinel_dir} is not writable"
+                )
                 self._last_liveness_check_time = False
                 return
-            Path("/opt/liveness_sentinel.txt").touch(exist_ok=True)
+            Path(sentinel_dir, "liveness_sentinel.txt").touch(exist_ok=True)
             self._last_liveness_check_time = now
         except Exception as e:
             self._logger.error(f"Failed to write liveness sentinel and disabling it: {e}")

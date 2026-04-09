@@ -614,7 +614,7 @@ instance_class:
             empty_yaml,
         )
         defaults["storage"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
-            module_name="dagster.core.storage.legacy_storage",
+            module_name="dagster._core.storage.legacy_storage",
             class_name="CompositeStorage",
             config_yaml=yaml.dump(
                 {

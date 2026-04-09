@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 [project]
 name = "dagster-cloud"
 requires-python = ">=3.9,<3.15"
-version = "1.12.22"
+version = "1.13.0"
 authors = [
     { name = "Elementl", email = "support@elementl.com" },
 ]
@@ -29,9 +29,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "dagster==1.12.22",
-    "dagster-shared==1.12.22",
-    "dagster-cloud-cli==1.12.22",
+    "dagster==1.13.0",
+    "dagster-shared==1.13.0",
+    "dagster-cloud-cli==1.13.0",
     "pex>=2.1.132,<2.60.0",
     "questionary",
     "requests",
@@ -76,14 +76,14 @@ tests = [
     "dbt-core",
     "dbt-snowflake",
     "dbt-duckdb",
-    "dagster-dbt==0.28.22",
-    "dagster-k8s==0.28.22",
-    "dagster-docker==0.28.22",
+    "dagster-dbt==0.29.0",
+    "dagster-k8s==0.29.0",
+    "dagster-docker==0.29.0",
     "dagster-cloud-backend",
     "dagster-test",
     "dagster-cloud-test-infra",
     "dagster-cloud-dagit",
-    "dagster-dg-cli==1.12.22",
+    "dagster-dg-cli==1.13.0",
     "syrupy",
 ]
 insights = [
@@ -91,14 +91,14 @@ insights = [
 ]
 docker = [
     "docker",
-    "dagster-docker==0.28.22",
+    "dagster-docker==0.29.0",
 ]
 kubernetes = [
     "kubernetes",
-    "dagster-k8s==0.28.22",
+    "dagster-k8s==0.29.0",
 ]
 ecs = [
-    "dagster-aws==0.28.22",
+    "dagster-aws==0.29.0",
     "boto3",
 ]
 sandbox = [
