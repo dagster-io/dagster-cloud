@@ -199,6 +199,7 @@ ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION = """
         runs {
             addExecutionPlanSnapshot(serializedExecutionPlanSnapshot: $serializedExecutionPlanSnapshot, snapshotId: $snapshotId) {
                 ok
+                snapshotId
             }
         }
     }

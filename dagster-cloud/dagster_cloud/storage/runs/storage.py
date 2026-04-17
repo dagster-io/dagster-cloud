@@ -427,7 +427,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def add_execution_plan_snapshot(
         self, execution_plan_snapshot: ExecutionPlanSnapshot, snapshot_id: str | None = None
     ) -> str:
-        self._execute_query(
+        res = self._execute_query(
             ADD_EXECUTION_PLAN_SNAPSHOT_MUTATION,
             variables={
                 "serializedExecutionPlanSnapshot": serialize_value(
@@ -438,6 +438,9 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
                 "snapshotId": snapshot_id,
             },
         )
+        server_snapshot_id = res["data"]["runs"]["addExecutionPlanSnapshot"].get("snapshotId")
+        if server_snapshot_id is not None:
+            return server_snapshot_id
         return (
             snapshot_id
             if snapshot_id
