@@ -10,6 +10,8 @@ import requests
 from dagster import InputContext, OutputContext, UPathIOManager, io_manager
 from dagster._utils import PICKLE_PROTOCOL
 from dagster._vendored.dateutil import parser
+from dagster_cloud_cli.core.headers.auth import DagsterCloudInstanceScope
+from dagster_cloud_cli.core.headers.impl import get_dagster_cloud_api_headers
 from upath import UPath
 
 ECS_AGENT_IP = "169.254.170.2"
@@ -86,8 +88,79 @@ class PickledObjectServerlessIOManager(UPathIOManager):
         return UPath(*["storage", *context.get_identifier()])
 
 
-@io_manager
-def serverless_io_manager(init_context):
+class ServerlessPresignedURLIOManager(UPathIOManager):
+    """IO manager for Dagster+ that stores artifacts via the Dagster+ API.
+
+    No AWS credentials required in user pods. Presigned PUT/GET URLs are
+    obtained from the Dagster+ API on each operation.
+    """
+
+    def __init__(self, api_url: str, api_token: str, timeout: int):
+        self._api_url = api_url
+        self._api_token = api_token
+        self._timeout = timeout
+        self._session = requests.Session()
+        super().__init__(base_path=UPath("."))
+
+    def _get_presigned_url(self, key: str, method: str) -> str:
+        resp = self._session.get(
+            f"{self._api_url}/gen_io_storage_url",
+            headers=get_dagster_cloud_api_headers(
+                self._api_token,
+                DagsterCloudInstanceScope.DEPLOYMENT,
+            ),
+            params={"key": key, "method": method},
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()["url"]
+
+    def load_from_path(self, context: InputContext, path: UPath) -> Any:
+        key = path.as_posix()
+        url = self._get_presigned_url(key, "GET")
+        resp = self._session.get(url, timeout=self._timeout)
+        if resp.status_code == 404:
+            raise FileNotFoundError(
+                f"Could not find the input for '{context.name}'."
+                " The upstream output may not have been materialized yet."
+            )
+        resp.raise_for_status()
+        return pickle.loads(resp.content)
+
+    def dump_to_path(self, context: OutputContext, obj: Any, path: UPath) -> None:
+        key = path.as_posix()
+        url = self._get_presigned_url(key, "PUT")
+        pickled = pickle.dumps(obj, PICKLE_PROTOCOL)
+        resp = self._session.put(url, data=pickled, timeout=self._timeout)
+        resp.raise_for_status()
+
+    def path_exists(self, path: UPath) -> bool:
+        key = path.as_posix()
+        url = self._get_presigned_url(key, "HEAD")
+        resp = self._session.head(url, timeout=self._timeout)
+        return resp.status_code == 200
+
+    def unlink(self, path: UPath) -> None:
+        key = path.as_posix()
+        url = self._get_presigned_url(key, "DELETE")
+        resp = self._session.delete(url, timeout=self._timeout)
+        resp.raise_for_status()
+
+    def make_directory(self, path: UPath) -> None:
+        pass
+
+    def get_op_output_relative_path(self, context: InputContext | OutputContext) -> UPath:
+        return UPath(*["storage", *context.get_identifier()])
+
+
+def _build_serverless_io_manager(init_context):
+    if os.getenv("SERVERLESS_IO_MANAGER_USE_PRESIGNED_URL"):
+        return ServerlessPresignedURLIOManager(
+            api_url=init_context.instance.dagster_cloud_url,
+            api_token=init_context.instance.dagster_cloud_agent_token,
+            timeout=init_context.instance.dagster_cloud_api_timeout,
+        )
+
     bucket = os.getenv("DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_BUCKET")
     prefix = os.getenv("DAGSTER_CLOUD_SERVERLESS_STORAGE_S3_PREFIX")
     check.invariant(
@@ -102,3 +175,8 @@ def serverless_io_manager(init_context):
     return PickledObjectServerlessIOManager(
         bucket, s3_prefix=f"{prefix}/io_storage/{deployment_name}"
     )
+
+
+@io_manager
+def serverless_io_manager(init_context):
+    return _build_serverless_io_manager(init_context)
