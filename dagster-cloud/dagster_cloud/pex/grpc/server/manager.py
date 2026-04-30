@@ -11,6 +11,7 @@ from dagster import _check as check
 from dagster._core.errors import DagsterUserCodeUnreachableError
 from dagster._core.instance.ref import InstanceRef
 from dagster._grpc.client import DagsterGrpcClient, client_heartbeat_thread
+from dagster._serdes import serialize_value
 from dagster._utils import find_free_port, safe_tempfile_path_unmanaged
 from dagster._utils.error import SerializableErrorInfo, serializable_error_info_from_exc_info
 from dagster_cloud_cli.core.workspace import CodeLocationDeployData, PexMetadata
@@ -232,6 +233,13 @@ class MultiPexManager(AbstractContextManager):
                 ]
                 if self._enable_metrics:
                     subprocess_args.append("--enable-metrics")
+                if code_location_deploy_data.defs_state_info:
+                    subprocess_args.extend(
+                        [
+                            "--defs-state-info",
+                            serialize_value(code_location_deploy_data.defs_state_info),
+                        ]
+                    )
 
                 # Set working_directory to "." if it is not set, so that it does not
                 # default to the PEX absolute path (which will then be expected to be the

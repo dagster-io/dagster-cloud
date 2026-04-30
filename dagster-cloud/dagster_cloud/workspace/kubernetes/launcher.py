@@ -25,6 +25,7 @@ from dagster_k8s.client import PatchedApiClient
 from dagster_k8s.container_context import K8sContainerContext
 from dagster_k8s.job import UserDefinedDagsterK8sConfig
 from dagster_k8s.models import k8s_snake_case_dict
+from dagster_k8s.utils import load_kubernetes_config
 from kubernetes.client.rest import ApiException
 from typing_extensions import Self
 
@@ -142,17 +143,11 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
         self._server_k8s_config = check.opt_dict_param(server_k8s_config, "server_k8s_config")
         self._run_k8s_config = check.opt_dict_param(run_k8s_config, "run_k8s_config")
 
-        if kubeconfig_file:
-            kubernetes.config.load_kube_config(kubeconfig_file)
-        else:
-            kubernetes.config.load_incluster_config()
-
-        # Override the SSL CA cert if a custom CA bundle is provided
-        if k8s_api_ssl_ca_cert_file:
-            # Get the active configuration and override the ssl_ca_cert
-            config = kubernetes.client.Configuration.get_default_copy()
-            config.ssl_ca_cert = k8s_api_ssl_ca_cert_file
-            kubernetes.client.Configuration.set_default(config)
+        load_kubernetes_config(
+            load_incluster_config=not kubeconfig_file,
+            kubeconfig_file=kubeconfig_file,
+            k8s_api_ssl_ca_cert_file=k8s_api_ssl_ca_cert_file,
+        )
 
         self._k8s_apps_api_client = k8s_apps_api_client
         self._k8s_core_api_client = k8s_core_api_client

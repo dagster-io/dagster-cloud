@@ -93,6 +93,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         run_task_definition_prefix: str = "run",
         assign_public_ip: bool | None = None,
         service_discovery_role_arn: str | None = None,
+        repository_credentials: str | None = None,
         **kwargs,
     ):
         self.ecs = boto3.client("ecs")
@@ -172,6 +173,10 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
 
         self.server_health_check = check.opt_mapping_param(
             server_health_check, "server_health_check"
+        )
+
+        self.repository_credentials = check.opt_str_param(
+            repository_credentials, "repository_credentials"
         )
 
         self._enable_ecs_exec = enable_ecs_exec
@@ -455,6 +460,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             server_ecs_tags=self.server_ecs_tags,
             run_ecs_tags=self.run_ecs_tags,
             server_health_check=self.server_health_check,
+            repository_credentials=self.repository_credentials,
         ).merge(EcsContainerContext.create_from_config(metadata.container_context))
 
         # disallow multiple replicas for code locations acting as pex servers
@@ -737,6 +743,11 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
                 **(
                     {"linux_parameters": ECS_EXEC_LINUX_PARAMETERS}
                     if self._get_enable_ecs_exec()
+                    else {}
+                ),
+                **(
+                    {"repository_credentials": self.repository_credentials}
+                    if self.repository_credentials
                     else {}
                 ),
             },

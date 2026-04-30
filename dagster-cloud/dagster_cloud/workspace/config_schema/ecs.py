@@ -125,6 +125,15 @@ SHARED_ECS_CONFIG = {
         is_required=False,
         description="Health check to include in code server task definitions.",
     ),
+    "repository_credentials": Field(
+        StringSource,
+        is_required=False,
+        description=(
+            "The arn of the secret to authenticate into your private container registry."
+            " This does not apply if you are leveraging ECR for your images, see"
+            " https://docs.aws.amazon.com/AmazonECS/latest/userguide/private-auth.html."
+        ),
+    ),
 }
 
 
@@ -170,15 +179,6 @@ ECS_CONTAINER_CONTEXT_CONFIG = {
             "ARN of the task execution role for the ECS container and Fargate agent to make AWS API"
             " calls on your behalf. See"
             " https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_execution_IAM_role.html. "
-        ),
-    ),
-    "repository_credentials": Field(
-        StringSource,
-        is_required=False,
-        description=(
-            "The arn of the secret to authenticate into your private container registry."
-            " This does not apply if you are leveraging ECR for your images, see"
-            " https://docs.aws.amazon.com/AmazonECS/latest/userguide/private-auth.html."
         ),
     ),
     **SHARED_ECS_CONFIG,
