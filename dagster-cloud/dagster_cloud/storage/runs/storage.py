@@ -184,7 +184,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         return (
             self._override_graphql_client
             if self._override_graphql_client
-            else self._instance.graphql_client  # pyright: ignore[reportAttributeAccessIssue]
+            else self._instance.graphql_client  # ty: ignore[unresolved-attribute]
         )
 
     def _execute_query(self, query, variables=None, idempotent_mutation=False):
@@ -245,7 +245,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
     def supports_bucket_queries(self) -> bool:
         return False
 
-    def get_runs(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_runs(  # ty: ignore[invalid-method-override], fix me!
         self,
         filters: RunsFilter | None = None,
         cursor: str | None = None,
@@ -290,7 +290,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["getRunsCount"]
 
-    def get_run_group(self, run_id: str) -> tuple[str, Iterable[DagsterRun]] | None:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_run_group(self, run_id: str) -> tuple[str, Iterable[DagsterRun]] | None:  # ty: ignore[invalid-method-override], fix me!
         res = self._execute_query(
             GET_RUN_GROUP_QUERY, variables={"runId": check.str_param(run_id, "run_id")}
         )
@@ -381,7 +381,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["hasRun"]
 
-    def has_job_snapshot(self, pipeline_snapshot_id: str) -> bool:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def has_job_snapshot(self, pipeline_snapshot_id: str) -> bool:  # ty: ignore[invalid-method-override], fix me!
         res = self._execute_query(
             HAS_PIPELINE_SNAPSHOT_QUERY,
             variables={
@@ -390,7 +390,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return res["data"]["runs"]["hasPipelineSnapshot"]
 
-    def add_job_snapshot(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def add_job_snapshot(  # ty: ignore[invalid-method-override], fix me!
         self, pipeline_snapshot: JobSnap, snapshot_id: str | None = None
     ) -> str:
         self._execute_query(
@@ -404,7 +404,7 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
         )
         return snapshot_id if snapshot_id else pipeline_snapshot.snapshot_id
 
-    def get_job_snapshot(self, pipeline_snapshot_id: str) -> JobSnap:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_job_snapshot(self, pipeline_snapshot_id: str) -> JobSnap:  # ty: ignore[invalid-method-override], fix me!
         res = self._execute_query(
             GET_PIPELINE_SNAPSHOT_QUERY,
             variables={
@@ -574,10 +574,10 @@ class GraphQLRunStorage(RunStorage, ConfigurableClass):
             variables={"serializedPartitionBackfill": serialize_value(partition_backfill)},
         )
 
-    def get_cursor_values(self, keys: set[str]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_cursor_values(self, keys: set[str]):
         return NotImplementedError("KVS is not supported from the user cloud")
 
-    def set_cursor_values(self, pairs: Mapping[str, str]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def set_cursor_values(self, pairs: Mapping[str, str]):
         return NotImplementedError("KVS is not supported from the user cloud")
 
     # Migrating run history

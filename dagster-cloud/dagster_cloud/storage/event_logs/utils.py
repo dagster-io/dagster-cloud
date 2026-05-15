@@ -60,7 +60,7 @@ def _truncate_dagster_event(
         (JobCanceledData, EngineEventData, HookErroredData, StepFailureData, StepRetryData),
     ):
         event_specific_data = event_specific_data._replace(
-            error=_truncate_dagster_event_error(
+            error=_truncate_dagster_event_error(  # ty: ignore[invalid-argument-type]
                 event_specific_data.error,
                 truncations,
             ),

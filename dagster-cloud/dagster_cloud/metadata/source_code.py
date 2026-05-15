@@ -36,7 +36,7 @@ def _locate_git_root() -> Path | None:
     elif code_origin.python_file:
         code_origin_filepath = code_origin.python_file
 
-    if not code_origin_filepath:  # pyright: ignore[reportPossiblyUnboundVariable]
+    if not code_origin_filepath:
         return None
     current_dir = Path(code_origin_filepath)
     for parent in current_dir.parents:

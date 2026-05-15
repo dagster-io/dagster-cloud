@@ -24,7 +24,7 @@ class DagsterCloudSecretsLoader(SecretsLoader, ConfigurableClass):
         self._inst_data = inst_data
 
     def _execute_query(self, query, variables=None):
-        return self._instance.graphql_client.execute(query, variable_values=variables)  # pyright: ignore[reportAttributeAccessIssue]
+        return self._instance.graphql_client.execute(query, variable_values=variables)  # ty: ignore[unresolved-attribute]
 
     def get_secrets_for_environment(self, location_name: str | None) -> dict[str, str]:
         res = self._execute_query(

@@ -29,7 +29,7 @@ from dagster_cloud.api.dagster_cloud_api import UserCodeDeploymentType
 from dagster_cloud.execution.monitoring import CloudContainerResourceLimits
 from dagster_cloud.storage.tags import PEX_METADATA_TAG
 from dagster_cloud.workspace.config_schema.docker import SHARED_DOCKER_CONFIG
-from dagster_cloud.workspace.docker.utils import unique_docker_resource_name
+from dagster_cloud.workspace.docker.utils import docker_client_from_env, unique_docker_resource_name
 from dagster_cloud.workspace.user_code_launcher import (
     DEFAULT_SERVER_PROCESS_STARTUP_TIMEOUT,
     SHARED_USER_CODE_LAUNCHER_CONFIG,
@@ -61,7 +61,7 @@ class DagsterDockerContainer(NamedTuple):
 
     container: Container
 
-    def __str__(self):  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __str__(self):
         return self.container.id
 
 
@@ -91,7 +91,7 @@ class DockerUserCodeLauncher(
     def requires_images(self):
         return True
 
-    def user_code_deployment_type(self) -> UserCodeDeploymentType:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def user_code_deployment_type(self) -> UserCodeDeploymentType:
         return UserCodeDeploymentType.DOCKER
 
     @property
@@ -159,7 +159,7 @@ class DockerUserCodeLauncher(
     def _get_standalone_dagster_server_handles_for_location(
         self, deployment_name: str, location_name: str
     ) -> list[DagsterDockerContainer]:
-        client = docker.client.from_env()
+        client = docker_client_from_env()
         return [
             DagsterDockerContainer(container=container)
             for container in client.containers.list(
@@ -177,7 +177,7 @@ class DockerUserCodeLauncher(
     def _get_multipex_server_handles_for_location(
         self, deployment_name: str, location_name: str
     ) -> list[DagsterDockerContainer]:
-        client = docker.client.from_env()
+        client = docker_client_from_env()
         return [
             DagsterDockerContainer(container=container)
             for container in client.containers.list(
@@ -206,7 +206,7 @@ class DockerUserCodeLauncher(
         additional_env: dict[str, str],
         labels: dict[str, str],
     ) -> tuple[Container, ServerEndpoint]:
-        client = docker.client.from_env()
+        client = docker_client_from_env()
 
         self._logger.info(
             f"Starting a new container for {deployment_name}:{location_name} with image {image}:"
@@ -351,7 +351,7 @@ class DockerUserCodeLauncher(
             DagsterDockerContainer(container=container), server_endpoint, metadata
         )
 
-    async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    async def _wait_for_new_server_ready(  # ty: ignore[invalid-method-override], fix me!
         self,
         deployment_name: str,
         location_name: str,
@@ -381,11 +381,11 @@ class DockerUserCodeLauncher(
         return handle.container.labels.get(AGENT_LABEL)
 
     def get_server_create_timestamp(self, handle: DagsterDockerContainer) -> float | None:
-        created_time_str = handle.container.attrs["Created"]
-        return parse(created_time_str).timestamp()  # pyright: ignore[reportAttributeAccessIssue]
+        created_time_str = handle.container.attrs["Created"]  # ty: ignore[not-subscriptable]
+        return parse(created_time_str).timestamp()
 
     def _list_server_handles(self) -> list[DagsterDockerContainer]:
-        client = docker.client.from_env()
+        client = docker_client_from_env()
         return [
             DagsterDockerContainer(container=container)
             for container in client.containers.list(all=True, filters={"label": GRPC_SERVER_LABEL})

@@ -129,7 +129,7 @@ class MultiPexApi(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/multi_pex_api.MultiPexApi/CreatePexServer',
+        return grpc.experimental.unary_unary(  # ty: ignore[possibly-missing-submodule]request, target, '/multi_pex_api.MultiPexApi/CreatePexServer',
             multi__pex__api__pb2.CreatePexServerRequest.SerializeToString,
             multi__pex__api__pb2.CreatePexServerReply.FromString,
             options, channel_credentials,
@@ -146,7 +146,7 @@ class MultiPexApi(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/multi_pex_api.MultiPexApi/GetPexServers',
+        return grpc.experimental.unary_unary(  # ty: ignore[possibly-missing-submodule]request, target, '/multi_pex_api.MultiPexApi/GetPexServers',
             multi__pex__api__pb2.GetPexServersRequest.SerializeToString,
             multi__pex__api__pb2.GetPexServersReply.FromString,
             options, channel_credentials,
@@ -163,7 +163,7 @@ class MultiPexApi(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/multi_pex_api.MultiPexApi/GetCrashedPexServers',
+        return grpc.experimental.unary_unary(  # ty: ignore[possibly-missing-submodule]request, target, '/multi_pex_api.MultiPexApi/GetCrashedPexServers',
             multi__pex__api__pb2.GetCrashedPexServersRequest.SerializeToString,
             multi__pex__api__pb2.GetCrashedPexServersReply.FromString,
             options, channel_credentials,
@@ -180,7 +180,7 @@ class MultiPexApi(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/multi_pex_api.MultiPexApi/ShutdownPexServer',
+        return grpc.experimental.unary_unary(  # ty: ignore[possibly-missing-submodule]request, target, '/multi_pex_api.MultiPexApi/ShutdownPexServer',
             multi__pex__api__pb2.ShutdownPexServerRequest.SerializeToString,
             multi__pex__api__pb2.ShutdownPexServerReply.FromString,
             options, channel_credentials,
@@ -197,7 +197,7 @@ class MultiPexApi(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/multi_pex_api.MultiPexApi/Ping',
+        return grpc.experimental.unary_unary(  # ty: ignore[possibly-missing-submodule]request, target, '/multi_pex_api.MultiPexApi/Ping',
             multi__pex__api__pb2.PingRequest.SerializeToString,
             multi__pex__api__pb2.PingReply.FromString,
             options, channel_credentials,

@@ -226,7 +226,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return create_agent_graphql_client(
             self.client_managed_retries_requests_session,
             self.dagster_cloud_graphql_url,
-            self._dagster_cloud_api_config,  # pyright: ignore[reportArgumentType]
+            self._dagster_cloud_api_config,
             scope=scope,
         )
 
@@ -309,7 +309,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         if self._http_client is None:
             self._http_client = create_agent_http_client(
                 self.client_managed_retries_requests_session,
-                self._dagster_cloud_api_config,  # pyright: ignore[reportArgumentType]
+                self._dagster_cloud_api_config,
                 scope=DagsterCloudInstanceScope.DEPLOYMENT,
             )
 
@@ -422,7 +422,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
         return f"{self.dagster_cloud_url}/code_location_update_result"
 
     def dagster_cloud_api_headers(self, scope: DagsterCloudInstanceScope):
-        return get_agent_headers(self._dagster_cloud_api_config, scope=scope)  # pyright: ignore[reportArgumentType]
+        return get_agent_headers(self._dagster_cloud_api_config, scope=scope)
 
     @property
     def dagster_cloud_agent_token(self) -> str:
@@ -445,7 +445,7 @@ class DagsterCloudAgentInstance(DagsterCloudInstance):
     def dagster_cloud_api_proxies(self) -> dict[str, str] | None:
         # Requests library modifies the proxies key so create a copy
         return (
-            self._dagster_cloud_api_config.get("proxies").copy()  # pyright: ignore[reportOptionalMemberAccess]
+            self._dagster_cloud_api_config.get("proxies").copy()
             if self._dagster_cloud_api_config.get("proxies")
             else {}
         )
@@ -598,22 +598,23 @@ instance_class:
 
         empty_yaml = yaml.dump({})
 
-        defaults["run_storage"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+        # `defaults` is typed `Mapping[...]` upstream but is a mutable dict at runtime.
+        defaults["run_storage"] = ConfigurableClassData(  # ty: ignore[invalid-assignment]
             "dagster_cloud.storage.runs",
             "GraphQLRunStorage",
             empty_yaml,
         )
-        defaults["event_log_storage"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+        defaults["event_log_storage"] = ConfigurableClassData(  # ty: ignore[invalid-assignment]
             "dagster_cloud.storage.event_logs",
             "GraphQLEventLogStorage",
             empty_yaml,
         )
-        defaults["schedule_storage"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+        defaults["schedule_storage"] = ConfigurableClassData(  # ty: ignore[invalid-assignment]
             "dagster_cloud.storage.schedules",
             "GraphQLScheduleStorage",
             empty_yaml,
         )
-        defaults["storage"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+        defaults["storage"] = ConfigurableClassData(  # ty: ignore[invalid-assignment]
             module_name="dagster._core.storage.legacy_storage",
             class_name="CompositeStorage",
             config_yaml=yaml.dump(
@@ -638,15 +639,15 @@ instance_class:
             ),
         )
 
-        defaults["compute_logs"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+        defaults["compute_logs"] = ConfigurableClassData(  # ty: ignore[invalid-assignment]
             "dagster_cloud.storage.compute_logs", "CloudComputeLogManager", empty_yaml
         )
 
-        defaults["secrets"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+        defaults["secrets"] = ConfigurableClassData(  # ty: ignore[invalid-assignment]
             "dagster_cloud.secrets", "DagsterCloudSecretsLoader", empty_yaml
         )
 
-        defaults["defs_state_storage"] = ConfigurableClassData(  # pyright: ignore[reportIndexIssue]
+        defaults["defs_state_storage"] = ConfigurableClassData(  # ty: ignore[invalid-assignment]
             "dagster_cloud.storage.defs_state", "GraphQLDefsStateStorage", empty_yaml
         )
 

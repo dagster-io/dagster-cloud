@@ -195,7 +195,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
             env_config_maps=self._env_config_maps,
             env_secrets=self._env_secrets,
             env_vars=self._env_vars,
-            job_namespace=self._namespace,  # pyright: ignore[reportArgumentType]
+            job_namespace=self._namespace,
             volume_mounts=self._volume_mounts,
             volumes=self._volumes,
             labels=self._labels,
@@ -476,13 +476,14 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                     namespace=container_context.namespace,
                     body=construct_code_location_deployment(
                         self._instance,
-                        deployment_name,
-                        location_name,
-                        resource_name,
-                        metadata,
-                        container_context,
+                        deployment_name=deployment_name,
+                        location_name=location_name,
+                        k8s_deployment_name=resource_name,
+                        metadata=metadata,
+                        container_context=container_context,
                         args=args,
                         server_timestamp=desired_entry.update_timestamp,
+                        server_replica_count=container_context.server_replica_count,
                     ),
                 )
             self._logger.info(
@@ -567,7 +568,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
     def _default_sentinel_dir(self) -> str:
         return "/tmp"
 
-    async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    async def _wait_for_new_server_ready(  # ty: ignore[invalid-method-override], fix me!
         self,
         deployment_name: str,
         location_name: str,
@@ -615,7 +616,7 @@ class K8sUserCodeLauncher(DagsterCloudUserCodeLauncher[K8sHandle], ConfigurableC
                 for deployment in deployments:
                     handles.append(
                         K8sHandle(
-                            namespace=namespace,  # pyright: ignore[reportArgumentType]
+                            namespace=namespace,  # ty: ignore[invalid-argument-type]
                             name=deployment.metadata.name,
                             labels=deployment.metadata.labels,
                             creation_timestamp=deployment.metadata.creation_timestamp.timestamp()

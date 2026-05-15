@@ -474,7 +474,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         return (
             self._override_graphql_client
             if self._override_graphql_client
-            else self._instance.graphql_client  # pyright: ignore[reportAttributeAccessIssue]
+            else self._instance.graphql_client  # ty: ignore[unresolved-attribute]
         )
 
     @property
@@ -549,7 +549,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
             end_time=check.opt_float_elem(stats, "endTime"),
         )
 
-    def get_step_stats_for_run(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def get_step_stats_for_run(  # ty: ignore[invalid-method-override], fix me!
         self, run_id: str, step_keys: list[str] | None = None
     ) -> list[RunStepKeyStatsSnapshot]:
         res = self._execute_query(
@@ -688,7 +688,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
     def wipe(self):
         return self._execute_query(WIPE_EVENT_LOG_STORAGE_MUTATION)
 
-    def watch(self, run_id: str, cursor: str, callback: Callable):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def watch(self, run_id: str, cursor: str, callback: Callable):  # ty: ignore[invalid-method-override], fix me!
         raise NotImplementedError("Not callable from user cloud")
 
     def end_watch(self, run_id: str, handler: Callable):
@@ -796,7 +796,7 @@ class GraphQLEventLogStorage(EventLogStorage, ConfigurableClass):
         )
         return res["data"]["eventLogs"]["hasAssetKey"]
 
-    def all_asset_keys(self) -> Iterable[AssetKey]:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def all_asset_keys(self) -> Iterable[AssetKey]:  # ty: ignore[invalid-method-override], fix me!
         res = self._execute_query(GET_ALL_ASSET_KEYS_QUERY)
         return [
             check.not_none(AssetKey.from_db_string(asset_key_string))

@@ -4,7 +4,6 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
 
 import dagster._check as check
 import grpc
@@ -55,7 +54,7 @@ class MultiPexApiServer(MultiPexApiServicer):
         )
         self.__cleanup_thread.start()
 
-    def CreatePexServer(self, request, _context):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def CreatePexServer(self, request, _context):  # ty: ignore[invalid-method-override], fix me!
         create_pex_server_args = deserialize_value(
             request.create_pex_server_args, CreatePexServerArgs
         )
@@ -73,7 +72,7 @@ class MultiPexApiServer(MultiPexApiServicer):
             create_pex_server_response=serialize_value(response)
         )
 
-    def GetPexServers(self, request, _context):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def GetPexServers(self, request, _context):  # ty: ignore[invalid-method-override], fix me!
         get_pex_servers_args = deserialize_value(request.get_pex_servers_args, GetPexServersArgs)
         try:
             pex_server_handles = self._pex_manager.get_active_pex_server_handles(
@@ -88,7 +87,7 @@ class MultiPexApiServer(MultiPexApiServicer):
             get_pex_servers_response=serialize_value(response)
         )
 
-    def GetCrashedPexServers(self, request, _context):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def GetCrashedPexServers(self, request, _context):  # ty: ignore[invalid-method-override], fix me!
         get_crashed_pex_servers_args = deserialize_value(
             request.get_crashed_pex_servers_args, GetCrashedPexServersArgs
         )
@@ -105,7 +104,7 @@ class MultiPexApiServer(MultiPexApiServicer):
             get_crashed_pex_servers_response=serialize_value(response)
         )
 
-    def ShutdownPexServer(self, request, _context):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def ShutdownPexServer(self, request, _context):  # ty: ignore[invalid-method-override], fix me!
         shutdown_pex_server_args = deserialize_value(
             request.shutdown_pex_server_args, ShutdownPexServerArgs
         )
@@ -118,7 +117,7 @@ class MultiPexApiServer(MultiPexApiServicer):
             shutdown_pex_server_response=serialize_value(response)
         )
 
-    def Ping(self, request, _context):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def Ping(self, request, _context):  # ty: ignore[invalid-method-override], fix me!
         echo = request.echo
         return multi_pex_api_pb2.PingReply(echo=echo)
 
@@ -161,7 +160,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
                 return client_or_error._get_response(api_name, request, timeout)  # noqa: SLF001
             except grpc.RpcError as e:
                 # Surface the grpc error to the caller
-                context.abort(e.code(), e.details())
+                context.abort(e.code(), e.details())  # ty: ignore[unresolved-attribute]
 
     def _streaming_query(
         self, api_name: str, request, context, timeout: int = DEFAULT_GRPC_TIMEOUT
@@ -176,7 +175,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
                 return client_or_error._get_streaming_response(api_name, request, timeout)  # noqa: SLF001
             except grpc.RpcError as e:
                 # Surface the grpc error to the caller
-                context.abort(e.code(), e.details())
+                context.abort(e.code(), e.details())  # ty: ignore[unresolved-attribute]
 
     def ExecutionPlanSnapshot(self, request, context):
         return self._query("ExecutionPlanSnapshot", request, context)
@@ -194,7 +193,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             return client_or_error._get_response("ListRepositories", request)  # noqa: SLF001
         except grpc.RpcError as e:
             # Surface the grpc error to the caller
-            context.abort(e.code(), e.details())
+            context.abort(e.code(), e.details())  # ty: ignore[unresolved-attribute]
 
     def Ping(self, request, context):
         return self._query("Ping", request, context)
@@ -250,8 +249,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             return self._query("SyncExternalScheduleExecution", request, context)
         except Exception as e:
             if (
-                isinstance(e, grpc.RpcError)
-                and cast("grpc.RpcError", e).code() == grpc.StatusCode.UNIMPLEMENTED
+                isinstance(e, grpc.RpcError) and e.code() == grpc.StatusCode.UNIMPLEMENTED  # ty: ignore[unresolved-attribute]
             ):
                 context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
@@ -286,8 +284,7 @@ class DagsterPexProxyApiServer(DagsterApiServicer):
             )
         except Exception as e:
             if (
-                isinstance(e, grpc.RpcError)
-                and cast("grpc.RpcError", e).code() == grpc.StatusCode.UNIMPLEMENTED
+                isinstance(e, grpc.RpcError) and e.code() == grpc.StatusCode.UNIMPLEMENTED  # ty: ignore[unresolved-attribute]
             ):
                 context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,

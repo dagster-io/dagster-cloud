@@ -335,7 +335,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
         )
 
     @classmethod
-    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: dict[str, Any]):  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def from_config_value(cls, inst_data: ConfigurableClassData, config_value: dict[str, Any]):  # ty: ignore[invalid-method-override], fix me!
         return EcsUserCodeLauncher(inst_data=inst_data, **config_value)
 
     @property
@@ -595,14 +595,14 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             task_logs = "Task logs:\n" + "\n".join(logs) if logs else "No logs in task."
             sections.append(task_logs)
         except:
-            self._logger.exception("Error trying to get logs for failed task", task_arn=task_arn)  # pyright: ignore[reportCallIssue]
+            self._logger.exception("Error trying to get logs for failed task", task_arn=task_arn)  # pyright: ignore[reportCallIssue]  # ty: ignore[unknown-argument]
 
         if self.show_debug_cluster_info:
             sections.append(get_debug_ecs_prompt(self.cluster, task_arn))
 
         return "\n\n".join(sections)
 
-    async def _wait_for_new_server_ready(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    async def _wait_for_new_server_ready(  # ty: ignore[invalid-method-override], fix me!
         self,
         deployment_name: str,
         location_name: str,
@@ -646,7 +646,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             except Exception as e:
                 if (
                     isinstance(e.__cause__, grpc.RpcError)
-                    and cast("grpc.RpcError", e.__cause__).code() == grpc.StatusCode.UNIMPLEMENTED
+                    and cast("grpc.RpcError", e.__cause__).code() == grpc.StatusCode.UNIMPLEMENTED  # ty: ignore[unresolved-attribute, redundant-cast]
                 ):
                     # New gRPC method not implemented on old multipex server versions
                     pass
@@ -767,7 +767,7 @@ class EcsUserCodeLauncher(DagsterCloudUserCodeLauncher[EcsServerHandleType], Con
             task_definition_prefix=self.run_task_definition_prefix,
         )
 
-    def run_launcher(self) -> CloudEcsRunLauncher:  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def run_launcher(self) -> CloudEcsRunLauncher:  # ty: ignore[invalid-method-override], fix me!
         launcher = CloudEcsRunLauncher(**self._run_launcher_kwargs())
         launcher.register_instance(self._instance)
 

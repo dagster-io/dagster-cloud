@@ -8,6 +8,7 @@ import uuid
 
 import boto3
 import botocore
+import botocore.exceptions
 import dagster._check as check
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -376,7 +377,7 @@ class Client:
                 service=service.name,
                 desiredCount=0,
             )
-        except botocore.exceptions.ClientError as error:  # pyright: ignore[reportAttributeAccessIssue]
+        except botocore.exceptions.ClientError as error:
             if error.response["Error"]["Code"] in [
                 "ServiceNotFoundException",
                 "ServiceNotActiveException",
@@ -459,7 +460,7 @@ class Client:
                             if resource_arn in actual_services:
                                 services.append(Service(client=self, arn=resource_arn))
 
-                except botocore.exceptions.ClientError as error:  # pyright: ignore[reportAttributeAccessIssue]
+                except botocore.exceptions.ClientError as error:
                     if error.response["Error"]["Code"] == "AccessDeniedException":
                         self._use_legacy_tag_filtering = True
                         logger.warning(
@@ -531,7 +532,7 @@ class Client:
         )
 
         if exit_code:
-            raise Exception(self.get_task_logs(task_arn))  # pyright: ignore[reportCallIssue]
+            raise Exception(self.get_task_logs(task_arn))  # pyright: ignore[reportCallIssue]  # ty: ignore[missing-argument]
 
         return True
 
@@ -787,7 +788,7 @@ class Client:
         )
 
     def _get_service_discovery_id(self, hostname):
-        service_name = hostname.split("." + self.namespace)[0]  # pyright: ignore[reportOperatorIssue]
+        service_name = hostname.split("." + self.namespace)[0]
 
         paginator = self.service_discovery.get_paginator("list_services")
         for page in paginator.paginate(

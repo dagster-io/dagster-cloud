@@ -167,7 +167,7 @@ def dbt_with_bigquery_insights(
     cost_by_asset = defaultdict(list)
     try:
         with adapter.connection_named("dagster_insights:bigquery_cost"):
-            client: bigquery.Client = adapter.connections.get_thread_connection().handle  # pyright: ignore[reportAssignmentType]
+            client: bigquery.Client = adapter.connections.get_thread_connection().handle
 
             if (client.location or adapter.config.credentials.location) and client.project:
                 # we should populate the location/project from the client, and use that to determine

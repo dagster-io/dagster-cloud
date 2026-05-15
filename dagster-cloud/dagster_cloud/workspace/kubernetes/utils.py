@@ -117,6 +117,7 @@ def construct_code_location_service(
 
 def construct_code_location_deployment(
     instance,
+    *,
     deployment_name,
     location_name,
     k8s_deployment_name,
@@ -124,6 +125,7 @@ def construct_code_location_deployment(
     container_context,
     args,
     server_timestamp: float,
+    server_replica_count: int | None = None,
 ):
     env = get_grpc_server_env(
         metadata,
@@ -152,6 +154,20 @@ def construct_code_location_deployment(
         ),
     }
 
+    # With multiple replicas the Service must only route traffic to pods whose gRPC
+    # port is open. The Dagster gRPC server only binds its port after user code has
+    # been imported (DagsterGrpcServer.serve -> server.start), so a tcpSocket probe
+    # on that port is sufficient and matches the readiness signal the agent's own
+    # client.ping uses. If the user already configured a probe, leave it alone.
+    if (
+        server_replica_count is not None
+        and server_replica_count > 1
+        and "readiness_probe" not in container_config
+    ):
+        container_config["readiness_probe"] = {
+            "tcp_socket": {"port": get_code_server_port()},
+        }
+
     pod_spec_config = copy.deepcopy(user_defined_config.pod_spec_config)
 
     user_defined_containers = pod_spec_config.pop("containers", [])
@@ -177,6 +193,7 @@ def construct_code_location_deployment(
         },
         "spec": {  # DeploymentSpec
             "selector": {"match_labels": {"user-deployment": k8s_deployment_name}},
+            **({"replicas": server_replica_count} if server_replica_count is not None else {}),
             "template": {  # PodTemplateSpec
                 "metadata": {
                     **pod_template_spec_metadata,

@@ -23,5 +23,5 @@ def build_bigquery_cost_metadata(
         BIGQUERY_METADATA_SLOTS_MS: slots_ms,
     }
     if job_ids:
-        metadata[BIGQUERY_METADATA_JOB_IDS] = job_ids
+        metadata[BIGQUERY_METADATA_JOB_IDS] = job_ids  # ty: ignore[invalid-assignment]
     return metadata

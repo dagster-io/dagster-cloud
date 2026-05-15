@@ -63,7 +63,7 @@ class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
         self._asset_key = asset_key
         super().__init__(*args, **kwargs)
 
-    def execute_string(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def execute_string(  # ty: ignore[invalid-method-override], fix me!
         self,
         sql_text: str,
         remove_comments: bool = False,
@@ -79,7 +79,7 @@ class WrappedSnowflakeConnection(snowflake.connector.SnowflakeConnection):
             **kwargs,
         )
 
-    def execute_stream(  # pyright: ignore[reportIncompatibleMethodOverride], fix me!
+    def execute_stream(  # ty: ignore[invalid-method-override], fix me!
         self,
         stream: StringIO,
         remove_comments: bool = False,

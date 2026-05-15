@@ -1084,7 +1084,7 @@ class DagsterCloudUserCodeLauncher(
         """
 
     def _get_multipex_server_handles_for_location(
-        self, _deployment_name: str, _location_name: str
+        self, deployment_name: str, location_name: str
     ) -> Collection[ServerHandle]:
         """Return a list of 'handles' that represent all servers running the multipex server
         entrypoint.
@@ -1303,9 +1303,7 @@ class DagsterCloudUserCodeLauncher(
             self._logger.info("Not cleaning up server since it was recently created")
             return False
 
-        return (active_agent_ids is not None) and (
-            agent_id_for_server not in cast("set[str]", active_agent_ids)
-        )
+        return (active_agent_ids is not None) and (agent_id_for_server not in active_agent_ids)
 
     def _graceful_cleanup_servers(self, include_own_servers: bool):  # ServerHandles
         active_agent_ids = self.get_active_agent_ids()
@@ -1337,7 +1335,7 @@ class DagsterCloudUserCodeLauncher(
             self._reconcile_grpc_metadata_thread.join()
 
         if self._run_worker_monitoring_thread:
-            self._run_worker_monitoring_thread_shutdown_event.set()  # pyright: ignore[reportOptionalMemberAccess]
+            self._run_worker_monitoring_thread_shutdown_event.set()  # ty: ignore[unresolved-attribute]
             self._run_worker_monitoring_thread.join()
 
         if self._reconcile_location_utilization_metrics_thread:
@@ -1424,7 +1422,7 @@ class DagsterCloudUserCodeLauncher(
         endpoints_or_errors = self.get_grpc_endpoints()
         for (deployment_name, location_name), endpoint_or_error in endpoints_or_errors.items():
             if isinstance(endpoint_or_error, ServerEndpoint):
-                endpoint = cast("ServerEndpoint", endpoint_or_error)
+                endpoint = endpoint_or_error
                 raw_metrics_str = (
                     endpoint.create_client().ping("").get("serialized_server_utilization_metrics")
                 )
@@ -1598,7 +1596,7 @@ class DagsterCloudUserCodeLauncher(
                     if (
                         isinstance(e, DagsterUserCodeUnreachableError)
                         and isinstance(e.__cause__, grpc.RpcError)
-                        and cast("grpc.RpcError", e.__cause__).code()
+                        and cast("grpc.RpcError", e.__cause__).code()  # ty: ignore[unresolved-attribute, redundant-cast]
                         in {grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.UNKNOWN}
                     ):
                         first_unavailable_time = self._first_unavailable_times.get(
